@@ -39,6 +39,7 @@ model DailyReport {
   step6             Json // 섹터: {sectors: [{name, return5d, volumeRatio, qualifies}]}
   step7             Json // 심리 필터: {vix, fearGreed, filterAction}
   step8             Json // 최종: {macroTrendScore, vetoApplied, finalDecision, positionSizePct}
+  details           Json? // 단계별 판정 기준·실제값 표(UI 상세 테이블용) — {step1: [...], ..., step8: [...]}
   narrative         String? // LLM 생성 해설
   dataCompleteness  Json // 어떤 지표가 자동 확인/수동입력/확인못함인지
   createdAt         DateTime @default(now())

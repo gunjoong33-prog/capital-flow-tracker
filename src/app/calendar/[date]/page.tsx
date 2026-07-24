@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { ReportView, type ReportViewData } from "@/components/ReportView";
+import type { StepDetails } from "@/lib/scoring/types";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -37,7 +38,12 @@ export default async function CalendarDayPage({
           <Link href="/calendar" className="hover:text-zinc-200">캘린더</Link>
           <Link href="/reports/weekly" className="hover:text-zinc-200">주기별 리포트</Link>
         </nav>
-        <ReportView dateLabel={dateLabel} report={reportData} narrative={report.narrative} />
+        <ReportView
+          dateLabel={dateLabel}
+          report={reportData}
+          narrative={report.narrative}
+          details={report.details as unknown as StepDetails | null}
+        />
       </main>
     </div>
   );

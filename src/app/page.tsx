@@ -41,7 +41,7 @@ export default async function Home() {
           <Link href="/calendar" className="hover:text-zinc-200">캘린더</Link>
           <Link href="/reports/weekly" className="hover:text-zinc-200">주기별 리포트</Link>
         </nav>
-        <ReportView dateLabel={today} report={report} />
+        <ReportView dateLabel={today} report={report} details={report.details} />
       </main>
     </div>
   );

@@ -118,3 +118,22 @@ export interface Step8Result {
   vetoApplied: boolean;
   positionSizePct: number | null; // 매수 시 배분 비율
 }
+
+// 각 단계 판정에 실제로 쓰인 기준·수치를 UI 표로 보여주기 위한 행 단위 데이터.
+// met=null은 "판정 불가/정보성 행"(자동 소스 없음 등)을 뜻한다 — false와 구분해야 함.
+export interface StepDetailRow {
+  label: string;
+  criterion: string;
+  value: string;
+  met: boolean | null;
+}
+export type StepDetails = {
+  step1: StepDetailRow[];
+  step2: StepDetailRow[];
+  step3: StepDetailRow[];
+  step4: StepDetailRow[];
+  step5: StepDetailRow[];
+  step6: StepDetailRow[];
+  step7: StepDetailRow[];
+  step8: StepDetailRow[];
+};
