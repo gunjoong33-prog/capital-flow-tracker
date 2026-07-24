@@ -1,4 +1,4 @@
-import { getNotionClient } from "@/lib/notion";
+import { getNotionClient, NOTION_PAGE_IDS } from "@/lib/notion";
 
 // 11개 하위 DB (재구성 완료 — 전부 "날짜" 속성 추가됨, 이제부턴 템플릿 복제가 아니라
 // 매일 새 행을 추가하는 방식으로 기록한다).
@@ -192,6 +192,49 @@ export async function writeDailyChecklistToNotion(input: DailyNotionInput) {
   }
 
   return { pageIds, count: pageIds.length };
+}
+
+/**
+ * 시장 체크리스트 페이지의 Calender DB에 오늘 항목을 추가한다.
+ * 이게 있어야 노션 캘린더(월간/주간 뷰)에 오늘자가 실제로 나타난다 — 11개 하위 DB에
+ * 행을 넣는 것만으로는 시장 체크리스트 페이지 자체엔 아무것도 표시되지 않는다.
+ */
+export async function writeCalendarEntry(input: {
+  date: string;
+  finalDecision: string;
+  macroTrendScore: number;
+  narrative: string;
+}) {
+  const notion = getNotionClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const page = await notion.pages.create({
+    parent: { database_id: NOTION_PAGE_IDS.CALENDAR_DB },
+    properties: {
+      이름: titleProp(`${input.date} 체크리스트 — ${input.finalDecision}`),
+      날짜: dateProp(input.date),
+      태그: { multi_select: [{ name: input.finalDecision }] },
+    } as any,
+    children: [
+      {
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
+            {
+              type: "text",
+              text: { content: `매크로 추세 점수: ${input.macroTrendScore.toFixed(2)} / 최종 결론: ${input.finalDecision}` },
+            },
+          ],
+        },
+      },
+      {
+        object: "block",
+        type: "paragraph",
+        paragraph: { rich_text: [{ type: "text", text: { content: input.narrative.slice(0, 2000) } }] },
+      },
+    ] as any,
+  });
+  return page.id;
 }
 
 /** 페이지들을 휴지통으로 보낸다(테스트 데이터 정리용). */

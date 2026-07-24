@@ -30,7 +30,7 @@ export async function generateNarrative(prompt: string): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 800 },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
       }),
     }
   );
