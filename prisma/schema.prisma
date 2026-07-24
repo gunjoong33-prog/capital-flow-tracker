@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 모든 원자료 지표의 시계열 저장소.
+// 예: metric="WALCL", date=2026-07-23, value=6800000, source="fred"
+// 콜드스타트 해소용 1년치 백필, 3/5/8단계의 "최근 1년 백분위" 계산의 기준 테이블.
+model MetricValue {
+  id        String   @id @default(cuid())
+  metric    String // 예: WALCL, RRP, TGA, US10Y, JP10Y, KR10Y, CFTC_JPY_NET, NDX, RUT, DJI, SPX, BTC, ETH, GOLD, WTI, BRENT, USDKRW, USDJPY, VIX, SECTOR_XLK 등
+  date      DateTime @db.Date
+  value     Float
+  source    String // fred | cftc | coingecko | eodhd | manual
+  isManual  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([metric, date])
+  @@index([metric, date])
+}
+
+// 매일 계산된 체크리스트 결과 스냅샷 (v2 프롬프트 1~8단계 + 최종 결론).
+// 계산은 결정론적 코드로 하고, narrative만 LLM 1회 호출로 채운다.
+model DailyReport {
+  id                String   @id @default(cuid())
+  date              DateTime @unique @db.Date
+  step1             Json // 글로벌 환경: {newsCount, hasBigEvent, vetoTriggered}
+  step2             Json // 유동성: {overseasScore, domesticAdjustment, finalScore, details}
+  step3             Json // 캐리 트레이드: {spreadBp, zone, carryToVol, jpyVolSpike, cftcNetPosition, score}
+  step4             Json // 환율금유가: {goldDir, realRateDir, dollarDir, quadrant, oilStatus}
+  step5             Json // 자금도착: {ndxReturn20d, rutReturn20d, gap, btcReturn20d, ethReturn20d}
+  step6             Json // 섹터: {sectors: [{name, return5d, volumeRatio, qualifies}]}
+  step7             Json // 심리 필터: {vix, fearGreed, filterAction}
+  step8             Json // 최종: {macroTrendScore, vetoApplied, finalDecision, positionSizePct}
+  narrative         String? // LLM 생성 해설
+  dataCompleteness  Json // 어떤 지표가 자동 확인/수동입력/확인못함인지
+  createdAt         DateTime @default(now())
+}
+
+// 주/월/분기/년 리포트. 사이트 전용(노션 미게시).
+model PeriodReport {
+  id          String   @id @default(cuid())
+  periodType  String // week | month | quarter | year
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  summary     Json // 기간 내 주요 지표 변화 요약
+  narrative   String?
+  createdAt   DateTime @default(now())
+
+  @@unique([periodType, periodStart])
+}
+
+// 자동화 안 되는 지표(CNN F&G, 비트코인 ETF 자금흐름, 13F)의 수동 입력 기록.
+// MetricValue와 별개로 "언제 마지막으로 손으로 입력했는지" 추적용.
+model ManualInputLog {
+  id        String   @id @default(cuid())
+  metric    String
+  date      DateTime @db.Date
+  value     Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([metric, date])
+}
