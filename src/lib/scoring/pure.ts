@@ -20,13 +20,13 @@ import type {
 // ── 1단계: 글로벌 환경 — 거부권 ─────────────────────────────
 // 노션 v2 프롬프트 8단계 "1단계 거부권" 절 그대로.
 export function scoreStep1(input: Step1Input): Step1Result {
-  const vetoTriggered = input.newsCountLast7Days >= 3 || input.hasBigEventNext14Days;
+  const vetoTriggered = input.newsCountLast7Days >= 3 || input.hasRecentEventSurprise;
   return {
     vetoTriggered,
     reason: vetoTriggered
       ? input.newsCountLast7Days >= 3
         ? `최근 7일 내 시장을 흔들 뉴스 ${input.newsCountLast7Days}건`
-        : "14일 내 큰 이벤트 예정"
+        : "최근 발표된 FOMC/CPI/고용지표 결과가 예상 밖(서프라이즈)"
       : "특이사항 없음",
   };
 }

@@ -1,4 +1,7 @@
 import { getLatestMetric, getMetricHistory, calculatePercentile, calculateCumulativeReturn } from "@/lib/metrics";
+import { getRecentRiskyNews } from "@/lib/news-events";
+import { getUpcomingMajorEvents } from "@/lib/major-events";
+import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
 import { METRICS, SECTOR_ETFS } from "@/lib/sources/types";
 import {
   scoreStep1,
@@ -57,43 +60,86 @@ async function directionOf(metric: string): Promise<Direction | null> {
 }
 
 /**
+ * USD/JPY 일간 변동률을 최근 19개 변동률의 평균·표준편차와 비교(z-score).
+ * |z| > 2 이거나 하루 변동률이 1.5%를 넘으면 "급등"으로 본다 — 표준편차가 아주 작을 때도
+ * 절대 임계값으로 걸러지도록 두 조건을 OR로 묶었다. 데이터가 21개 미만이면 판정 보류(급등 아님).
+ */
+async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | null; latestReturnPct: number | null }> {
+  const history = await getMetricHistory(METRICS.USDJPY, 60);
+  if (history.length < 21) return { spike: false, zScore: null, latestReturnPct: null };
+  const recent = history.slice(-21);
+  const returns: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    returns.push((recent[i].value - recent[i - 1].value) / recent[i - 1].value);
+  }
+  const latestReturn = returns[returns.length - 1];
+  const baseline = returns.slice(0, -1);
+  const mean = baseline.reduce((a, b) => a + b, 0) / baseline.length;
+  const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length;
+  const std = Math.sqrt(variance);
+  const z = std > 0 ? (latestReturn - mean) / std : 0;
+  const spike = Math.abs(z) > 2 || Math.abs(latestReturn) > 0.015;
+  return { spike, zScore: Number(z.toFixed(2)), latestReturnPct: Number((latestReturn * 100).toFixed(2)) };
+}
+
+/**
  * 오늘자 v2 체크리스트 전체를 DB 데이터로 계산한다.
  * 지표가 없으면 해당 판정은 null(모름)로 남기고 억지로 채우지 않는다 —
  * 원칙: "확인 못하면 확인 못함이라고 쓴다"(v2 프롬프트 핵심 원칙).
  *
- * 수동 입력 지표(CNN F&G, 비트코인 ETF 자금흐름)와 finviz 대체 지표(섹터 5일 수익률)는
- * 별도 인자로 주입받는다 — 자동 수집원이 없기 때문(지난 감사 리스크1 참고).
+ * 뉴스 판정(1단계)은 매일 파이프라인이 미리 수집·Gemini 판정해 NewsEvent에 저장해둔 것을 읽기만 한다 —
+ * 여기서 다시 뉴스를 가져와 판정하면 페이지를 열 때마다 LLM을 호출하게 되므로 분리했다.
+ * FOMC·CPI·고용지표 등 "14일 내 큰 이벤트"도 마찬가지로 MajorEvent 테이블을 읽기만 한다.
+ * 엔화 변동성 급등은 이미 저장된 USD/JPY 시계열로 그때그때 계산한다(DB 조회만 필요, 비용 없음).
+ *
+ * CNN 공포탐욕지수(공식 API 없음)와 섹터 5일 수익률(수동/외부 조회)만 여전히 별도 인자로 받는다.
  *
  * details: 각 단계 판정에 쓰인 실제 기준·수치를 UI 표로 보여주기 위한 행 데이터.
  * 점수 계산과 별개 경로로 채워서, 표시용 가공이 점수 로직에 영향을 주지 않게 분리했다.
  */
 export async function runDailyAnalysis(manualInputs: {
-  newsCountLast7Days: number;
-  hasBigEventNext14Days: boolean;
   domesticWeightHigh: boolean;
-  jpyVolSpike: boolean;
   fearGreed: number | null;
   sectors: SectorInput[];
 }) {
   const details = {} as StepDetails;
 
-  // 1단계
-  const step1 = scoreStep1({
-    newsCountLast7Days: manualInputs.newsCountLast7Days,
-    hasBigEventNext14Days: manualInputs.hasBigEventNext14Days,
-  });
+  // 1단계 — 거부권은 "뉴스 3건 이상" 또는 "최근 발표된 FOMC/CPI/고용지표 결과가 서프라이즈"일 때 발동.
+  // (예정된 이벤트가 있다는 것만으로 발동하면 FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 —
+  // 그래서 "예정" 여부가 아니라 "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
+  const riskyNews = await getRecentRiskyNews(7);
+  const upcomingEvents = await getUpcomingMajorEvents(14);
+  const recentOutcomes = await evaluateRecentEventOutcomes(5);
+  const hasEventSurprise = recentOutcomes.some((o) => o.risky);
+  const step1 = {
+    ...scoreStep1({
+      newsCountLast7Days: riskyNews.length,
+      hasRecentEventSurprise: hasEventSurprise,
+    }),
+    riskyNews: riskyNews.map((n) => ({ title: n.title, url: n.url, summary: n.summary, date: n.date.toISOString().slice(0, 10) })),
+    upcomingEvents: upcomingEvents.map((e) => ({ name: e.name, date: e.date.toISOString().slice(0, 10) })),
+    recentEventOutcomes: recentOutcomes,
+  };
   details.step1 = [
     {
-      label: "최근 7일 시장을 흔든 뉴스",
+      label: "최근 7일 시장을 흔든 뉴스(Gemini 판정)",
       criterion: "3건 미만",
-      value: `${manualInputs.newsCountLast7Days}건`,
-      met: manualInputs.newsCountLast7Days < 3,
+      value: `${riskyNews.length}건`,
+      met: riskyNews.length < 3,
     },
+    ...recentOutcomes.map((o) => ({
+      label: `${o.name}(${o.date}) 실제 결과`,
+      criterion: "예상 범위 내(서프라이즈 아님)",
+      value: o.detail,
+      met: !o.risky,
+    })),
     {
-      label: "14일 내 큰 이벤트(FOMC 등)",
-      criterion: "예정 없음",
-      value: manualInputs.hasBigEventNext14Days ? "있음" : "없음",
-      met: !manualInputs.hasBigEventNext14Days,
+      label: "14일 내 예정된 이벤트(정보용, 거부권과 무관)",
+      criterion: "-",
+      value: upcomingEvents.length > 0
+        ? upcomingEvents.map((e) => `${e.name}(${e.date.toISOString().slice(0, 10)})`).join(", ")
+        : "없음",
+      met: null,
     },
   ];
 
@@ -145,12 +191,13 @@ export async function runDailyAnalysis(manualInputs: {
     : null;
   const cftcLatest = await getLatestMetric(METRICS.CFTC_JPY_NET);
   const cftcPercentile = cftcLatest ? await calculatePercentile(METRICS.CFTC_JPY_NET, cftcLatest.value) : null;
+  const jpySpike = await detectJpyVolSpike();
   const step3 = scoreStep3({
     us10y: us10y?.value ?? 0,
     jp10y: jp10y?.value ?? 0,
     spreadBpPercentile: spreadPercentile,
     cftcNetPositionPercentile: cftcPercentile,
-    jpyVolSpike: manualInputs.jpyVolSpike,
+    jpyVolSpike: jpySpike.spike,
   });
   details.step3 = [
     { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
@@ -158,7 +205,14 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp (${step3.zone})`, met: null },
     { label: "스프레드 최근 1년 백분위", criterion: "높을수록 캐리 유리", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     { label: "CFTC 엔화 순포지션 백분위", criterion: "참고용(숏 깊이)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
-    { label: "엔화(USD/JPY) 변동성 급등", criterion: "감지 시 청산 신호 최우선", value: manualInputs.jpyVolSpike ? "감지됨" : "없음", met: !manualInputs.jpyVolSpike },
+    {
+      label: "엔화(USD/JPY) 변동성 급등(자동 계산)",
+      criterion: "일간 변동률이 최근 20일 평균 대비 2표준편차 초과 또는 1.5%p 초과",
+      value: jpySpike.zScore !== null
+        ? `${jpySpike.latestReturnPct}% (z=${jpySpike.zScore})`
+        : "데이터 부족(21거래일 미만)",
+      met: !jpySpike.spike,
+    },
   ];
 
   // 4단계

@@ -16,7 +16,7 @@ console.assert(step3.spreadBp === 190, `❌ 스프레드 계산 오류: ${step3.
 console.log("✅ 11번 섹션 재해석과 일치: 190bp → 3구간(위험)\n");
 
 console.log("=== 1단계 거부권 ===");
-const step1Veto = scoreStep1({ newsCountLast7Days: 4, hasBigEventNext14Days: false });
+const step1Veto = scoreStep1({ newsCountLast7Days: 4, hasRecentEventSurprise: false });
 console.assert(step1Veto.vetoTriggered === true, "❌ 뉴스 4건이면 거부권 발동해야 함");
 console.log(step1Veto, "\n");
 

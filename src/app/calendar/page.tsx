@@ -1,7 +1,14 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
+import { getMajorEventsInRange } from "@/lib/major-events";
 import type { Step8Result } from "@/lib/scoring/types";
+
+const EVENT_LABEL: Record<string, string> = {
+  "FOMC 회의 결과 발표": "FOMC",
+  "미국 CPI 발표": "CPI",
+  "미국 고용지표 발표": "고용지표",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +47,14 @@ export default async function CalendarPage({
     select: { date: true, step8: true },
   });
   const byDate = new Map(reports.map((r) => [toDateKey(r.date), r.step8 as unknown as Step8Result]));
+
+  const majorEvents = await getMajorEventsInRange(gridStart, gridEnd);
+  const eventsByDate = new Map<string, string[]>();
+  for (const e of majorEvents) {
+    const key = toDateKey(e.date);
+    const label = EVENT_LABEL[e.name] ?? e.name;
+    eventsByDate.set(key, [...(eventsByDate.get(key) ?? []), label]);
+  }
 
   const days: Date[] = [];
   for (let d = new Date(gridStart); d <= gridEnd; d.setUTCDate(d.getUTCDate() + 1)) {
@@ -81,6 +96,7 @@ export default async function CalendarPage({
             const key = toDateKey(d);
             const inMonth = d.getUTCMonth() === mon - 1;
             const step8 = byDate.get(key);
+            const events = eventsByDate.get(key) ?? [];
             const isToday = key === todayKey;
             const cell = (
               <div
@@ -93,6 +109,15 @@ export default async function CalendarPage({
                   >
                     {step8.finalDecision} {step8.macroTrendScore.toFixed(1)}
                   </span>
+                )}
+                {events.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {events.map((ev, i) => (
+                      <span key={i} className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] text-sky-400">
+                        {ev}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
             );

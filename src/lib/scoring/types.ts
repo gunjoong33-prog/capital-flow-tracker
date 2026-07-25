@@ -6,11 +6,32 @@ export type Direction = "up" | "down" | "flat";
 
 export interface Step1Input {
   newsCountLast7Days: number; // 최근 7일 내 시장 흔들 뉴스 건수
-  hasBigEventNext14Days: boolean; // 14일 내 큰 이벤트(FOMC 등) 예정
+  hasRecentEventSurprise: boolean; // 최근 발표된 FOMC/CPI/고용지표의 실제 결과가 통계적 서프라이즈였는지
+}
+export interface RiskyNewsItem {
+  title: string;
+  url: string;
+  summary: string;
+  date: string;
+}
+export interface UpcomingEventItem {
+  name: string;
+  date: string;
+}
+export interface EventOutcomeItem {
+  name: string;
+  date: string;
+  risky: boolean;
+  detail: string;
 }
 export interface Step1Result {
   vetoTriggered: boolean; // 거부권 발동 여부
   reason: string;
+  // run.ts가 DB 조회 후 덧붙이는 필드라 pure.ts의 scoreStep1은 채우지 않는다 — 선택 필드로 둠.
+  // (기존에 저장된 DailyReport에도 이 필드가 없을 수 있어 옵셔널이 하위호환에도 맞다)
+  riskyNews?: RiskyNewsItem[]; // Gemini가 리스크로 판정한 뉴스(있으면 UI에 요약+링크로 표시)
+  upcomingEvents?: UpcomingEventItem[]; // 14일 내 예정된 FOMC·CPI·고용지표 등(정보용, 거부권과 무관)
+  recentEventOutcomes?: EventOutcomeItem[]; // 최근 발표된 이벤트의 실제 결과 서프라이즈 판정(거부권 근거)
 }
 
 export interface Step2Input {

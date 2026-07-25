@@ -58,7 +58,7 @@ model PeriodReport {
   @@unique([periodType, periodStart])
 }
 
-// 자동화 안 되는 지표(CNN F&G, 비트코인 ETF 자금흐름, 13F)의 수동 입력 기록.
+// 자동화 안 되는 지표(CNN F&G, 국내비중 설정)의 수동 입력 기록.
 // MetricValue와 별개로 "언제 마지막으로 손으로 입력했는지" 추적용.
 model ManualInputLog {
   id        String   @id @default(cuid())
@@ -69,4 +69,31 @@ model ManualInputLog {
   createdAt DateTime @default(now())
 
   @@unique([metric, date])
+}
+
+// 1단계 거부권 판정용 — 매일 파이프라인이 뉴스 헤드라인을 모아 Gemini로 "시장을 흔들 리스크인가" 판정,
+// 리스크로 판단된 것만 저장한다(전부 저장하면 노이즈만 쌓임). 최근 7일 내 건수가 거부권 기준.
+model NewsEvent {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  title     String
+  url       String
+  summary   String
+  source    String // google-news | fed-press
+  createdAt DateTime @default(now())
+
+  @@unique([date, url])
+  @@index([date])
+}
+
+// FOMC·CPI·고용지표 등 예정된 발표일. 1단계 "14일 내 큰 이벤트" 판정 + 사이트 캘린더 표시용.
+// FOMC는 연준이 공개하는 고정 일정이라 하드코딩 목록, CPI/고용지표는 FRED release/dates API로 매일 동기화.
+model MajorEvent {
+  id     String   @id @default(cuid())
+  date   DateTime @db.Date
+  name   String // "FOMC 회의 결과 발표", "미국 CPI 발표", "미국 고용지표 발표"
+  source String // fed | fred
+
+  @@unique([date, name])
+  @@index([date])
 }

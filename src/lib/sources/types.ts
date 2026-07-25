@@ -10,6 +10,9 @@ export const METRICS = {
   REAL_RATE: "REAL_RATE", // 실질금리(10년물)
   CREDIT_SPREAD: "CREDIT_SPREAD", // 크레딧 스프레드(HY OAS)
   US10Y_2Y10Y_SPREAD: "US10Y_2Y10Y_SPREAD", // 미국 2Y-10Y 스프레드
+  US_CPI: "US_CPI", // 미국 CPI(계절조정, 1단계 이벤트 서프라이즈 판정용)
+  US_NFP: "US_NFP", // 미국 비농업 고용자수(1단계 이벤트 서프라이즈 판정용)
+  FED_FUNDS_RATE: "FED_FUNDS_RATE", // 연준 기준금리 상단(FOMC 실제 결정 판정용)
 
   // 2단계 국내
   BOK_RATE: "BOK_RATE", // 한국은행 기준금리

@@ -12,6 +12,8 @@ import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { getManualInputsForDate } from "@/lib/manual-inputs";
+import { syncMajorEvents } from "@/lib/major-events";
+import { syncNewsEvents } from "@/lib/news-events";
 import type { FetchedPoint } from "@/lib/sources/types";
 
 export interface DailyPipelineResult {
@@ -41,9 +43,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoStr = sevenDaysAgo.toISOString().slice(0, 10);
 
-  // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행
-  const [fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult, kr10yResult, bokRateResult, cpiResult] =
-    await Promise.allSettled([
+  // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행 (뉴스 판정·주요 이벤트 동기화도 여기 포함)
+  const [
+    fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
+    kr10yResult, bokRateResult, cpiResult, majorEventsResult, newsEventsResult,
+  ] = await Promise.allSettled([
       process.env.FRED_API_KEY
         ? fetchAllFredMetrics(process.env.FRED_API_KEY, sevenDaysAgoStr)
         : Promise.resolve({ points: [], errors: [{ metric: "FRED", message: "FRED_API_KEY 없음" }] }),
@@ -57,7 +61,17 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       process.env.ECOS_API_KEY
         ? fetchKoreaCpi(process.env.ECOS_API_KEY, sevenDaysAgoStr.slice(0, 7).replace("-", ""), today.slice(0, 7).replace("-", ""))
         : Promise.resolve([]),
+      syncMajorEvents(),
+      syncNewsEvents(),
     ]);
+
+  if (majorEventsResult.status === "fulfilled") {
+    for (const e of majorEventsResult.value.errors) sourceErrors.push({ source: "주요이벤트일정", error: e });
+  } else sourceErrors.push({ source: "주요이벤트일정", error: String(majorEventsResult.reason) });
+
+  if (newsEventsResult.status === "fulfilled") {
+    for (const e of newsEventsResult.value.errors) sourceErrors.push({ source: "뉴스판정", error: e });
+  } else sourceErrors.push({ source: "뉴스판정", error: String(newsEventsResult.reason) });
 
   if (fredResult.status === "fulfilled") {
     allPoints.push(...fredResult.value.points);
@@ -90,13 +104,10 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       : [];
   if (sectorsResult.status === "rejected") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 
-  // 2) 채점 — 자동 소스 없는 항목은 /manual-input에서 그날 입력한 값을 쓴다(안 넣으면 안전한 기본값).
+  // 2) 채점 — 뉴스·이벤트·엔화급등은 위에서 이미 동기화·계산됨. CNN F&G·국내비중만 여전히 수동.
   const manualInputs = await getManualInputsForDate(today);
   const report = await runDailyAnalysis({
-    newsCountLast7Days: manualInputs.newsCountLast7Days,
-    hasBigEventNext14Days: manualInputs.hasBigEventNext14Days,
     domesticWeightHigh: manualInputs.domesticWeightHigh,
-    jpyVolSpike: manualInputs.jpyVolSpike,
     fearGreed: manualInputs.fearGreed,
     sectors,
   });
@@ -185,7 +196,13 @@ async function buildNotionInput(
 
   return {
     date,
-    geopolitics: { summary: "자동 파이프라인 — 뉴스 판단 미연동(수동 확인 필요)", link: null, risky: report.step1.vetoTriggered },
+    geopolitics: report.step1.riskyNews.length > 0
+      ? {
+          summary: report.step1.riskyNews.map((n) => n.summary).join(" / "),
+          link: report.step1.riskyNews[0].url,
+          risky: true,
+        }
+      : { summary: "Gemini 판정 결과 리스크 뉴스 없음", link: null, risky: false },
     domesticLiquidity: [
       { name: "한국은행 기준금리", condition: "인하 또는 동결 흐름", status: "자동 미판정" },
       { name: "국내 CPI", condition: "목표치(2%) 근접 추세", status: "자동 미판정" },

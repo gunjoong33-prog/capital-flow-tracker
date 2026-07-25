@@ -18,10 +18,7 @@ async function getReport() {
   const manualInputs = await getManualInputsForDate(today);
 
   return runDailyAnalysis({
-    newsCountLast7Days: manualInputs.newsCountLast7Days,
-    hasBigEventNext14Days: manualInputs.hasBigEventNext14Days,
     domesticWeightHigh: manualInputs.domesticWeightHigh,
-    jpyVolSpike: manualInputs.jpyVolSpike,
     fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
   });

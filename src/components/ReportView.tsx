@@ -58,6 +58,32 @@ export function ReportView({
       <StepCard step={1} title="글로벌 환경" details={details?.step1} tip={STEP_TIPS[1]}>
         <Field label="거부권 발동" value={step1.vetoTriggered ? "예" : "아니오"} />
         <Field label="사유" value={step1.reason} />
+        {step1.riskyNews && step1.riskyNews.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {step1.riskyNews.map((n, i) => (
+              <div key={i} className="rounded-md bg-rose-500/10 px-3 py-2 text-xs">
+                <p className="text-rose-300">{n.summary}</p>
+                <a href={n.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-rose-400 underline hover:text-rose-300">
+                  기사 보기 →
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+        {step1.recentEventOutcomes && step1.recentEventOutcomes.filter((o) => o.risky).length > 0 && (
+          <div className="mt-3 space-y-2">
+            {step1.recentEventOutcomes.filter((o) => o.risky).map((o, i) => (
+              <div key={i} className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                {o.name}({o.date}) 결과가 예상 밖입니다 — {o.detail}
+              </div>
+            ))}
+          </div>
+        )}
+        {step1.upcomingEvents && step1.upcomingEvents.length > 0 && (
+          <p className="mt-2 text-xs text-zinc-500">
+            14일 내 예정된 이벤트(참고용): {step1.upcomingEvents.map((e) => `${e.name}(${e.date})`).join(", ")}
+          </p>
+        )}
       </StepCard>
 
       <StepCard step={2} title="자본의 유동성" score={step2.finalScore} details={details?.step2} tip={STEP_TIPS[2]}>
