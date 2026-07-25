@@ -19,6 +19,13 @@ const FRED_SERIES: Record<string, string> = {
   [METRICS.US_PPI]: "PPIFIS",
   [METRICS.US_PCE]: "PCEPI",
   [METRICS.FED_FUNDS_RATE]: "DFEDTARU",
+  // 아래 4개는 평소엔 Yahoo(yahoo.ts)가 당일 종가를 담당하고, 이건 Yahoo가 실패한 날에만
+  // 쓰이는 폴백 공식 소스다(연준 H.10·EIA 원자료, 2~3영업일 지연). pipeline.ts에서 Yahoo 포인트를
+  // FRED 포인트보다 나중에 저장해 같은 날짜가 겹치면 Yahoo 값이 이기도록 순서를 맞춰뒀다.
+  [METRICS.USDKRW]: "DEXKOUS",
+  [METRICS.USDJPY]: "DEXJPUS",
+  [METRICS.WTI]: "DCOILWTICO",
+  [METRICS.BRENT]: "DCOILBRENTEU",
 };
 
 interface FredObservation {

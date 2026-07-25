@@ -169,25 +169,34 @@ interface DailyChange {
   latest: number | null;
   changeAmount: number | null;
   changePct: number | null;
+  source: string | null; // "yahoo" | "fred" 등 — fred면 Yahoo가 실패해 폴백된 값이라는 뜻
+  daysOld: number | null; // 최신값의 날짜가 오늘로부터 며칠 전인지
 }
 
-/** 지표의 최신값과 직전 데이터포인트 대비 변동액·변동률. 4단계 환율·유가 보조 지표에 쓴다. */
+/**
+ * 지표의 최신값과 직전 데이터포인트 대비 변동액·변동률. 4단계 환율·유가 보조 지표에 쓴다.
+ * USD/KRW·USD/JPY·WTI·브렌트는 평소 Yahoo(당일 종가)가 채우고, Yahoo가 실패한 날에만
+ * FRED(연준·EIA 공식 소스, 2~3영업일 지연)로 자동 대체된다 — source로 어느 쪽인지 구분한다.
+ */
 async function dailyChange(metric: string): Promise<DailyChange> {
   const [prev, curr] = await getMetricHistoryByCount(metric, 2);
-  if (!curr) return { latest: null, changeAmount: null, changePct: null };
-  if (!prev) return { latest: curr.value, changeAmount: null, changePct: null };
+  if (!curr) return { latest: null, changeAmount: null, changePct: null, source: null, daysOld: null };
+  const daysOld = Math.round((Date.now() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  if (!prev) return { latest: curr.value, changeAmount: null, changePct: null, source: curr.source, daysOld };
   const changeAmount = curr.value - prev.value;
   const changePct = prev.value !== 0 ? (changeAmount / prev.value) * 100 : null;
-  return { latest: curr.value, changeAmount, changePct };
+  return { latest: curr.value, changeAmount, changePct, source: curr.source, daysOld };
 }
 
 /** dailyChange 결과를 "값 (단위) — 전일 대비 ±값 (단위), ±값%" 형태의 표시 문자열로 만든다. */
 function fmtDailyChange(c: DailyChange, unit: string, decimals = 2): string {
   if (c.latest === null) return "확인 못함";
   const latestStr = fmt(c.latest, decimals, unit);
-  if (c.changeAmount === null || c.changePct === null) return latestStr;
+  // Yahoo가 실패해 FRED로 대체된 값이면, 며칠 전 값인지 명시해서 "당일 값"으로 오해하지 않게 한다.
+  const fallbackNote = c.source === "fred" ? ` (FRED 대체, ${c.daysOld}일 전)` : "";
+  if (c.changeAmount === null || c.changePct === null) return `${latestStr}${fallbackNote}`;
   const sign = c.changeAmount >= 0 ? "+" : "";
-  return `${latestStr} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
+  return `${latestStr}${fallbackNote} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
 }
 
 interface TrendCheck {
