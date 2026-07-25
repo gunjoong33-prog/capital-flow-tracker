@@ -360,16 +360,16 @@ export async function runDailyAnalysis(manualInputs: {
   details.step3 = [
     { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
     { label: "일본 10년물(JP10Y)", criterion: "참고용", value: fmt(jp10y?.value ?? null, 2, "%"), met: null },
-    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: null },
-    { label: "스프레드 최근 1년 백분위", criterion: "높을수록 캐리 유리", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
-    { label: "CFTC 엔화 순포지션 백분위", criterion: "참고용(숏 깊이)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
+    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: step3.zone === "안정" },
+    { label: "스프레드 최근 1년 백분위", criterion: "50%ile 이상(중앙값보다 넓음) 시 충족", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: spreadPercentile !== null ? spreadPercentile >= 50 : null },
+    { label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 미만(숏 우위, 캐리 활발) 시 충족", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile < 50 : null },
     {
       label: "엔화 변동성 급등(USD/JPY)",
       criterion: "일간 변동률이 최근 20일 평균 대비 2표준편차 초과 또는 1.5%p 초과",
       value: jpySpike.zScore !== null
         ? `${jpySpike.latestReturnPct}% (z=${jpySpike.zScore})`
         : "데이터 부족(21거래일 미만)",
-      met: !jpySpike.spike,
+      met: jpySpike.zScore !== null ? !jpySpike.spike : null,
     },
   ];
 
