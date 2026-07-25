@@ -125,12 +125,12 @@ async function netLiquidityTrend(): Promise<{ detail: string; risingTrend: boole
   const current = netAt(walcl[walcl.length - 1].value, tga[tga.length - 1].value, rrp[rrp.length - 1].value);
 
   if (walcl.length < 5 || tga.length < 5 || rrp.length < 5) {
-    return { detail: `${comma(current)}십억달러`, risingTrend: null };
+    return { detail: `${comma(current)} (십억달러)`, risingTrend: null };
   }
   const past = netAt(walcl[0].value, tga[0].value, rrp[0].value);
   const change = current - past;
   return {
-    detail: `${comma(current)}십억달러 — 4기간 전 대비 ${change >= 0 ? "+" : ""}${comma(change)}십억달러`,
+    detail: `${comma(current)} (십억달러) — 4기간 전 대비 ${change >= 0 ? "+" : ""}${comma(change)} (십억달러)`,
     risingTrend: change > 0,
   };
 }
@@ -153,7 +153,7 @@ async function tgaDeviationFromRecentAverage(): Promise<{ detail: string; within
   const baseline = history.slice(0, 8).reduce((a, b) => a + b.value, 0) / 8;
   const deviationPct = ((current - baseline) / baseline) * 100;
   return {
-    detail: `${comma(current / 1000)}십억달러 — 최근 8기간 평균 ${comma(baseline / 1000)}십억달러 대비 ${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(1)}%`,
+    detail: `${comma(current / 1000)} (십억달러) — 최근 8기간 평균 ${comma(baseline / 1000)} (십억달러) 대비 ${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(1)}%`,
     withinNormalRange: Math.abs(deviationPct) < 10,
   };
 }
