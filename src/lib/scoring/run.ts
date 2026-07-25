@@ -364,7 +364,7 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "스프레드 최근 1년 백분위", criterion: "높을수록 캐리 유리", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     { label: "CFTC 엔화 순포지션 백분위", criterion: "참고용(숏 깊이)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     {
-      label: "엔화(USD/JPY) 변동성 급등(자동 계산)",
+      label: "엔화 변동성 급등(USD/JPY)",
       criterion: "일간 변동률이 최근 20일 평균 대비 2표준편차 초과 또는 1.5%p 초과",
       value: jpySpike.zScore !== null
         ? `${jpySpike.latestReturnPct}% (z=${jpySpike.zScore})`
