@@ -211,7 +211,7 @@ async function buildNotionInput(
     fredIndicators: [
       { name: "WALCL", condition: "규모 증가", status: walcl ? `${walcl.value.toLocaleString()}` : "확인 못함", qualifies: !!report.step2.overseasQualifyingCount },
       { name: "M2", condition: "2달 연속 증가율 상승", status: m2 ? `${m2.value}` : "확인 못함", qualifies: false },
-      { name: "지급준비금(TOTRESNS)", condition: "4주 연속 증가", status: totresns ? `${totresns.value}` : "확인 못함", qualifies: false },
+      { name: "기준잔액(TOTRESNS)", condition: "4기간 연속 증가", status: totresns ? `${totresns.value}` : "확인 못함", qualifies: false },
       { name: "RRP", condition: "지속 감소", status: rrp ? `${rrp.value}` : "확인 못함", qualifies: false },
       { name: "TGA", condition: "지속 감소", status: tga ? `${tga.value}` : "확인 못함", qualifies: false },
       { name: "실질금리(10년물)", condition: "하락 또는 낮은 데서 횡보", status: realRate ? `${realRate.value}%` : "확인 못함", qualifies: false },

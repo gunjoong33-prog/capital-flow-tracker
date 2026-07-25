@@ -44,6 +44,21 @@ export async function getMetricHistory(metric: string, days: number) {
 }
 
 /**
+ * 특정 지표의 최근 N개 "데이터포인트"를 달력 일수와 무관하게 그대로 가져온다.
+ * 월간 지표(TOTRESNS, REAL_RATE 등)는 발표가 몇 달씩 밀리기도 해서 getMetricHistory의
+ * 날짜창 방식으로는 필요한 개수를 못 채우는 경우가 있다 — "최근 N일"이 아니라 "최근 N개"가
+ * 필요한 연속 증가/감소 판정에는 이 함수를 쓴다.
+ */
+export async function getMetricHistoryByCount(metric: string, count: number) {
+  const rows = await db.metricValue.findMany({
+    where: { metric },
+    orderBy: { date: "desc" },
+    take: count,
+  });
+  return rows.reverse();
+}
+
+/**
  * 값의 최근 1년 내 백분위(0~100) 계산.
  * 3단계(캐리 스프레드·포지션), 5단계(나스닥-러셀 격차) 백분위 산출에 공용으로 씀.
  */

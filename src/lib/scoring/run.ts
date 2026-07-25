@@ -1,4 +1,4 @@
-import { getLatestMetric, getMetricHistory, calculatePercentile, calculateCumulativeReturn } from "@/lib/metrics";
+import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculateCumulativeReturn } from "@/lib/metrics";
 import { getRecentRiskyNews } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
@@ -25,27 +25,29 @@ interface TrendCheck {
   latestValue: number | null;
 }
 
-/** 최근 값들이 계속 늘고 있는지 판정 + 최신값 동시 반환. 데이터 부족하면 met=null(모름). */
+/**
+ * 최근 값들이 계속 늘고 있는지 판정 + 최신값 동시 반환. 데이터 부족하면 met=null(모름).
+ * 날짜창이 아니라 "최근 N개 데이터포인트"로 가져온다 — 월간 지표(TOTRESNS, REAL_RATE 등)는
+ * 발표가 몇 달씩 밀리기도 해서 날짜창 방식으론 필요한 개수를 못 채우는 경우가 있었다.
+ */
 async function risingCheck(metric: string, periods: number): Promise<TrendCheck> {
-  const history = await getMetricHistory(metric, periods * 10);
+  const history = await getMetricHistoryByCount(metric, periods + 1);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   if (history.length < periods + 1) return { met: null, latestValue };
-  const recent = history.slice(-(periods + 1));
   let met = true;
-  for (let i = 1; i < recent.length; i++) {
-    if (recent[i].value <= recent[i - 1].value) { met = false; break; }
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].value <= history[i - 1].value) { met = false; break; }
   }
   return { met, latestValue };
 }
 
 async function fallingCheck(metric: string, periods: number): Promise<TrendCheck> {
-  const history = await getMetricHistory(metric, periods * 10);
+  const history = await getMetricHistoryByCount(metric, periods + 1);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   if (history.length < periods + 1) return { met: null, latestValue };
-  const recent = history.slice(-(periods + 1));
   let met = true;
-  for (let i = 1; i < recent.length; i++) {
-    if (recent[i].value >= recent[i - 1].value) { met = false; break; }
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].value >= history[i - 1].value) { met = false; break; }
   }
   return { met, latestValue };
 }
@@ -56,7 +58,7 @@ async function fallingCheck(metric: string, periods: number): Promise<TrendCheck
  * YoY(이번달) > YoY(지난달) > YoY(지지난달)이면 충족.
  */
 async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
-  const history = await getMetricHistory(METRICS.M2, 800); // 월간 데이터라 2년치 이상 넉넉히 확보
+  const history = await getMetricHistoryByCount(METRICS.M2, 20); // 3개월치 YoY 계산에 최소 15개월 필요, 여유 있게 20개
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   const n = history.length;
   if (n < 15) return { met: null, latestValue, detail: "데이터 부족" };
@@ -75,9 +77,10 @@ async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
 }
 
 async function directionOf(metric: string): Promise<Direction | null> {
-  const history = await getMetricHistory(metric, 10);
-  if (history.length < 2) return null;
-  const [prev, curr] = history.slice(-2);
+  // 날짜창(예: 최근 10일) 방식은 월간 지표(REAL_RATE 등)가 발표 지연 시 데이터 0~1개만 잡혀
+  // 늘 null->"flat"로 새는 버그가 있었다 — "최근 2개 데이터포인트"로 바꿔 발표 주기와 무관하게 동작.
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+  if (!prev || !curr) return null;
   if (curr.value > prev.value) return "up";
   if (curr.value < prev.value) return "down";
   return "flat";
@@ -193,7 +196,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step2 = [
     { label: "Fed 자산(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0), met: walcl.met },
     { label: "M2 통화량", criterion: "전년 동월 대비(YoY) 증가율이 2개월 연속 상향(성장 가속)", value: m2.detail, met: m2.met },
-    { label: "지급준비금(TOTRESNS)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0), met: reserves.met },
+    { label: "기준잔액(TOTRESNS)", criterion: "최근 4기간 연속 증가", value: fmt(reserves.latestValue, 0), met: reserves.met },
     { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 0), met: rrp.met },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0), met: tga.met },
     { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
