@@ -103,7 +103,7 @@ export function ReportView({
         )}
       </StepCard>
 
-      <StepCard step={4} title="환율·금·유가" score={step4.score} details={details?.step4} tip={STEP_TIPS[4]} summary={details?.step4Summary}>
+      <StepCard step={4} title="환율·금·유가" score={step4.score} details={details?.step4} auxDetails={details?.step4Aux} tip={STEP_TIPS[4]} summary={details?.step4Summary}>
         <Field label="사분면" value={step4.quadrant} />
         <Field label="달러 확인" value={step4.dollarConfirms ? "실질금리와 동행(신호 강함)" : "디커플링(경계)"} />
       </StepCard>

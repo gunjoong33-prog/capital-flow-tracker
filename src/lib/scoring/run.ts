@@ -112,17 +112,73 @@ function summarizeStep3(
 }
 
 /**
- * 4단계(금·실질금리 사분면) 판정 결과를 1~2줄로 요약. summarizeStep2/3와 같은 원칙(결정론적, LLM 미사용).
+ * 4단계(금·실질금리 사분면) 판정 결과를 1~3줄로 요약. summarizeStep2/3와 같은 원칙(결정론적, LLM 미사용).
  * pure.ts의 note는 이미 사람이 읽기 좋은 해설 문장이라 그대로 재사용한다.
+ * 3번째 줄은 환율·유가가 왜 그렇게 움직였는지를 1~3단계 결과(거부권·유동성 국면·엔 캐리 압박)에서 추론해 붙인다 —
+ * 원인이 여러 개면 리스크가 큰 순서(거부권 > 엔 캐리 청산 압박 > 유동성 위축)로 하나만 골라 짧게 유지한다.
  */
-function summarizeStep4(step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean }): string {
+function summarizeStep4(
+  step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean },
+  fxOilDirection: { dollarDir: Direction; oilDir: Direction },
+  context: {
+    vetoTriggered: boolean;
+    overseasQualifyingCount: number;
+    overseasTotalCount: number;
+    carryZone: string;
+    jpySpike: boolean;
+  }
+): string {
   const lines = [`현재 사분면은 "${step4Result.quadrant}"이며, ${step4Result.note}(4단계 점수 ${step4Result.score}/10).`];
   lines.push(
     step4Result.dollarConfirms
       ? "달러도 실질금리와 같은 방향으로 움직이고 있어 신호가 강한 편입니다."
       : "달러는 실질금리와 다른 방향으로 움직이고 있어 디커플링(신호 약화) 경계가 필요합니다."
   );
+
+  const riskStance = fxOilDirection.dollarDir === "up" && fxOilDirection.oilDir === "up"
+    ? "Risk-Off(자본이 미국에 갇힘)"
+    : fxOilDirection.dollarDir === "down"
+      ? "Risk-On(신흥국으로 자금 확산)"
+      : "혼조";
+
+  let reason: string;
+  if (context.vetoTriggered) {
+    reason = "1단계에서 지정학적·정책 리스크로 거부권이 발동된 만큼 안전자산 선호가 영향을 준 것으로 보입니다";
+  } else if (context.jpySpike || context.carryZone === "위험") {
+    reason = "3단계 엔 캐리 트레이드 청산 압박(스프레드 위험 구간 또는 엔화 변동성 급등)이 환시 변동성을 키운 것으로 보입니다";
+  } else if (context.overseasTotalCount > 0 && context.overseasQualifyingCount / context.overseasTotalCount < 3 / 7) {
+    reason = "2단계 해외 유동성이 위축된 국면이라 위험자산 대비 달러 선호가 반영된 것으로 보입니다";
+  } else {
+    reason = "1~3단계에서 뚜렷한 리스크 신호는 없어 통상적인 변동 범위 안에서 움직인 것으로 보입니다";
+  }
+  lines.push(`환율·유가는 ${riskStance} 흐름이며, ${reason}.`);
+
   return lines.join("\n");
+}
+
+interface DailyChange {
+  latest: number | null;
+  changeAmount: number | null;
+  changePct: number | null;
+}
+
+/** 지표의 최신값과 직전 데이터포인트 대비 변동액·변동률. 4단계 환율·유가 보조 지표에 쓴다. */
+async function dailyChange(metric: string): Promise<DailyChange> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+  if (!curr) return { latest: null, changeAmount: null, changePct: null };
+  if (!prev) return { latest: curr.value, changeAmount: null, changePct: null };
+  const changeAmount = curr.value - prev.value;
+  const changePct = prev.value !== 0 ? (changeAmount / prev.value) * 100 : null;
+  return { latest: curr.value, changeAmount, changePct };
+}
+
+/** dailyChange 결과를 "값 (단위) — 전일 대비 ±값 (단위), ±값%" 형태의 표시 문자열로 만든다. */
+function fmtDailyChange(c: DailyChange, unit: string, decimals = 2): string {
+  if (c.latest === null) return "확인 못함";
+  const latestStr = fmt(c.latest, decimals, unit);
+  if (c.changeAmount === null || c.changePct === null) return latestStr;
+  const sign = c.changeAmount >= 0 ? "+" : "";
+  return `${latestStr} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
 }
 
 interface TrendCheck {
@@ -474,7 +530,31 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "사분면 판정", criterion: "위험선호 우호적 조합(금↓+실질금리↑ 또는 금↑+실질금리↓/보합) 시 충족", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
 
-  details.step4Summary = summarizeStep4(step4);
+  // 보조 지표 — 환율(USD/KRW, USD/JPY)·유가(WTI, 브렌트)의 전일 대비 변동. 원본 프롬프트의 4개 핵심 지표
+  // 구조를 그대로 유지하려고 집계엔 안 넣고, 2단계와 같은 방식으로 별도 토글("보조 지표 보기")로 뺀다.
+  const usdKrwChange = await dailyChange(METRICS.USDKRW);
+  const usdJpyChange = await dailyChange(METRICS.USDJPY);
+  const wtiChange = await dailyChange(METRICS.WTI);
+  const brentChange = await dailyChange(METRICS.BRENT);
+  const wtiDir = (await directionOf(METRICS.WTI)) ?? "flat";
+  details.step4Aux = [
+    { label: "USD/KRW", criterion: "참고용 — 강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    { label: "USD/JPY", criterion: "참고용 — 강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
+    { label: "WTI유 선물", criterion: "참고용 — 고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
+    { label: "브렌트유 선물", criterion: "참고용 — 고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
+  ];
+
+  details.step4Summary = summarizeStep4(
+    step4,
+    { dollarDir, oilDir: wtiDir },
+    {
+      vetoTriggered: step1.vetoTriggered,
+      overseasQualifyingCount: step2.overseasQualifyingCount,
+      overseasTotalCount: step2.overseasTotalCount,
+      carryZone: step3.zone,
+      jpySpike: jpySpike.spike,
+    }
+  );
 
   // 5단계
   const ndxReturn20d = (await calculateCumulativeReturn(METRICS.NDX, 20)) ?? 0;
