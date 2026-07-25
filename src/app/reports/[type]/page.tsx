@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { SiteNav } from "@/components/SiteNav";
 import type { PeriodType } from "@/lib/period-report";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +35,7 @@ export default async function ReportArchivePage({
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-3xl space-y-6">
-        <nav className="flex gap-4 text-sm text-zinc-500">
-          <Link href="/" className="hover:text-zinc-200">오늘의 리포트</Link>
-          <Link href="/calendar" className="hover:text-zinc-200">캘린더</Link>
-          <span className="text-zinc-100">주기별 리포트</span>
-        </nav>
+        <SiteNav active="reports" />
 
         <div className="flex gap-2 text-sm">
           {Object.keys(TYPE_MAP).map((t) => (
@@ -82,7 +79,7 @@ export default async function ReportArchivePage({
                       </span>
                     )}
                     {summary.avgMacroTrendScore !== null && (
-                      <span className="text-xs text-zinc-500">평균 점수 {summary.avgMacroTrendScore}</span>
+                      <span className="text-xs text-zinc-500">평균 투자 적합도 {summary.avgMacroTrendScore}</span>
                     )}
                   </div>
                 </div>

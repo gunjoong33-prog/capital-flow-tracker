@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
+import { SiteNav } from "@/components/SiteNav";
 import type { Step8Result } from "@/lib/scoring/types";
 
 export const dynamic = "force-dynamic";
@@ -52,11 +53,7 @@ export default async function CalendarPage({
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-4xl space-y-6">
-        <nav className="flex gap-4 text-sm text-zinc-500">
-          <Link href="/" className="hover:text-zinc-200">오늘의 리포트</Link>
-          <span className="text-zinc-100">캘린더</span>
-          <Link href="/reports/weekly" className="hover:text-zinc-200">주기별 리포트</Link>
-        </nav>
+        <SiteNav active="calendar" />
 
         <div className="flex items-center justify-between">
           <Link

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { ReportView, type ReportViewData } from "@/components/ReportView";
+import { SiteNav } from "@/components/SiteNav";
 import type { StepDetails } from "@/lib/scoring/types";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +33,7 @@ export default async function CalendarDayPage({
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-3xl space-y-4">
-        <nav className="flex gap-4 text-sm text-zinc-500">
-          <Link href="/" className="hover:text-zinc-200">오늘의 리포트</Link>
-          <Link href="/calendar" className="hover:text-zinc-200">캘린더</Link>
-          <Link href="/reports/weekly" className="hover:text-zinc-200">주기별 리포트</Link>
-        </nav>
+        <SiteNav active="calendar" />
         <ReportView
           dateLabel={dateLabel}
           report={reportData}

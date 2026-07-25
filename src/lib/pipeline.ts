@@ -11,6 +11,7 @@ import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
+import { getManualInputsForDate } from "@/lib/manual-inputs";
 import type { FetchedPoint } from "@/lib/sources/types";
 
 export interface DailyPipelineResult {
@@ -89,13 +90,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       : [];
   if (sectorsResult.status === "rejected") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 
-  // 2) 채점 — 자동 소스 없는 항목은 기본값(placeholder). UI/향후 수동입력 기능으로 보완 예정.
+  // 2) 채점 — 자동 소스 없는 항목은 /manual-input에서 그날 입력한 값을 쓴다(안 넣으면 안전한 기본값).
+  const manualInputs = await getManualInputsForDate(today);
   const report = await runDailyAnalysis({
-    newsCountLast7Days: 0,
-    hasBigEventNext14Days: false,
-    domesticWeightHigh: false,
-    jpyVolSpike: false,
-    fearGreed: null,
+    newsCountLast7Days: manualInputs.newsCountLast7Days,
+    hasBigEventNext14Days: manualInputs.hasBigEventNext14Days,
+    domesticWeightHigh: manualInputs.domesticWeightHigh,
+    jpyVolSpike: manualInputs.jpyVolSpike,
+    fearGreed: manualInputs.fearGreed,
     sectors,
   });
 

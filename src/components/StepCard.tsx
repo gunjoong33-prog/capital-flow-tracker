@@ -7,23 +7,42 @@ export function StepCard({
   score,
   children,
   details,
+  tip,
 }: {
   step: number;
   title: string;
   score?: number;
   children: ReactNode;
   details?: StepDetailRow[];
+  tip?: string;
 }) {
+  const tipId = `tip-${step}`;
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+      {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-400">
-          {step}단계 · {title}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-zinc-400">
+            {step}단계 · {title}
+          </h2>
+          {tip && (
+            <label
+              htmlFor={tipId}
+              className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-zinc-700 text-[10px] leading-none text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 peer-checked:border-zinc-400 peer-checked:text-zinc-200"
+            >
+              ?
+            </label>
+          )}
+        </div>
         {score !== undefined && (
           <span className="text-xs text-zinc-500">점수 {score.toFixed(1)}</span>
         )}
       </div>
+      {tip && (
+        <div className="mb-3 hidden whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400 peer-checked:block">
+          {tip}
+        </div>
+      )}
       <div className="text-sm text-zinc-200">{children}</div>
 
       {details && details.length > 0 && (

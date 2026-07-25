@@ -222,7 +222,7 @@ export async function writeCalendarEntry(input: {
           rich_text: [
             {
               type: "text",
-              text: { content: `매크로 추세 점수: ${input.macroTrendScore.toFixed(2)} / 최종 결론: ${input.finalDecision}` },
+              text: { content: `투자 적합도 점수: ${input.macroTrendScore.toFixed(2)} / 최종 결론: ${input.finalDecision}` },
             },
           ],
         },
