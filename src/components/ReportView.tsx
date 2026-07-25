@@ -103,10 +103,9 @@ export function ReportView({
         )}
       </StepCard>
 
-      <StepCard step={4} title="환율·금·유가" score={step4.score} details={details?.step4} tip={STEP_TIPS[4]}>
+      <StepCard step={4} title="환율·금·유가" score={step4.score} details={details?.step4} tip={STEP_TIPS[4]} summary={details?.step4Summary}>
         <Field label="사분면" value={step4.quadrant} />
         <Field label="달러 확인" value={step4.dollarConfirms ? "실질금리와 동행(신호 강함)" : "디커플링(경계)"} />
-        <p className="mt-2 text-xs text-zinc-500">{step4.note}</p>
       </StepCard>
 
       <StepCard step={5} title="규모별·성격별 자금 도착" score={step5.score} details={details?.step5} tip={STEP_TIPS[5]}>

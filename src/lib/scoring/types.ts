@@ -154,6 +154,7 @@ export type StepDetails = {
   step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드) — 별도 토글
   step2Summary?: string; // 2단계 지표 결과를 1~3줄로 요약한 종합판단(결정론적 생성, "상세 보기" 위에 표시)
   step3Summary?: string; // 3단계 지표 결과를 1~3줄로 요약한 종합판단
+  step4Summary?: string; // 4단계 지표 결과를 1~3줄로 요약한 종합판단
   step3: StepDetailRow[];
   step4: StepDetailRow[];
   step5: StepDetailRow[];

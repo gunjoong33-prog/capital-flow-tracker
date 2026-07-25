@@ -111,6 +111,20 @@ function summarizeStep3(
   return lines.join("\n");
 }
 
+/**
+ * 4단계(금·실질금리 사분면) 판정 결과를 1~2줄로 요약. summarizeStep2/3와 같은 원칙(결정론적, LLM 미사용).
+ * pure.ts의 note는 이미 사람이 읽기 좋은 해설 문장이라 그대로 재사용한다.
+ */
+function summarizeStep4(step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean }): string {
+  const lines = [`현재 사분면은 "${step4Result.quadrant}"이며, ${step4Result.note}(4단계 점수 ${step4Result.score}/10).`];
+  lines.push(
+    step4Result.dollarConfirms
+      ? "달러도 실질금리와 같은 방향으로 움직이고 있어 신호가 강한 편입니다."
+      : "달러는 실질금리와 다른 방향으로 움직이고 있어 디커플링(신호 약화) 경계가 필요합니다."
+  );
+  return lines.join("\n");
+}
+
 interface TrendCheck {
   met: boolean | null;
   latestValue: number | null;
@@ -456,9 +470,11 @@ export async function runDailyAnalysis(manualInputs: {
   details.step4 = [
     { label: "금 가격 방향", criterion: "직전 대비", value: dirLabel(goldDir), met: null },
     { label: "실질금리 방향", criterion: "직전 대비", value: dirLabel(realRateDir), met: null },
-    { label: "달러(USD/KRW) 방향(보조 확인)", criterion: "실질금리와 같은 방향이면 신호 강함", value: dirLabel(dollarDir), met: step4.dollarConfirms },
-    { label: "사분면 판정", criterion: "금·실질금리 조합", value: step4.quadrant, met: null },
+    { label: "달러 방향(USD/KRW)", criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함", value: dirLabel(dollarDir), met: step4.dollarConfirms },
+    { label: "사분면 판정", criterion: "위험선호 우호적 조합(금↓+실질금리↑ 또는 금↑+실질금리↓/보합) 시 충족", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
+
+  details.step4Summary = summarizeStep4(step4);
 
   // 5단계
   const ndxReturn20d = (await calculateCumulativeReturn(METRICS.NDX, 20)) ?? 0;
