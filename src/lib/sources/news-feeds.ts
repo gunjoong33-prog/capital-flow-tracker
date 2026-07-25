@@ -1,6 +1,8 @@
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
 // Google News RSS: 검색어 기반 공개 RSS(비공식이지만 안정적으로 유지돼온 포맷).
-// 연준 보도자료 RSS: federalreserve.gov 공식 피드.
+// 연준 보도자료·연설/증언, 백악관 뉴스: 각 기관 공식 RSS 피드
+// (federalreserve.gov/feeds/feeds.htm, whitehouse.gov/news/feed/ 에서 확인).
+// v2 프롬프트 1단계 원문이 "Bloomberg ASIA·백악관·Fed"를 직접 지정한 소스라 그대로 반영.
 
 export interface Headline {
   title: string;
@@ -58,6 +60,8 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
       fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news", 5)
     ),
     fetchRss("https://www.federalreserve.gov/feeds/press_all.xml", "fed-press", 10),
+    fetchRss("https://www.federalreserve.gov/feeds/speeches_and_testimony.xml", "fed-speeches", 10),
+    fetchRss("https://www.whitehouse.gov/news/feed/", "whitehouse", 10),
   ]);
 
   for (const r of results) {
