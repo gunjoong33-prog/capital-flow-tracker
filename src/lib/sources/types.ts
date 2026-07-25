@@ -4,7 +4,7 @@ export const METRICS = {
   // 2단계 해외
   WALCL: "WALCL", // 연준 대차대조표
   M2: "M2", // M2 통화량
-  TOTRESNS: "TOTRESNS", // 기준잔액(연준 지급준비금 잔액)
+  TOTRESNS: "TOTRESNS", // 기준잔액 — FRED WRESBAL(주간) 시리즈로 채움, "4주 연속" 기준에 맞춤
   RRP: "RRP", // 역레포 잔액
   TGA: "TGA", // 재무부 계정
   REAL_RATE: "REAL_RATE", // 실질금리(10년물)

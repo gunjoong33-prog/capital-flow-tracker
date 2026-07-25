@@ -5,7 +5,8 @@ import { METRICS, type FetchedPoint } from "./types";
 const FRED_SERIES: Record<string, string> = {
   [METRICS.WALCL]: "WALCL",
   [METRICS.M2]: "M2SL",
-  [METRICS.TOTRESNS]: "TOTRESNS",
+  // 기준잔액 기준이 "4주 연속"이라 월간 시리즈(TOTRESNS)가 아니라 주간 시리즈(WRESBAL)를 써야 한다.
+  [METRICS.TOTRESNS]: "WRESBAL",
   [METRICS.RRP]: "RRPONTTLD",
   [METRICS.TGA]: "WTREGEN",
   [METRICS.REAL_RATE]: "REAINTRATREARAT10Y",
