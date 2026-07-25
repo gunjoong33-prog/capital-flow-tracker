@@ -15,6 +15,19 @@ import {
 } from "./pure";
 import type { Direction, SectorInput, StepDetailRow, StepDetails } from "./types";
 
+/**
+ * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
+ * 쓰는 임계점 그대로(3단계 캐리 트레이드 구간표와 같은 방식으로 추가). "3기간 연속 축소" 추세와는
+ * 별개로, "지금 수준 자체가 위험한 구간인가"를 보여주는 보조 정보다.
+ */
+function creditSpreadZone(bp: number): string {
+  if (bp < 300) return "과도한 낙관(반등 리스크 경계)";
+  if (bp < 400) return "낙관→정상 이행 구간";
+  if (bp <= 500) return "역사적 평균(정상) 구간";
+  if (bp < 600) return "정상→경색 이행(주의)";
+  return "신용경색·침체 경고(600bp 이상)";
+}
+
 function fmt(v: number | null, decimals = 2, suffix = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
   return `${v.toFixed(decimals)}${suffix}`;
@@ -200,8 +213,27 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, " 십억달러"), met: rrp.met },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, " 백만달러"), met: tga.met },
     { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
-    { label: "크레딧 스프레드", criterion: "최근 3기간 연속 축소", value: fmt(creditSpread.latestValue, 2, "%"), met: creditSpread.met },
+    {
+      label: "크레딧 스프레드(하이일드 OAS)",
+      criterion: "최근 3기간 연속 축소",
+      value: creditSpread.latestValue !== null
+        ? `${(creditSpread.latestValue * 100).toFixed(0)}bp (${creditSpreadZone(creditSpread.latestValue * 100)})`
+        : "확인 못함",
+      met: creditSpread.met,
+    },
   ];
+
+  // BBB 등급 스프레드 — 정보용 보조 지표(원본 프롬프트의 "크레딧 스프레드" 1개 지표를 그대로 유지하려고
+  // 해외 지표 7개 집계엔 넣지 않는다). 200bp 넘으면 우량 기업조차 차환에 어려움을 겪는다는 신호.
+  const bbb = await getLatestMetric(METRICS.CREDIT_SPREAD_BBB);
+  const bbbBp = bbb ? bbb.value * 100 : null;
+  details.step2.push({
+    label: "BBB 등급 스프레드(보조 지표, 집계 제외)",
+    criterion: "200bp 초과 시 우량기업 차환 어려움 경고",
+    value: bbbBp !== null ? `${bbbBp.toFixed(0)}bp` : "확인 못함",
+    met: bbbBp !== null ? bbbBp <= 200 : null,
+  });
+
   if (manualInputs.domesticWeightHigh) {
     details.step2.push(
       { label: "한국은행 기준금리 인하", criterion: "비정기 발표 — 자동 미판정", value: "확인 못함", met: null },

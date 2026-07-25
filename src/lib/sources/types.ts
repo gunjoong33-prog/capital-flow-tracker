@@ -8,7 +8,8 @@ export const METRICS = {
   RRP: "RRP", // 역레포 잔액
   TGA: "TGA", // 재무부 계정
   REAL_RATE: "REAL_RATE", // 실질금리(10년물)
-  CREDIT_SPREAD: "CREDIT_SPREAD", // 크레딧 스프레드(HY OAS)
+  CREDIT_SPREAD: "CREDIT_SPREAD", // 크레딧 스프레드(하이일드 OAS, BAMLH0A0HYM2)
+  CREDIT_SPREAD_BBB: "CREDIT_SPREAD_BBB", // BBB 등급 스프레드(보조 지표, BAMLC0A4CBBB) — 200bp 초과 시 우량기업 차환 경고
   US10Y_2Y10Y_SPREAD: "US10Y_2Y10Y_SPREAD", // 미국 2Y-10Y 스프레드
   US_CPI: "US_CPI", // 미국 CPI(계절조정, 1단계 이벤트 서프라이즈 판정용)
   US_NFP: "US_NFP", // 미국 비농업 고용자수(1단계 이벤트 서프라이즈 판정용)
