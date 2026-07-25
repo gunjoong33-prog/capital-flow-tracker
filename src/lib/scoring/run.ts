@@ -49,6 +49,68 @@ function fmt(v: number | null, decimals = 2, unit = ""): string {
   return `${formatted} (${unit})`;
 }
 
+/**
+ * 2단계 지표 7개(+보조 지표) 판정 결과를 결정론적 규칙으로 1~3줄 한국어 문장으로 요약한다.
+ * LLM 호출 없이 이미 계산된 값만 조합하므로 재현 가능하고, "상세 보기" 토글을 안 열어도
+ * 한눈에 상황을 파악할 수 있게 하는 게 목적이다.
+ */
+function summarizeStep2(
+  step2Result: { overseasQualifyingCount: number; overseasTotalCount: number; finalScore: number },
+  creditSpreadBp: number | null,
+  netLiqRising: boolean | null,
+  rrpDepleted: boolean | null,
+  tgaWithinNormalRange: boolean | null
+): string {
+  const { overseasQualifyingCount: q, overseasTotalCount: t, finalScore } = step2Result;
+  const ratio = t > 0 ? q / t : 0;
+  const stance = ratio >= 5 / 7
+    ? "뚜렷한 완화 국면"
+    : ratio >= 3 / 7
+      ? "신호가 엇갈리는 혼조 국면"
+      : "대체로 위축된 국면";
+  const lines = [`해외 유동성 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(1)}/10).`];
+
+  if (creditSpreadBp !== null) {
+    lines.push(`크레딧 스프레드는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}" 구간입니다.`);
+  }
+
+  const auxParts: string[] = [];
+  if (netLiqRising !== null) auxParts.push(`순유동성은 ${netLiqRising ? "상승" : "하락"} 추세`);
+  if (rrpDepleted !== null) auxParts.push(`RRP 방파제는 ${rrpDepleted ? "고갈 경고" : "정상"}`);
+  if (tgaWithinNormalRange !== null) auxParts.push(`TGA는 평균 대비 ${tgaWithinNormalRange ? "정상 범위" : "이탈"}`);
+  if (auxParts.length > 0) lines.push(`${auxParts.join(", ")}입니다.`);
+
+  return lines.join("\n");
+}
+
+/**
+ * 3단계(캐리 트레이드) 지표 판정 결과를 1~3줄로 요약. summarizeStep2와 같은 원칙(결정론적, LLM 미사용).
+ */
+function summarizeStep3(
+  step3Result: { spreadBp: number; zone: string },
+  spreadPercentile: number | null,
+  cftcPercentile: number | null,
+  jpySpike: { spike: boolean; zScore: number | null }
+): string {
+  const zoneDesc = step3Result.zone === "안정" ? "유지되기 쉬운" : step3Result.zone === "주의" ? "주의가 필요한" : "위태로운";
+  const lines = [`US10Y-JP10Y 스프레드가 ${step3Result.spreadBp}bp로 "${step3Result.zone}" 구간에 있어 엔 캐리 트레이드가 ${zoneDesc} 환경입니다.`];
+
+  if (spreadPercentile !== null && cftcPercentile !== null) {
+    const activity = cftcPercentile < 50 ? "활발한" : "저조한";
+    lines.push(`최근 1년 스프레드 백분위는 ${spreadPercentile}%ile, CFTC 엔화 순포지션은 ${cftcPercentile}%ile로 캐리 트레이드가 ${activity} 편입니다.`);
+  }
+
+  if (jpySpike.zScore !== null) {
+    lines.push(
+      jpySpike.spike
+        ? `엔화 변동성이 급등(z=${jpySpike.zScore})해 청산 압박이 커지고 있어 레버리지 축소가 필요합니다.`
+        : `엔화 변동성 급등은 감지되지 않아(z=${jpySpike.zScore}) 아직 안정적입니다.`
+    );
+  }
+
+  return lines.join("\n");
+}
+
 interface TrendCheck {
   met: boolean | null;
   latestValue: number | null;
@@ -315,8 +377,10 @@ export async function runDailyAnalysis(manualInputs: {
     met: netLiq.risingTrend,
   });
 
+  let rrpDepleted: boolean | null = null;
   if (rrp.latestValue !== null) {
     const rrpStatus = rrpBufferStatus(rrp.latestValue);
+    rrpDepleted = rrpStatus.depleted;
     details.step2Aux.push({
       label: "RRP 방파제 상태",
       criterion: "50십억달러 미만이면 방파제 고갈 경고",
@@ -332,6 +396,14 @@ export async function runDailyAnalysis(manualInputs: {
     value: tgaDeviation.detail,
     met: tgaDeviation.withinNormalRange,
   });
+
+  details.step2Summary = summarizeStep2(
+    step2,
+    creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null,
+    netLiq.risingTrend,
+    rrpDepleted,
+    tgaDeviation.withinNormalRange
+  );
 
   if (manualInputs.domesticWeightHigh) {
     details.step2.push(
@@ -372,6 +444,8 @@ export async function runDailyAnalysis(manualInputs: {
       met: jpySpike.zScore !== null ? !jpySpike.spike : null,
     },
   ];
+
+  details.step3Summary = summarizeStep3(step3, spreadPercentile, cftcPercentile, jpySpike);
 
   // 4단계
   const goldDir = (await directionOf(METRICS.GOLD)) ?? "flat";

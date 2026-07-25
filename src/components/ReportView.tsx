@@ -86,7 +86,7 @@ export function ReportView({
         )}
       </StepCard>
 
-      <StepCard step={2} title="자본의 유동성" score={step2.finalScore} details={details?.step2} auxDetails={details?.step2Aux} tip={STEP_TIPS[2]}>
+      <StepCard step={2} title="자본의 유동성" score={step2.finalScore} details={details?.step2} auxDetails={details?.step2Aux} tip={STEP_TIPS[2]} summary={details?.step2Summary}>
         <Field label="해외 지표 충족" value={`${step2.overseasQualifyingCount} / ${step2.overseasTotalCount}`} />
         <p className="-mt-1 mb-1.5 text-xs text-zinc-500">
           Fed 대차대조표·M2 통화량·기준잔액·역레포·TGA·실질금리·크레딧 스프레드 7개 지표 중 "유동성 우호적" 방향으로
@@ -95,7 +95,7 @@ export function ReportView({
         <Field label="국내 지표 보정" value={step2.domesticAdjustment > 0 ? `+${step2.domesticAdjustment}` : step2.domesticAdjustment} />
       </StepCard>
 
-      <StepCard step={3} title="캐리 트레이드" score={step3.score} details={details?.step3} tip={STEP_TIPS[3]}>
+      <StepCard step={3} title="캐리 트레이드" score={step3.score} details={details?.step3} tip={STEP_TIPS[3]} summary={details?.step3Summary}>
         <Field label="US10Y-JP10Y 스프레드" value={`${step3.spreadBp}bp`} />
         <Field label="구간(참고용, 미검증)" value={step3.zone} />
         {step3.warning && (

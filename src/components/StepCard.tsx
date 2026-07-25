@@ -146,6 +146,7 @@ export function StepCard({
   details,
   auxDetails,
   tip,
+  summary,
 }: {
   step: number;
   title: string;
@@ -154,6 +155,7 @@ export function StepCard({
   details?: StepDetailRow[];
   auxDetails?: StepDetailRow[];
   tip?: string;
+  summary?: string;
 }) {
   const tipId = `tip-${step}`;
   return (
@@ -183,6 +185,13 @@ export function StepCard({
         </div>
       )}
       <div className="text-sm text-zinc-200">{children}</div>
+
+      {summary && (
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">종합판단</p>
+          <p className="whitespace-pre-line text-xs leading-relaxed text-zinc-300">{summary}</p>
+        </div>
+      )}
 
       {((details && details.length > 0) || (auxDetails && auxDetails.length > 0)) && (
         <div className="mt-3 space-y-2">
