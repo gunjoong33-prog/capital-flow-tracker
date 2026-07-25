@@ -4,7 +4,13 @@ import type { StepDetailRow } from "@/lib/scoring/types";
 function DetailTable({ rows }: { rows: StepDetailRow[] }) {
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
-      <table className="w-full text-xs">
+      <table className="w-full table-fixed text-xs">
+        <colgroup>
+          <col className="w-[24%]" />
+          <col className="w-[30%]" />
+          <col className="w-[32%]" />
+          <col className="w-[14%]" />
+        </colgroup>
         <thead>
           <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
             <th className="px-3 py-2 font-normal">지표</th>
@@ -14,24 +20,110 @@ function DetailTable({ rows }: { rows: StepDetailRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-b border-zinc-800/60 last:border-0">
-              <td className="px-3 py-2 text-zinc-300">{row.label}</td>
-              <td className="px-3 py-2 text-zinc-500">{row.criterion}</td>
-              <td className="px-3 py-2 text-zinc-200">{row.value}</td>
-              <td className="px-3 py-2">
-                {row.met === null ? (
-                  <span className="text-zinc-600">-</span>
-                ) : row.met ? (
-                  <span className="text-emerald-400">✓</span>
-                ) : (
-                  <span className="text-rose-400">✕</span>
-                )}
-              </td>
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            // run.ts가 "핵심값 — 부가설명" 형태로 값을 만드는 경우가 많다 — 나눠서
+            // 핵심값은 굵게, 부가설명은 작은 보조 텍스트로 분리해야 표가 안 빽빽해진다.
+            const [mainValue, ...noteParts] = row.value.split(" — ");
+            const note = noteParts.join(" — ");
+            return (
+              <tr key={i} className="border-b border-zinc-800/60 align-top last:border-0">
+                <td className="px-3 py-2.5 text-zinc-300">{row.label}</td>
+                <td className="px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
+                <td className="px-3 py-2.5">
+                  <div className="font-medium text-zinc-200">{mainValue}</div>
+                  {note && <div className="mt-0.5 leading-snug text-zinc-500">{note}</div>}
+                </td>
+                <td className="px-3 py-2.5">
+                  {row.met === null ? (
+                    <span className="text-zinc-600">-</span>
+                  ) : row.met ? (
+                    <span className="text-emerald-400">✓</span>
+                  ) : (
+                    <span className="text-rose-400">✕</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface TipItem {
+  text: string;
+  marker: string;
+  sub: string[];
+}
+
+/** 팁 텍스트 한 블록(빈 줄로 구분된 단위)을 제목 문단 + 불릿/번호 목록으로 구조화해서 렌더링. */
+function TipBlock({ block }: { block: string }) {
+  const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // 불릿("-")·번호("1.")·보조설명("—")이 나오기 전까지의 앞머리 줄들은 제목 문단으로 합친다.
+  let i = 0;
+  const headingLines: string[] = [];
+  while (i < lines.length && !/^[-—]|^\d+\.\s/.test(lines[i])) {
+    headingLines.push(lines[i]);
+    i++;
+  }
+  const heading = headingLines.length > 0 ? headingLines.join(" ") : null;
+
+  const items: TipItem[] = [];
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("—")) {
+      if (items.length > 0) items[items.length - 1].sub.push(line.replace(/^—\s*/, ""));
+      continue;
+    }
+    const numMatch = line.match(/^(\d+)\.\s+(.*)/);
+    const bulletMatch = line.match(/^-\s+(.*)/);
+    if (numMatch) {
+      items.push({ text: numMatch[2], marker: `${numMatch[1]}.`, sub: [] });
+    } else if (bulletMatch) {
+      items.push({ text: bulletMatch[1], marker: "•", sub: [] });
+    } else if (items.length > 0) {
+      // 소스 코드에서 길어서 줄바꿈해둔 불릿의 이어지는 줄 — 새 항목이 아니라 이전 항목에 붙인다.
+      items[items.length - 1].text += ` ${line}`;
+    } else {
+      items.push({ text: line, marker: "•", sub: [] });
+    }
+  }
+
+  if (items.length === 0) {
+    return <p className="leading-relaxed text-zinc-400">{heading}</p>;
+  }
+
+  return (
+    <div>
+      {heading && <p className="mb-1.5 leading-relaxed text-zinc-300">{heading}</p>}
+      <ul className="space-y-2">
+        {items.map((item, idx) => (
+          <li key={idx} className="flex gap-2 leading-relaxed">
+            <span className="shrink-0 text-zinc-600">{item.marker}</span>
+            <span className="text-zinc-400">
+              {item.text}
+              {item.sub.map((s, j) => (
+                <span key={j} className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
+                  {s}
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TipContent({ text }: { text: string }) {
+  const blocks = text.split("\n\n").filter((b) => b.trim().length > 0);
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, i) => (
+        <TipBlock key={i} block={block} />
+      ))}
     </div>
   );
 }
@@ -76,8 +168,8 @@ export function StepCard({
         )}
       </div>
       {tip && (
-        <div className="mb-3 hidden whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400 peer-checked:block">
-          {tip}
+        <div className="mb-3 hidden rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs peer-checked:block">
+          <TipContent text={tip} />
         </div>
       )}
       <div className="text-sm text-zinc-200">{children}</div>
