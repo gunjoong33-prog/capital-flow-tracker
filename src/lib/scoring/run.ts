@@ -468,8 +468,8 @@ export async function runDailyAnalysis(manualInputs: {
   const step4 = scoreStep4({ goldDirection: goldDir, realRateDirection: realRateDir, dollarDirection: dollarDir });
   const dirLabel = (d: Direction) => (d === "up" ? "상승" : d === "down" ? "하락" : "보합");
   details.step4 = [
-    { label: "금 가격 방향", criterion: "직전 대비", value: dirLabel(goldDir), met: null },
-    { label: "실질금리 방향", criterion: "직전 대비", value: dirLabel(realRateDir), met: null },
+    { label: "금 가격 방향", criterion: "하락 시 충족(사분면 최고점 조합의 방향)", value: dirLabel(goldDir), met: goldDir === "down" },
+    { label: "실질금리 방향", criterion: "상승 시 충족(사분면 최고점 조합의 방향)", value: dirLabel(realRateDir), met: realRateDir === "up" },
     { label: "달러 방향(USD/KRW)", criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함", value: dirLabel(dollarDir), met: step4.dollarConfirms },
     { label: "사분면 판정", criterion: "위험선호 우호적 조합(금↓+실질금리↑ 또는 금↑+실질금리↓/보합) 시 충족", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
