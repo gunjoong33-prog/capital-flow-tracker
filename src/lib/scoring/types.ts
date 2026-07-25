@@ -151,6 +151,7 @@ export interface StepDetailRow {
 export type StepDetails = {
   step1: StepDetailRow[];
   step2: StepDetailRow[];
+  step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드) — 별도 토글
   step3: StepDetailRow[];
   step4: StepDetailRow[];
   step5: StepDetailRow[];

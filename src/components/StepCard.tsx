@@ -1,12 +1,48 @@
 import type { ReactNode } from "react";
 import type { StepDetailRow } from "@/lib/scoring/types";
 
+function DetailTable({ rows }: { rows: StepDetailRow[] }) {
+  return (
+    <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
+            <th className="px-3 py-2 font-normal">지표</th>
+            <th className="px-3 py-2 font-normal">기준</th>
+            <th className="px-3 py-2 font-normal">실제값</th>
+            <th className="px-3 py-2 font-normal">충족</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-zinc-800/60 last:border-0">
+              <td className="px-3 py-2 text-zinc-300">{row.label}</td>
+              <td className="px-3 py-2 text-zinc-500">{row.criterion}</td>
+              <td className="px-3 py-2 text-zinc-200">{row.value}</td>
+              <td className="px-3 py-2">
+                {row.met === null ? (
+                  <span className="text-zinc-600">-</span>
+                ) : row.met ? (
+                  <span className="text-emerald-400">✓</span>
+                ) : (
+                  <span className="text-rose-400">✕</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function StepCard({
   step,
   title,
   score,
   children,
   details,
+  auxDetails,
   tip,
 }: {
   step: number;
@@ -14,6 +50,7 @@ export function StepCard({
   score?: number;
   children: ReactNode;
   details?: StepDetailRow[];
+  auxDetails?: StepDetailRow[];
   tip?: string;
 }) {
   const tipId = `tip-${step}`;
@@ -45,42 +82,25 @@ export function StepCard({
       )}
       <div className="text-sm text-zinc-200">{children}</div>
 
-      {details && details.length > 0 && (
-        <details className="mt-3">
-          <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
-            분석 기준·지표 상세 보기 ({details.length}개)
-          </summary>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
-                  <th className="px-3 py-2 font-normal">지표</th>
-                  <th className="px-3 py-2 font-normal">기준</th>
-                  <th className="px-3 py-2 font-normal">실제값</th>
-                  <th className="px-3 py-2 font-normal">충족</th>
-                </tr>
-              </thead>
-              <tbody>
-                {details.map((row, i) => (
-                  <tr key={i} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="px-3 py-2 text-zinc-300">{row.label}</td>
-                    <td className="px-3 py-2 text-zinc-500">{row.criterion}</td>
-                    <td className="px-3 py-2 text-zinc-200">{row.value}</td>
-                    <td className="px-3 py-2">
-                      {row.met === null ? (
-                        <span className="text-zinc-600">-</span>
-                      ) : row.met ? (
-                        <span className="text-emerald-400">✓</span>
-                      ) : (
-                        <span className="text-rose-400">✕</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+      {((details && details.length > 0) || (auxDetails && auxDetails.length > 0)) && (
+        <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
+          {details && details.length > 0 && (
+            <details className="min-w-0 flex-1">
+              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+                분석 기준·지표 상세 보기 ({details.length}개)
+              </summary>
+              <DetailTable rows={details} />
+            </details>
+          )}
+          {auxDetails && auxDetails.length > 0 && (
+            <details className="min-w-0 flex-1">
+              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+                보조 지표 보기 ({auxDetails.length}개, 집계 제외)
+              </summary>
+              <DetailTable rows={auxDetails} />
+            </details>
+          )}
+        </div>
       )}
     </section>
   );

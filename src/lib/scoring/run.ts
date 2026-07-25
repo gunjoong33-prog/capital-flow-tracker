@@ -283,21 +283,24 @@ export async function runDailyAnalysis(manualInputs: {
     },
   ];
 
-  // BBB 등급 스프레드 — 정보용 보조 지표(원본 프롬프트의 "크레딧 스프레드" 1개 지표를 그대로 유지하려고
-  // 해외 지표 7개 집계엔 넣지 않는다). 200bp 넘으면 우량 기업조차 차환에 어려움을 겪는다는 신호.
+  // 보조 지표 4개 — 원본 프롬프트의 7개 지표 구조를 그대로 유지하려고 해외 지표 집계엔 안 넣고
+  // "분석 기준·지표 상세 보기"와는 별도 토글("보조 지표 보기")로 뺀다.
+  details.step2Aux = [];
+
+  // BBB 등급 스프레드: 200bp 넘으면 우량 기업조차 차환에 어려움을 겪는다는 신호.
   const bbb = await getLatestMetric(METRICS.CREDIT_SPREAD_BBB);
   const bbbBp = bbb ? bbb.value * 100 : null;
-  details.step2.push({
-    label: "BBB 등급 스프레드(보조 지표, 집계 제외)",
+  details.step2Aux.push({
+    label: "BBB 등급 스프레드",
     criterion: "200bp 초과 시 우량기업 차환 어려움 경고",
     value: bbbBp !== null ? `${bbbBp.toFixed(0)}bp` : "확인 못함",
     met: bbbBp !== null ? bbbBp <= 200 : null,
   });
 
-  // 월가 순유동성 프레임워크(WALCL-TGA-RRP) 기반 보조 지표 3개 — 전부 정보용, 해외 지표 7개 집계엔 안 들어감.
+  // 월가 순유동성 프레임워크(WALCL-TGA-RRP) 기반 보조 지표 3개.
   const netLiq = await netLiquidityTrend();
-  details.step2.push({
-    label: "순유동성 Net Liquidity(보조 지표, 집계 제외)",
+  details.step2Aux.push({
+    label: "순유동성 Net Liquidity",
     criterion: "연준 총자산-TGA-RRP. 상승하면 증시에 우호적(월가 프레임워크)",
     value: netLiq.detail,
     met: netLiq.risingTrend,
@@ -305,8 +308,8 @@ export async function runDailyAnalysis(manualInputs: {
 
   if (rrp.latestValue !== null) {
     const rrpStatus = rrpBufferStatus(rrp.latestValue);
-    details.step2.push({
-      label: "RRP 방파제 상태(보조 지표, 집계 제외)",
+    details.step2Aux.push({
+      label: "RRP 방파제 상태",
       criterion: "50십억달러 미만이면 방파제 고갈 경고",
       value: `${fmt(rrp.latestValue, 2, "십억달러")} — ${rrpStatus.label}`,
       met: !rrpStatus.depleted,
@@ -314,8 +317,8 @@ export async function runDailyAnalysis(manualInputs: {
   }
 
   const tgaDeviation = await tgaDeviationFromRecentAverage();
-  details.step2.push({
-    label: "TGA 최근 평균 대비 이탈도(보조 지표, 집계 제외)",
+  details.step2Aux.push({
+    label: "TGA 최근 평균 대비 이탈도",
     criterion: "재무부 공식 QRA 목표잔액 대신 최근 8기간 평균을 기준선으로 씀 — ±10%p 넘게 이탈하면 경계",
     value: tgaDeviation.detail,
     met: tgaDeviation.withinNormalRange,
