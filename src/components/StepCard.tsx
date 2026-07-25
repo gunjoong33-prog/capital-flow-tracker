@@ -12,10 +12,10 @@ function DetailTable({ rows }: { rows: StepDetailRow[] }) {
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full table-fixed text-xs">
         <colgroup>
-          <col className="w-[20%]" />
+          <col className="w-[26%]" />
           <col className="w-[32%]" />
           <col className="w-[34%]" />
-          <col className="w-[14%]" />
+          <col className="w-[8%]" />
         </colgroup>
         <thead>
           <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
