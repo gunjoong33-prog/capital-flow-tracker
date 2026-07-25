@@ -111,10 +111,16 @@ function summarizeStep3(
   return lines.join("\n");
 }
 
+/** "A. B." 처럼 한 줄에 여러 문장이 붙어 있으면 마침표 뒤에서 끊어 문장별로 나눈다(가독성 최적화용). */
+function splitSentences(text: string): string[] {
+  return text.split(/(?<=\.)\s+/).map((s) => s.trim()).filter(Boolean);
+}
+
 /**
- * 4단계(금·실질금리 사분면) 판정 결과를 1~3줄로 요약. summarizeStep2/3와 같은 원칙(결정론적, LLM 미사용).
- * pure.ts의 note는 이미 사람이 읽기 좋은 해설 문장이라 그대로 재사용한다.
- * 3번째 줄은 환율·유가가 왜 그렇게 움직였는지를 1~3단계 결과(거부권·유동성 국면·엔 캐리 압박)에서 추론해 붙인다 —
+ * 4단계(금·실질금리 사분면) 판정 결과를 요약. summarizeStep2/3와 같은 원칙(결정론적, LLM 미사용).
+ * 가독성을 위해 한 줄에 문장 하나만 오도록 만든다 — pure.ts의 note가 문장 2개를 담고 있는
+ * 경우가 있어(예: "흔치 않은 조합... . 1단계부터 재확인 필요") splitSentences로 풀어서 각각 별도 줄로 낸다.
+ * 마지막 줄은 환율·유가가 왜 그렇게 움직였는지를 1~3단계 결과(거부권·유동성 국면·엔 캐리 압박)에서 추론해 붙인다 —
  * 원인이 여러 개면 리스크가 큰 순서(거부권 > 엔 캐리 청산 압박 > 유동성 위축)로 하나만 골라 짧게 유지한다.
  */
 function summarizeStep4(
@@ -128,7 +134,9 @@ function summarizeStep4(
     jpySpike: boolean;
   }
 ): string {
-  const lines = [`현재 사분면은 "${step4Result.quadrant}"이며, ${step4Result.note}(4단계 점수 ${step4Result.score}/10).`];
+  const lines: string[] = [];
+  lines.push(`현재 사분면은 "${step4Result.quadrant}"입니다(4단계 점수 ${step4Result.score}/10).`);
+  lines.push(...splitSentences(step4Result.note.endsWith(".") ? step4Result.note : `${step4Result.note}.`));
   lines.push(
     step4Result.dollarConfirms
       ? "달러도 실질금리와 같은 방향으로 움직이고 있어 신호가 강한 편입니다."
@@ -143,15 +151,16 @@ function summarizeStep4(
 
   let reason: string;
   if (context.vetoTriggered) {
-    reason = "1단계에서 지정학적·정책 리스크로 거부권이 발동된 만큼 안전자산 선호가 영향을 준 것으로 보입니다";
+    reason = "1단계에서 지정학적·정책 리스크로 거부권이 발동된 만큼 안전자산 선호가 영향을 준 것으로 보입니다.";
   } else if (context.jpySpike || context.carryZone === "위험") {
-    reason = "3단계 엔 캐리 트레이드 청산 압박(스프레드 위험 구간 또는 엔화 변동성 급등)이 환시 변동성을 키운 것으로 보입니다";
+    reason = "3단계 엔 캐리 트레이드 청산 압박(스프레드 위험 구간 또는 엔화 변동성 급등)이 환시 변동성을 키운 것으로 보입니다.";
   } else if (context.overseasTotalCount > 0 && context.overseasQualifyingCount / context.overseasTotalCount < 3 / 7) {
-    reason = "2단계 해외 유동성이 위축된 국면이라 위험자산 대비 달러 선호가 반영된 것으로 보입니다";
+    reason = "2단계 해외 유동성이 위축된 국면이라 위험자산 대비 달러 선호가 반영된 것으로 보입니다.";
   } else {
-    reason = "1~3단계에서 뚜렷한 리스크 신호는 없어 통상적인 변동 범위 안에서 움직인 것으로 보입니다";
+    reason = "1~3단계에서 뚜렷한 리스크 신호는 없어 통상적인 변동 범위 안에서 움직인 것으로 보입니다.";
   }
-  lines.push(`환율·유가는 ${riskStance} 흐름이며, ${reason}.`);
+  lines.push(`환율·유가는 ${riskStance} 흐름입니다.`);
+  lines.push(reason);
 
   return lines.join("\n");
 }
@@ -538,10 +547,10 @@ export async function runDailyAnalysis(manualInputs: {
   const brentChange = await dailyChange(METRICS.BRENT);
   const wtiDir = (await directionOf(METRICS.WTI)) ?? "flat";
   details.step4Aux = [
-    { label: "USD/KRW", criterion: "참고용 — 강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdKrwChange, "원"), met: null },
-    { label: "USD/JPY", criterion: "참고용 — 강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
-    { label: "WTI유 선물", criterion: "참고용 — 고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
-    { label: "브렌트유 선물", criterion: "참고용 — 고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
+    { label: "USD·KRW", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
+    { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
+    { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
   ];
 
   details.step4Summary = summarizeStep4(
