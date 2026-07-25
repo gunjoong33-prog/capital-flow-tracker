@@ -21,16 +21,18 @@ import type { Direction, SectorInput, StepDetailRow, StepDetails } from "./types
  * 별개로, "지금 수준 자체가 위험한 구간인가"를 보여주는 보조 정보다.
  */
 function creditSpreadZone(bp: number): string {
-  if (bp < 300) return "과도한 낙관(반등 리스크 경계)";
-  if (bp < 400) return "낙관→정상 이행 구간";
-  if (bp <= 500) return "역사적 평균(정상) 구간";
-  if (bp < 600) return "정상→경색 이행(주의)";
-  return "신용경색·침체 경고(600bp 이상)";
+  if (bp < 300) return "과도한 낙관, 반등 리스크 경계";
+  if (bp < 400) return "낙관에서 정상으로 이행";
+  if (bp <= 500) return "역사적 평균 정상 구간";
+  if (bp < 600) return "정상에서 경색으로 이행, 주의";
+  return "신용경색·침체 경고";
 }
 
-function fmt(v: number | null, decimals = 2, suffix = ""): string {
+/** 값 뒤에 단위를 괄호로 붙인다 — 숫자와 단위가 헷갈리지 않게. 단위 없으면 숫자만. */
+function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
-  return `${v.toFixed(decimals)}${suffix}`;
+  const formatted = v.toFixed(decimals);
+  return unit ? `${formatted} (${unit})` : formatted;
 }
 
 interface TrendCheck {
@@ -207,17 +209,17 @@ export async function runDailyAnalysis(manualInputs: {
     kospiForeignNetBuying: kospiForeign.met,
   });
   details.step2 = [
-    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, " 백만달러"), met: walcl.met },
+    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
     { label: "M2 통화량", criterion: "전년 동월 대비(YoY) 증가율이 2개월 연속 상향(성장 가속)", value: m2.detail, met: m2.met },
-    { label: "기준잔액(WRESBAL)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0, " 백만달러"), met: reserves.met },
-    { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, " 십억달러"), met: rrp.met },
-    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, " 백만달러"), met: tga.met },
+    { label: "기준잔액(WRESBAL)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0, "백만달러"), met: reserves.met },
+    { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, "십억달러"), met: rrp.met },
+    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
     { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
       criterion: "최근 3기간 연속 축소",
       value: creditSpread.latestValue !== null
-        ? `${(creditSpread.latestValue * 100).toFixed(0)}bp (${creditSpreadZone(creditSpread.latestValue * 100)})`
+        ? `${(creditSpread.latestValue * 100).toFixed(0)} (bp) — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
       met: creditSpread.met,
     },
@@ -230,7 +232,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step2.push({
     label: "BBB 등급 스프레드(보조 지표, 집계 제외)",
     criterion: "200bp 초과 시 우량기업 차환 어려움 경고",
-    value: bbbBp !== null ? `${bbbBp.toFixed(0)}bp` : "확인 못함",
+    value: bbbBp !== null ? `${bbbBp.toFixed(0)} (bp)` : "확인 못함",
     met: bbbBp !== null ? bbbBp <= 200 : null,
   });
 
@@ -261,7 +263,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step3 = [
     { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
     { label: "일본 10년물(JP10Y)", criterion: "참고용", value: fmt(jp10y?.value ?? null, 2, "%"), met: null },
-    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp (${step3.zone})`, met: null },
+    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp} (bp) — ${step3.zone}`, met: null },
     { label: "스프레드 최근 1년 백분위", criterion: "높을수록 캐리 유리", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     { label: "CFTC 엔화 순포지션 백분위", criterion: "참고용(숏 깊이)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     {

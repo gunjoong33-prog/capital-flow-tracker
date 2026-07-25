@@ -70,9 +70,9 @@ export function StepCard({
                       {row.met === null ? (
                         <span className="text-zinc-600">-</span>
                       ) : row.met ? (
-                        <span className="text-emerald-400">충족</span>
+                        <span className="text-emerald-400">✓</span>
                       ) : (
-                        <span className="text-rose-400">미충족</span>
+                        <span className="text-rose-400">✕</span>
                       )}
                     </td>
                   </tr>
