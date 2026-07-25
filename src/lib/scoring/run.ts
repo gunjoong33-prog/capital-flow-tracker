@@ -28,11 +28,16 @@ function creditSpreadZone(bp: number): string {
   return "신용경색·침체 경고";
 }
 
-/** 값 뒤에 단위를 괄호로 붙인다 — 숫자와 단위가 헷갈리지 않게. 단위 없으면 숫자만. */
+/**
+ * 값 뒤에 단위를 붙인다. 돈의 단위(백만달러·십억달러 등)는 괄호로 감싸 숫자와 헷갈리지 않게 하고,
+ * %·bp는 관용적으로 숫자에 바로 붙여 쓰는 표기라 괄호 없이 직접 붙인다.
+ */
 function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
   const formatted = v.toFixed(decimals);
-  return unit ? `${formatted} (${unit})` : formatted;
+  if (!unit) return formatted;
+  if (unit === "%" || unit === "bp") return `${formatted}${unit}`;
+  return `${formatted} (${unit})`;
 }
 
 interface TrendCheck {
@@ -89,6 +94,59 @@ async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
   }
   const met = yoy[2] > yoy[1] && yoy[1] > yoy[0];
   return { met, latestValue, detail: `YoY 증가율 ${yoy.map((v) => `${v.toFixed(2)}%`).join(" → ")}` };
+}
+
+/**
+ * 월가 순유동성(Net Liquidity) = 연준 총자산(WALCL) - TGA - RRP.
+ * TGA·RRP는 연준 대차대조표상 부채 항목이라 이게 줄면 그만큼 시중 은행 지급준비금(실제 유동성)이
+ * 늘어난다는 회계 항등식에 기반한다. 원본 프롬프트의 "지표 하나씩 개별 판정" 구조를 유지하려고
+ * 해외 지표 7개 집계엔 넣지 않고 참고용 보조 지표로만 보여준다 — 방향성(상승/하락) 확인용.
+ * 세 시리즈 모두 이미 수집돼있는 데이터라 별도 백필 없이 계산만 하면 된다.
+ */
+async function netLiquidityTrend(): Promise<{ detail: string; risingTrend: boolean | null }> {
+  const [walcl, tga, rrp] = await Promise.all([
+    getMetricHistoryByCount(METRICS.WALCL, 5),
+    getMetricHistoryByCount(METRICS.TGA, 5),
+    getMetricHistoryByCount(METRICS.RRP, 5),
+  ]);
+  if (walcl.length === 0 || tga.length === 0 || rrp.length === 0) {
+    return { detail: "데이터 부족", risingTrend: null };
+  }
+  const netAt = (w: number, t: number, r: number) => w / 1000 - t / 1000 - r; // 전부 십억달러로 환산
+  const current = netAt(walcl[walcl.length - 1].value, tga[tga.length - 1].value, rrp[rrp.length - 1].value);
+
+  if (walcl.length < 5 || tga.length < 5 || rrp.length < 5) {
+    return { detail: `${current.toFixed(0)}십억달러`, risingTrend: null };
+  }
+  const past = netAt(walcl[0].value, tga[0].value, rrp[0].value);
+  const change = current - past;
+  return {
+    detail: `${current.toFixed(0)}십억달러, 4기간 전 대비 ${change >= 0 ? "+" : ""}${change.toFixed(0)}십억달러`,
+    risingTrend: change > 0,
+  };
+}
+
+/** RRP가 2023년 고점(~2.5조 달러) 대비 사실상 바닥났는지 — 고갈되면 연준 QT 충격을 흡수해줄 방파제가 사라진다. */
+function rrpBufferStatus(rrpBillions: number): { depleted: boolean; label: string } {
+  if (rrpBillions < 50) return { depleted: true, label: "고갈(방파제 소진) — QT·국채발행이 지준을 직접 흡수할 위험" };
+  if (rrpBillions < 200) return { depleted: false, label: "저수위, 방파제 여력 얼마 안 남음" };
+  return { depleted: false, label: "방파제 여력 있음" };
+}
+
+/**
+ * 재무부의 실제 QRA 목표잔액은 분기별 발표문에만 있어 구조화된 데이터로 가져올 수 없다 —
+ * 대신 최근 8기간 평균을 "최근 정상 범위"로 삼아 이탈도를 본다(공식 목표치의 근사치).
+ */
+async function tgaDeviationFromRecentAverage(): Promise<{ detail: string; withinNormalRange: boolean | null }> {
+  const history = await getMetricHistoryByCount(METRICS.TGA, 9);
+  if (history.length < 9) return { detail: "데이터 부족", withinNormalRange: null };
+  const current = history[history.length - 1].value;
+  const baseline = history.slice(0, 8).reduce((a, b) => a + b.value, 0) / 8;
+  const deviationPct = ((current - baseline) / baseline) * 100;
+  return {
+    detail: `현재 ${(current / 1000).toFixed(0)}십억달러, 최근 8기간 평균 ${(baseline / 1000).toFixed(0)}십억달러 대비 ${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(1)}%`,
+    withinNormalRange: Math.abs(deviationPct) < 10,
+  };
 }
 
 async function directionOf(metric: string): Promise<Direction | null> {
@@ -219,7 +277,7 @@ export async function runDailyAnalysis(manualInputs: {
       label: "크레딧 스프레드(하이일드 OAS)",
       criterion: "최근 3기간 연속 축소",
       value: creditSpread.latestValue !== null
-        ? `${(creditSpread.latestValue * 100).toFixed(0)} (bp) — ${creditSpreadZone(creditSpread.latestValue * 100)}`
+        ? `${(creditSpread.latestValue * 100).toFixed(0)}bp — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
       met: creditSpread.met,
     },
@@ -232,8 +290,35 @@ export async function runDailyAnalysis(manualInputs: {
   details.step2.push({
     label: "BBB 등급 스프레드(보조 지표, 집계 제외)",
     criterion: "200bp 초과 시 우량기업 차환 어려움 경고",
-    value: bbbBp !== null ? `${bbbBp.toFixed(0)} (bp)` : "확인 못함",
+    value: bbbBp !== null ? `${bbbBp.toFixed(0)}bp` : "확인 못함",
     met: bbbBp !== null ? bbbBp <= 200 : null,
+  });
+
+  // 월가 순유동성 프레임워크(WALCL-TGA-RRP) 기반 보조 지표 3개 — 전부 정보용, 해외 지표 7개 집계엔 안 들어감.
+  const netLiq = await netLiquidityTrend();
+  details.step2.push({
+    label: "순유동성 Net Liquidity(보조 지표, 집계 제외)",
+    criterion: "연준 총자산-TGA-RRP. 상승하면 증시에 우호적(월가 프레임워크)",
+    value: netLiq.detail,
+    met: netLiq.risingTrend,
+  });
+
+  if (rrp.latestValue !== null) {
+    const rrpStatus = rrpBufferStatus(rrp.latestValue);
+    details.step2.push({
+      label: "RRP 방파제 상태(보조 지표, 집계 제외)",
+      criterion: "50십억달러 미만이면 방파제 고갈 경고",
+      value: `${fmt(rrp.latestValue, 2, "십억달러")} — ${rrpStatus.label}`,
+      met: !rrpStatus.depleted,
+    });
+  }
+
+  const tgaDeviation = await tgaDeviationFromRecentAverage();
+  details.step2.push({
+    label: "TGA 최근 평균 대비 이탈도(보조 지표, 집계 제외)",
+    criterion: "재무부 공식 QRA 목표잔액 대신 최근 8기간 평균을 기준선으로 씀 — ±10%p 넘게 이탈하면 경계",
+    value: tgaDeviation.detail,
+    met: tgaDeviation.withinNormalRange,
   });
 
   if (manualInputs.domesticWeightHigh) {
@@ -263,7 +348,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step3 = [
     { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
     { label: "일본 10년물(JP10Y)", criterion: "참고용", value: fmt(jp10y?.value ?? null, 2, "%"), met: null },
-    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp} (bp) — ${step3.zone}`, met: null },
+    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: null },
     { label: "스프레드 최근 1년 백분위", criterion: "높을수록 캐리 유리", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     { label: "CFTC 엔화 순포지션 백분위", criterion: "참고용(숏 깊이)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
     {
