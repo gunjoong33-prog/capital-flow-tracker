@@ -50,6 +50,30 @@ async function fallingCheck(metric: string, periods: number): Promise<TrendCheck
   return { met, latestValue };
 }
 
+/**
+ * M2의 원본 기준은 "값 자체가 늘었는가"가 아니라 "전년 동월 대비(YoY) 증가율이 2개월 연속 상향"이다 —
+ * 즉 성장 자체가 아니라 성장 속도가 가속되는지를 본다(노션 v2 프롬프트 원문 그대로).
+ * YoY(이번달) > YoY(지난달) > YoY(지지난달)이면 충족.
+ */
+async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
+  const history = await getMetricHistory(METRICS.M2, 800); // 월간 데이터라 2년치 이상 넉넉히 확보
+  const latestValue = history.length > 0 ? history[history.length - 1].value : null;
+  const n = history.length;
+  if (n < 15) return { met: null, latestValue, detail: "데이터 부족" };
+
+  const yoy: number[] = [];
+  for (let offset = 2; offset >= 0; offset--) {
+    const idx = n - 1 - offset;
+    const idxPrevYear = idx - 12;
+    if (idxPrevYear < 0) return { met: null, latestValue, detail: "데이터 부족(12개월 전 값 필요)" };
+    const curr = history[idx].value;
+    const prevYear = history[idxPrevYear].value;
+    yoy.push(((curr - prevYear) / prevYear) * 100);
+  }
+  const met = yoy[2] > yoy[1] && yoy[1] > yoy[0];
+  return { met, latestValue, detail: `YoY 증가율 ${yoy.map((v) => `${v.toFixed(2)}%`).join(" → ")}` };
+}
+
 async function directionOf(metric: string): Promise<Direction | null> {
   const history = await getMetricHistory(metric, 10);
   if (history.length < 2) return null;
@@ -145,7 +169,7 @@ export async function runDailyAnalysis(manualInputs: {
 
   // 2단계
   const walcl = await risingCheck(METRICS.WALCL, 2);
-  const m2 = await risingCheck(METRICS.M2, 2);
+  const m2 = await m2YoyAcceleration();
   const reserves = await risingCheck(METRICS.TOTRESNS, 4);
   const rrp = await fallingCheck(METRICS.RRP, 3);
   const tga = await fallingCheck(METRICS.TGA, 3);
@@ -168,7 +192,7 @@ export async function runDailyAnalysis(manualInputs: {
   });
   details.step2 = [
     { label: "Fed 자산(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0), met: walcl.met },
-    { label: "M2 통화량", criterion: "최근 2기간 연속 증가", value: fmt(m2.latestValue, 0), met: m2.met },
+    { label: "M2 통화량", criterion: "전년 동월 대비(YoY) 증가율이 2개월 연속 상향(성장 가속)", value: m2.detail, met: m2.met },
     { label: "지급준비금(TOTRESNS)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0), met: reserves.met },
     { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 0), met: rrp.met },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0), met: tga.met },
