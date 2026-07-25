@@ -185,9 +185,9 @@ export function StepCard({
       <div className="text-sm text-zinc-200">{children}</div>
 
       {((details && details.length > 0) || (auxDetails && auxDetails.length > 0)) && (
-        <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="mt-3 space-y-2">
           {details && details.length > 0 && (
-            <details className="min-w-0 flex-1">
+            <details>
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 분석 기준·지표 상세 보기 ({details.length}개)
               </summary>
@@ -195,7 +195,7 @@ export function StepCard({
             </details>
           )}
           {auxDetails && auxDetails.length > 0 && (
-            <details className="min-w-0 flex-1">
+            <details>
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 보조 지표 보기 ({auxDetails.length}개, 집계 제외)
               </summary>
