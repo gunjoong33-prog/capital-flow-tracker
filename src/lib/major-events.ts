@@ -15,10 +15,12 @@ const FOMC_DATES_2026 = [
   "2026-12-09",
 ];
 
-const FRED_RELEASE = {
-  CPI: 10,
-  JOBS: 50,
-} as const;
+const FRED_RELEASES: { id: number; name: string }[] = [
+  { id: 10, name: "미국 CPI 발표" },
+  { id: 50, name: "미국 고용지표 발표" },
+  { id: 46, name: "미국 PPI 발표" },
+  { id: 54, name: "미국 PCE 물가지표 발표" },
+];
 
 async function fetchFredReleaseDatesForYear(releaseId: number, apiKey: string, year: number): Promise<string[]> {
   // realtime_start/end가 "오늘"이나 해를 넘는 넓은 범위면 빈 배열/일부만 돌아온다(실측 확인함) —
@@ -55,20 +57,16 @@ export async function syncMajorEvents(): Promise<{ synced: number; errors: strin
 
   const fredKey = process.env.FRED_API_KEY;
   if (fredKey) {
-    try {
-      const cpiDates = await fetchFredReleaseDates(FRED_RELEASE.CPI, fredKey);
-      for (const date of cpiDates) rows.push({ date, name: "미국 CPI 발표", source: "fred" });
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
-    }
-    try {
-      const jobsDates = await fetchFredReleaseDates(FRED_RELEASE.JOBS, fredKey);
-      for (const date of jobsDates) rows.push({ date, name: "미국 고용지표 발표", source: "fred" });
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
+    for (const release of FRED_RELEASES) {
+      try {
+        const dates = await fetchFredReleaseDates(release.id, fredKey);
+        for (const date of dates) rows.push({ date, name: release.name, source: "fred" });
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
+      }
     }
   } else {
-    errors.push("FRED_API_KEY 없음 — CPI/고용지표 일정 동기화 스킵");
+    errors.push("FRED_API_KEY 없음 — CPI/PPI/PCE/고용지표 일정 동기화 스킵");
   }
 
   let synced = 0;

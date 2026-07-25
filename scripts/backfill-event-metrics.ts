@@ -11,7 +11,7 @@ async function main() {
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
   const startDate = twoYearsAgo.toISOString().slice(0, 10);
 
-  for (const metric of [METRICS.US_CPI, METRICS.US_NFP, METRICS.FED_FUNDS_RATE]) {
+  for (const metric of [METRICS.US_CPI, METRICS.US_NFP, METRICS.US_PPI, METRICS.US_PCE, METRICS.FED_FUNDS_RATE]) {
     const points = await fetchFredMetric(metric, key, startDate);
     let saved = 0;
     for (const p of points) {

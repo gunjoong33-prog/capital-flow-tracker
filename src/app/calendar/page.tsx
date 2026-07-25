@@ -8,6 +8,8 @@ const EVENT_LABEL: Record<string, string> = {
   "FOMC 회의 결과 발표": "FOMC",
   "미국 CPI 발표": "CPI",
   "미국 고용지표 발표": "고용지표",
+  "미국 PPI 발표": "PPI",
+  "미국 PCE 물가지표 발표": "PCE",
 };
 
 export const dynamic = "force-dynamic";

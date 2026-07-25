@@ -52,6 +52,8 @@ export async function evaluateRecentEventOutcomes(daysBack: number): Promise<Eve
     let result: { risky: boolean; detail: string };
     if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5);
     else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5);
+    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5);
+    else if (e.name.includes("PCE")) result = await zScoreSurprise(METRICS.US_PCE, 12, 1.5);
     else if (e.name.includes("FOMC")) result = await fedRateChanged();
     else continue;
 

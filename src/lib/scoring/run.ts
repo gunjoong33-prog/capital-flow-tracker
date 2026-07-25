@@ -122,7 +122,7 @@ export async function runDailyAnalysis(manualInputs: {
   };
   details.step1 = [
     {
-      label: "최근 7일 시장을 흔든 뉴스(Gemini 판정)",
+      label: "최근 7일 시장을 흔든 뉴스",
       criterion: "3건 미만",
       value: `${riskyNews.length}건`,
       met: riskyNews.length < 3,
@@ -134,7 +134,7 @@ export async function runDailyAnalysis(manualInputs: {
       met: !o.risky,
     })),
     {
-      label: "14일 내 예정된 이벤트(정보용, 거부권과 무관)",
+      label: "14일 내 예정된 이벤트",
       criterion: "-",
       value: upcomingEvents.length > 0
         ? upcomingEvents.map((e) => `${e.name}(${e.date.toISOString().slice(0, 10)})`).join(", ")

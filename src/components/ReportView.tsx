@@ -81,7 +81,7 @@ export function ReportView({
         )}
         {step1.upcomingEvents && step1.upcomingEvents.length > 0 && (
           <p className="mt-2 text-xs text-zinc-500">
-            14일 내 예정된 이벤트(참고용): {step1.upcomingEvents.map((e) => `${e.name}(${e.date})`).join(", ")}
+            14일 내 예정된 이벤트: {step1.upcomingEvents.map((e) => `${e.name}(${e.date})`).join(", ")}
           </p>
         )}
       </StepCard>
