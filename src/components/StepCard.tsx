@@ -1,14 +1,20 @@
 import type { ReactNode } from "react";
 import type { StepDetailRow } from "@/lib/scoring/types";
 
+/** "Fed 대차대조표(WALCL)" -> 본명 + 코드로 나눈다 — 괄호가 좁은 열 안에서 줄바꿈되며 읽기 불편해지는 걸 막는다. */
+function splitLabel(label: string): { main: string; code: string | null } {
+  const match = label.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  return match ? { main: match[1], code: match[2] } : { main: label, code: null };
+}
+
 function DetailTable({ rows }: { rows: StepDetailRow[] }) {
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full table-fixed text-xs">
         <colgroup>
-          <col className="w-[24%]" />
-          <col className="w-[30%]" />
+          <col className="w-[20%]" />
           <col className="w-[32%]" />
+          <col className="w-[34%]" />
           <col className="w-[14%]" />
         </colgroup>
         <thead>
@@ -25,9 +31,13 @@ function DetailTable({ rows }: { rows: StepDetailRow[] }) {
             // 핵심값은 굵게, 부가설명은 작은 보조 텍스트로 분리해야 표가 안 빽빽해진다.
             const [mainValue, ...noteParts] = row.value.split(" — ");
             const note = noteParts.join(" — ");
+            const { main: labelMain, code: labelCode } = splitLabel(row.label);
             return (
               <tr key={i} className="border-b border-zinc-800/60 align-top last:border-0">
-                <td className="px-3 py-2.5 text-zinc-300">{row.label}</td>
+                <td className="px-3 py-2.5">
+                  <div className="text-zinc-300">{labelMain}</div>
+                  {labelCode && <div className="mt-0.5 text-[10px] text-zinc-600">{labelCode}</div>}
+                </td>
                 <td className="px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
                 <td className="px-3 py-2.5">
                   <div className="font-medium text-zinc-200">{mainValue}</div>

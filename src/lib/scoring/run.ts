@@ -32,9 +32,18 @@ function creditSpreadZone(bp: number): string {
  * 값 뒤에 단위를 붙인다. 돈의 단위(백만달러·십억달러 등)는 괄호로 감싸 숫자와 헷갈리지 않게 하고,
  * %·bp는 관용적으로 숫자에 바로 붙여 쓰는 표기라 괄호 없이 직접 붙인다.
  */
+/** 천단위 콤마만 넣는 축약형 — fmt()를 쓰기 애매한 문장 조립 내부용. */
+function comma(v: number, decimals = 0): string {
+  return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
-  const formatted = v.toFixed(decimals);
+  // 돈 단위 큰 숫자는 천단위 콤마를 넣어야 자릿수를 한눈에 읽는다(6747378 -> 6,747,378).
+  // %·bp는 값 자체가 작아 콤마가 필요 없으니 그대로 둔다.
+  const formatted = unit === "%" || unit === "bp"
+    ? v.toFixed(decimals)
+    : v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   if (!unit) return formatted;
   if (unit === "%" || unit === "bp") return `${formatted}${unit}`;
   return `${formatted} (${unit})`;
@@ -116,12 +125,12 @@ async function netLiquidityTrend(): Promise<{ detail: string; risingTrend: boole
   const current = netAt(walcl[walcl.length - 1].value, tga[tga.length - 1].value, rrp[rrp.length - 1].value);
 
   if (walcl.length < 5 || tga.length < 5 || rrp.length < 5) {
-    return { detail: `${current.toFixed(0)}십억달러`, risingTrend: null };
+    return { detail: `${comma(current)}십억달러`, risingTrend: null };
   }
   const past = netAt(walcl[0].value, tga[0].value, rrp[0].value);
   const change = current - past;
   return {
-    detail: `${current.toFixed(0)}십억달러, 4기간 전 대비 ${change >= 0 ? "+" : ""}${change.toFixed(0)}십억달러`,
+    detail: `${comma(current)}십억달러 — 4기간 전 대비 ${change >= 0 ? "+" : ""}${comma(change)}십억달러`,
     risingTrend: change > 0,
   };
 }
@@ -144,7 +153,7 @@ async function tgaDeviationFromRecentAverage(): Promise<{ detail: string; within
   const baseline = history.slice(0, 8).reduce((a, b) => a + b.value, 0) / 8;
   const deviationPct = ((current - baseline) / baseline) * 100;
   return {
-    detail: `현재 ${(current / 1000).toFixed(0)}십억달러, 최근 8기간 평균 ${(baseline / 1000).toFixed(0)}십억달러 대비 ${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(1)}%`,
+    detail: `${comma(current / 1000)}십억달러 — 최근 8기간 평균 ${comma(baseline / 1000)}십억달러 대비 ${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(1)}%`,
     withinNormalRange: Math.abs(deviationPct) < 10,
   };
 }
@@ -268,7 +277,7 @@ export async function runDailyAnalysis(manualInputs: {
   });
   details.step2 = [
     { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
-    { label: "M2 통화량", criterion: "전년 동월 대비(YoY) 증가율이 2개월 연속 상향(성장 가속)", value: m2.detail, met: m2.met },
+    { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향(가속)", value: m2.detail, met: m2.met },
     { label: "기준잔액(WRESBAL)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0, "백만달러"), met: reserves.met },
     { label: "역레포(RRP)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, "십억달러"), met: rrp.met },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
@@ -319,7 +328,7 @@ export async function runDailyAnalysis(manualInputs: {
   const tgaDeviation = await tgaDeviationFromRecentAverage();
   details.step2Aux.push({
     label: "TGA 최근 평균 대비 이탈도",
-    criterion: "재무부 공식 QRA 목표잔액 대신 최근 8기간 평균을 기준선으로 씀 — ±10%p 넘게 이탈하면 경계",
+    criterion: "최근 8기간 평균 대비 ±10%p 이탈 시 경계(공식 QRA 목표치 근사)",
     value: tgaDeviation.detail,
     met: tgaDeviation.withinNormalRange,
   });
