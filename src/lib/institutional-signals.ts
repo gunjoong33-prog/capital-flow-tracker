@@ -51,14 +51,21 @@ async function lookupSector(ticker: string): Promise<keyof typeof SECTOR_ETFS | 
   }
 }
 
+/** Dataroma의 영문 매매 표기("Buy"·"Sell -100.00%"·"Reduce -21.08%" 등)를 한글로 옮긴다. */
+function translateMoveDetail(detail: string, action: "buy" | "sell"): string {
+  if (detail === "Buy") return "신규매수";
+  const pctMatch = detail.match(/(-?[\d.]+)%/);
+  if (!pctMatch) return action === "buy" ? "매수" : "매도";
+  const pct = Math.abs(Number(pctMatch[1]));
+  if (pct >= 100) return action === "buy" ? "신규매수" : "전량매도";
+  return action === "buy" ? `비중 ${pct}% 확대` : `비중 ${pct}% 축소`;
+}
+
 function summarizeSuperInvestors(moves: SuperInvestorMove[]): string {
   if (moves.length === 0) return "확인 못함";
   const notable = [...moves].sort((a, b) => (b.portfolioPct ?? 0) - (a.portfolioPct ?? 0)).slice(0, 4);
-  const lines = notable.map((m) => {
-    const actionKo = m.action === "buy" ? "매수" : "매도";
-    return `${m.manager} — ${m.ticker}(${m.company}) ${actionKo}(${m.detail})`;
-  });
-  return `최근 분기(${moves[0].quarter}) 주목할 만한 매매:\n${lines.join("\n")}`;
+  const lines = notable.map((m) => `${m.manager}: ${m.ticker}(${m.company}) ${translateMoveDetail(m.detail, m.action)}`);
+  return `최근 분기(${moves[0].quarter}) 고래 매매 중 포트폴리오 비중 변화가 큰 순서:\n${lines.join("\n")}`;
 }
 
 function summarizeStockConsensus(moves: SuperInvestorMove[]): string {
@@ -75,7 +82,8 @@ function summarizeStockConsensus(moves: SuperInvestorMove[]): string {
     .sort((a, b) => b[1].managers.size - a[1].managers.size)
     .slice(0, 5);
   if (consensus.length === 0) return "이번 분기 2명 이상이 동시 매수한 종목 없음";
-  return `복수 기관 동시 매수(컨센서스) 종목: ${consensus.map(([ticker, v]) => `${ticker}(${v.company}, ${v.managers.size}명)`).join(", ")}`;
+  const lines = consensus.map(([ticker, v]) => `${ticker}(${v.company}) — ${v.managers.size}명 동시 매수`);
+  return `여러 기관이 동시에 사들인 컨센서스 종목:\n${lines.join("\n")}`;
 }
 
 function summarizeInsiderTrades(trades: InsiderTrade[]): string {
@@ -89,7 +97,7 @@ function summarizeInsiderTrades(trades: InsiderTrade[]): string {
     const amount = `$${Math.abs(t.valueUsd!).toLocaleString("en-US")}`;
     return `${t.ticker}(${t.company}) — ${t.insiderName}(${t.title}) ${actionKo} ${amount}`;
   });
-  return lines.join("\n");
+  return `금액 기준 최근 대형 내부자거래:\n${lines.join("\n")}`;
 }
 
 async function summarizeSectorFlow(
@@ -118,7 +126,7 @@ async function summarizeSectorFlow(
   const [topSectorKey, count] = [...sectorCounts.entries()].sort((a, b) => b[1] - a[1])[0];
   const label = `${SECTOR_LABELS[topSectorKey]}(${SECTOR_ETFS[topSectorKey]})`;
   return {
-    summary: `매수 상위 ${topTickers.length}종목 중 ${count}종목이 ${label} 섹터 — 가장 많이 몰린 섹터`,
+    summary: `최근 매수 상위 ${topTickers.length}종목 중 ${count}종목이 ${label} 섹터로 가장 많이 몰림`,
     topSectorKey,
   };
 }

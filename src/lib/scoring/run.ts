@@ -38,6 +38,14 @@ function comma(v: number, decimals = 0): string {
   return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+/** 한글 명사 뒤에 "로/으로" 조사를 받침 유무에 맞게 붙인다(7단계 종합판단 등 문장 생성용). */
+function attachRo(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}로`;
+  const hasBatchim = (last - 0xac00) % 28 !== 0;
+  return `${word}${hasBatchim ? "으로" : "로"}`;
+}
+
 function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
   // 돈 단위 큰 숫자는 천단위 콤마를 넣어야 자릿수를 한눈에 읽는다(6747378 -> 6,747,378).
@@ -260,6 +268,61 @@ function summarizeStep6(step6Result: { qualifying: string[] }, sectors: SectorIn
     lines.push(`5일 수익률 1위는 ${sorted[0].name} (${sorted[0].return5d.toFixed(2)}%)입니다.`);
   }
   lines.push("정확한 이동 원인은 산업 트렌드 링크에서 직접 확인하는 걸 권장합니다.");
+  return lines.join("\n");
+}
+
+/**
+ * 7단계 종합판단 — 기관·내부자 자금이 어디로 흘러갔고 전단계(5·6단계)와 일치하는지,
+ * VIX·공포탐욕지수가 극단(과열/공포)인지에 따른 자본 유출입 시사점을 결정론적으로 진단한다.
+ * VIX·F&G "변동 원인"은 뉴스 근거 없이 지어낼 수 없으므로(데이터 정직성 원칙), 실제 원인 서술이
+ * 아니라 현재 수치가 어느 구간인지·그게 뭘 의미하는지로 해석한다.
+ */
+function summarizeStep7(
+  institutional: InstitutionalSignals | undefined,
+  institutionalMatch: string,
+  vix: number | null,
+  fearGreed: number | null,
+  step7Result: { bothOverheated: boolean; fearZone: boolean }
+): string {
+  const lines: string[] = [];
+
+  if (institutional) {
+    const flowDesc = institutional.topSectorLabel
+      ? `${institutional.topSectorLabel} 섹터`
+      : institutional.activityTickers[0]
+        ? `${institutional.activityTickers[0]} 등 개별 종목 중심`
+        : "뚜렷한 쏠림 없이 분산된 매수";
+    const matchDesc = institutionalMatch.startsWith("일치")
+      ? "5·6단계에서 짚은 종목·섹터와 일치해 신호가 서로 보강됩니다."
+      : institutionalMatch.startsWith("불일치")
+        ? "5·6단계 분석과는 다른 흐름이라 참고 자료로만 활용하는 게 좋습니다."
+        : "비교할 만큼 데이터가 충분하지 않습니다.";
+    lines.push(`슈퍼 투자자·내부자 자금은 최근 ${attachRo(flowDesc)} 몰렸고, ${matchDesc}`);
+  } else {
+    lines.push("기관·내부자 매집 데이터를 확인하지 못했습니다.");
+  }
+
+  const vixDesc = vix === null
+    ? "VIX 데이터 없음"
+    : vix < 15
+      ? `VIX ${vix.toFixed(2)}(과열 구간, 15 미만)`
+      : vix > 25
+        ? `VIX ${vix.toFixed(2)}(공포 구간, 25 초과)`
+        : `VIX ${vix.toFixed(2)}(중립)`;
+  const fgDesc = fearGreed === null
+    ? "공포탐욕지수 미입력"
+    : fearGreed > 75
+      ? `공포탐욕지수 ${fearGreed}(과열 구간, 75 초과)`
+      : fearGreed < 25
+        ? `공포탐욕지수 ${fearGreed}(공포 구간, 25 미만)`
+        : `공포탐욕지수 ${fearGreed}(중립)`;
+  const implication = step7Result.bothOverheated
+    ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
+    : step7Result.fearZone
+      ? "공포 신호가 감지돼 역발상 매수 기회일 수 있지만, 추가 자금 이탈 위험도 함께 살펴야 합니다."
+      : "둘 다 극단적이지 않아 자본 유출입에 특별한 경고 신호는 없습니다.";
+  lines.push(`${vixDesc}, ${fgDesc} — ${implication}`);
+
   return lines.join("\n");
 }
 
@@ -804,17 +867,21 @@ export async function runDailyAnalysis(manualInputs: {
     }
   }
 
-  details.step7 = [
-    { label: "슈퍼 투자자 포트폴리오", criterion: "거손/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null },
+  // 표를 2개로 나눈다 — ①기관·내부자 매집(신규, 충족열 없음) ②공포탐욕·VIX 지수(기존, 충족열 유지).
+  details.step7Institutional = [
+    { label: "슈퍼 투자자 포트폴리오", criterion: "고래/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null },
     { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null },
     { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null },
     { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null },
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
+  ];
+  details.step7 = [
     { label: "VIX", criterion: "<15 과열 / >25 공포", value: fmt(vix?.value ?? null, 2), met: null },
     { label: "CNN 공포와 탐욕지수", criterion: ">75 과열 / <25 공포 (자동 미연동)", value: manualInputs.fearGreed !== null ? `${manualInputs.fearGreed}` : "확인 못함", met: null },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
+  details.step7Summary = summarizeStep7(institutional, institutionalMatch, vix?.value ?? null, manualInputs.fearGreed, step7);
 
   // 8단계
   const step8 = scoreStep8({ step1, step2, step3, step4, step5, step6, step7 });

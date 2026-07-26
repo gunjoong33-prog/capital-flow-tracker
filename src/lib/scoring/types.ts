@@ -162,10 +162,12 @@ export type StepDetails = {
   step5BigTech?: StepDetailRow[]; // 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동 — 별도 토글(step5Aux 아래), 충족열 없음
   step5Summary?: string; // 5단계 지표 결과를 1~3줄로 요약한 종합판단
   step6Summary?: string; // 6단계 지표 결과를 1~3줄로 요약한 종합판단(어느 섹터로 자금이 몰렸는지)
+  step7Institutional?: StepDetailRow[]; // 기관·내부자 매집(Dataroma·OpenInsider) — 별도 토글, 충족열 없음
+  step7Summary?: string; // 7단계 지표 결과를 1~3줄로 요약한 종합판단(자금 흐름·전단계 일치 여부, VIX·공포탐욕 해석)
   step3: StepDetailRow[];
   step4: StepDetailRow[];
   step5: StepDetailRow[];
   step6: StepDetailRow[];
-  step7: StepDetailRow[];
+  step7: StepDetailRow[]; // VIX·공포탐욕지수 — 기존 표, 충족열 유지
   step8: StepDetailRow[];
 };

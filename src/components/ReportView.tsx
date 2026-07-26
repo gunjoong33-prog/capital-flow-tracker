@@ -152,7 +152,16 @@ export function ReportView({
         </div>
       </StepCard>
 
-      <StepCard step={7} title="심리 필터(합산 제외, 포지션 크기 조절용)" details={details?.step7} tip={STEP_TIPS[7]}>
+      <StepCard
+        step={7}
+        title="심리 필터(합산 제외, 포지션 크기 조절용)"
+        details={details?.step7}
+        auxDetails={details?.step7Institutional}
+        auxHideMetColumn
+        auxLabel="기관·내부자 매집 지표"
+        tip={STEP_TIPS[7]}
+        summary={details?.step7Summary}
+      >
         <Field label="양쪽 과열" value={step7.bothOverheated ? "예 — 매수 크기 30% 축소" : "아니오"} />
         <Field label="공포 구간" value={step7.fearZone ? "예 — 역발상 기회 고려" : "아니오"} />
       </StepCard>
