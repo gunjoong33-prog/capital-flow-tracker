@@ -30,7 +30,6 @@ async function main() {
   const { signals: institutionalSignals } = await computeInstitutionalSignals();
 
   const report = await runDailyAnalysis({
-    domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
     bigTechReasons,

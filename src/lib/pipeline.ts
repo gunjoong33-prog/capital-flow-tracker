@@ -6,7 +6,7 @@ import { fetchCftcJpyNetPositionLatest } from "@/lib/sources/cftc";
 import { fetchCoinGeckoLatest } from "@/lib/sources/coingecko";
 import { fetchJp10yLatest } from "@/lib/sources/mof-japan";
 import { fetchAllYahooLatest, fetchAllSectors } from "@/lib/sources/yahoo";
-import { fetchKr10y, fetchBokBaseRate, fetchKoreaCpi } from "@/lib/sources/ecos";
+import { fetchKr10y } from "@/lib/sources/ecos";
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
@@ -48,7 +48,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행 (뉴스 판정·주요 이벤트 동기화도 여기 포함)
   const [
     fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
-    kr10yResult, bokRateResult, cpiResult, majorEventsResult, newsEventsResult,
+    kr10yResult, majorEventsResult, newsEventsResult,
   ] = await Promise.allSettled([
       process.env.FRED_API_KEY
         ? fetchAllFredMetrics(process.env.FRED_API_KEY, sevenDaysAgoStr)
@@ -59,10 +59,6 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       fetchAllYahooLatest(),
       fetchAllSectors(),
       process.env.ECOS_API_KEY ? fetchKr10y(process.env.ECOS_API_KEY, sevenDaysAgo) : Promise.resolve([]),
-      process.env.ECOS_API_KEY ? fetchBokBaseRate(process.env.ECOS_API_KEY, sevenDaysAgo) : Promise.resolve([]),
-      process.env.ECOS_API_KEY
-        ? fetchKoreaCpi(process.env.ECOS_API_KEY, sevenDaysAgoStr.slice(0, 7).replace("-", ""), today.slice(0, 7).replace("-", ""))
-        : Promise.resolve([]),
       syncMajorEvents(),
       syncNewsEvents(),
     ]);
@@ -95,8 +91,6 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   } else sourceErrors.push({ source: "Yahoo", error: String(yahooResult.reason) });
 
   if (kr10yResult.status === "fulfilled") allPoints.push(...kr10yResult.value);
-  if (bokRateResult.status === "fulfilled") allPoints.push(...bokRateResult.value);
-  if (cpiResult.status === "fulfilled") allPoints.push(...cpiResult.value);
 
   const metricsSaved = await saveMetricPoints(allPoints);
 
@@ -106,14 +100,13 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       : [];
   if (sectorsResult.status === "rejected") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 
-  // 2) 채점 — 뉴스·이벤트·엔화급등은 위에서 이미 동기화·계산됨. CNN F&G·국내비중만 여전히 수동.
+  // 2) 채점 — 뉴스·이벤트·엔화급등은 위에서 이미 동기화·계산됨. CNN F&G만 여전히 수동.
   const manualInputs = await getManualInputsForDate(today);
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
   if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Gemini)", error: bigTechErrors.join("; ") });
   const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
   if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
   const report = await runDailyAnalysis({
-    domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors,
     bigTechReasons,

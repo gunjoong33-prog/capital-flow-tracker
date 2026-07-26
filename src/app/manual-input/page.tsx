@@ -34,14 +34,6 @@ export default async function ManualInputPage() {
             />
           </label>
 
-          <label className="flex items-center gap-2">
-            <input type="checkbox" name="domesticWeightHigh" defaultChecked={current.domesticWeightHigh} className="h-4 w-4" />
-            <span className="text-sm text-zinc-300">국내(한국) 자산 비중이 높다</span>
-          </label>
-          <p className="-mt-4 text-xs text-zinc-600">
-            이 항목만 그날그날이 아니라 다시 바꾸기 전까지 계속 유지되는 설정이다.
-          </p>
-
           <button
             type="submit"
             className="w-full rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"

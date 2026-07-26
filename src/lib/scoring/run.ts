@@ -528,7 +528,6 @@ async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | n
  * 점수 계산과 별개 경로로 채워서, 표시용 가공이 점수 로직에 영향을 주지 않게 분리했다.
  */
 export async function runDailyAnalysis(manualInputs: {
-  domesticWeightHigh: boolean;
   fearGreed: number | null;
   sectors: SectorInput[];
   bigTechReasons?: Record<string, string>;
@@ -594,7 +593,6 @@ export async function runDailyAnalysis(manualInputs: {
   const tga = await fallingCheck(METRICS.TGA, 3);
   const realRate2 = await fallingCheck(METRICS.REAL_RATE, 3);
   const creditSpread = await fallingCheck(METRICS.CREDIT_SPREAD, 3);
-  const kospiForeign = await risingCheck(METRICS.KOSPI_FOREIGN_NET, 5);
 
   const step2 = scoreStep2({
     walclIncreasing: walcl.met,
@@ -604,10 +602,6 @@ export async function runDailyAnalysis(manualInputs: {
     tgaDeclining: tga.met,
     realRateFallingOrLowFlat: realRate2.met,
     creditSpreadNarrowing: creditSpread.met,
-    domesticWeightHigh: manualInputs.domesticWeightHigh,
-    bokRateEasing: null, // 한국은행 기준금리는 비정기 발표 — 별도 로직 필요, 1차 구현에선 미판정
-    cpiNearTarget: null,
-    kospiForeignNetBuying: kospiForeign.met,
   });
   details.step2 = [
     { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
@@ -676,14 +670,6 @@ export async function runDailyAnalysis(manualInputs: {
     rrpDepleted,
     tgaDeviation.withinNormalRange
   );
-
-  if (manualInputs.domesticWeightHigh) {
-    details.step2.push(
-      { label: "한국은행 기준금리 인하", criterion: "비정기 발표 — 자동 미판정", value: "확인 못함", met: null },
-      { label: "국내 CPI 목표치(2%) 근접", criterion: "자동 미판정", value: "확인 못함", met: null },
-      { label: "코스피 외국인 순매수", criterion: "최근 5거래일 연속 순매수", value: fmt(kospiForeign.latestValue, 0), met: kospiForeign.met },
-    );
-  }
 
   // 3단계
   const us10y = await getLatestMetric(METRICS.US10Y);

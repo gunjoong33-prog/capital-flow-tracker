@@ -5,10 +5,6 @@ import { METRICS, type FetchedPoint } from "./types";
 // StatisticItemList API로 실제 항목코드 조회해서 확정함(2026-07-25).
 const STAT_CODE_MARKET_RATE = "817Y002";
 const CODE_KR10Y = "010210000"; // 국고채(10년) — 확인됨
-const STAT_CODE_BASE_RATE = "722Y001"; // 한국은행 기준금리
-const CODE_BASE_RATE = "0101000"; // 확인됨(실제 값 2.75%로 검증됨)
-const STAT_CODE_CPI = "901Y009"; // 소비자물가지수
-const CODE_CPI = "0"; // 총지수 — 확인됨
 
 interface EcosRow {
   TIME: string; // 일별: YYYYMMDD, 월별: YYYYMM
@@ -24,10 +20,6 @@ interface EcosResponse {
 
 function isoDateFromYyyymmdd(yyyymmdd: string): string {
   return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
-}
-
-function isoDateFromYyyymm(yyyymm: string): string {
-  return `${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}-01`;
 }
 
 function toYmd(date: Date): string {
@@ -69,43 +61,6 @@ export async function fetchKr10y(
   return rows.map((r) => ({
     metric: METRICS.KR10Y,
     date: isoDateFromYyyymmdd(r.TIME),
-    value: parseFloat(r.DATA_VALUE),
-    source: "ecos" as const,
-  }));
-}
-
-/** 한국은행 기준금리. 비정기 발표. */
-export async function fetchBokBaseRate(
-  apiKey: string,
-  fromDate: Date,
-  toDate: Date = new Date()
-): Promise<FetchedPoint[]> {
-  const rows = await fetchEcosSeries(
-    apiKey,
-    STAT_CODE_BASE_RATE,
-    CODE_BASE_RATE,
-    "D",
-    toYmd(fromDate),
-    toYmd(toDate)
-  );
-  return rows.map((r) => ({
-    metric: METRICS.BOK_RATE,
-    date: isoDateFromYyyymmdd(r.TIME),
-    value: parseFloat(r.DATA_VALUE),
-    source: "ecos" as const,
-  }));
-}
-
-/** 국내 CPI(전년동월비, %). 월별. */
-export async function fetchKoreaCpi(
-  apiKey: string,
-  fromMonth: string, // YYYYMM
-  toMonth: string
-): Promise<FetchedPoint[]> {
-  const rows = await fetchEcosSeries(apiKey, STAT_CODE_CPI, CODE_CPI, "M", fromMonth, toMonth);
-  return rows.map((r) => ({
-    metric: METRICS.KR_CPI,
-    date: isoDateFromYyyymm(r.TIME),
     value: parseFloat(r.DATA_VALUE),
     source: "ecos" as const,
   }));

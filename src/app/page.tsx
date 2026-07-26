@@ -49,7 +49,6 @@ async function getReport() {
   ]);
 
   const report = await runDailyAnalysis({
-    domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
     bigTechReasons: extractBigTechReasons(persistedDetails),

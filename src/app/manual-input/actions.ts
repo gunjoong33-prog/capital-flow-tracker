@@ -9,7 +9,6 @@ export async function submitManualInputs(formData: FormData) {
 
   await saveManualInputs(today, {
     fearGreed: fearGreedRaw && fearGreedRaw !== "" ? Number(fearGreedRaw) : null,
-    domesticWeightHigh: formData.get("domesticWeightHigh") === "on",
   });
 
   revalidatePath("/");

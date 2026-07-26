@@ -97,7 +97,6 @@ export function ReportView({
           Fed 대차대조표·M2 통화량·기준잔액·역레포·TGA·실질금리·크레딧 스프레드 7개 지표 중 "유동성 우호적" 방향으로
           움직인 게 몇 개인지 센 값이다(아래 상세 보기에서 지표별 충족 여부 확인 가능). 이 비율이 2단계 점수의 기반이 된다.
         </p>
-        <Field label="국내 지표 보정" value={step2.domesticAdjustment > 0 ? `+${step2.domesticAdjustment}` : step2.domesticAdjustment} />
       </StepCard>
 
       <StepCard step={3} title="캐리 트레이드" score={step3.score} details={details?.step3} tip={STEP_TIPS[3]} summary={details?.step3Summary}>

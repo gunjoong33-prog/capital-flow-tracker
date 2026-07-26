@@ -7,7 +7,7 @@ import { fetchCftcJpyNetPosition } from "../src/lib/sources/cftc";
 import { fetchCoinGeckoRange } from "../src/lib/sources/coingecko";
 import { fetchJp10yHistorical } from "../src/lib/sources/mof-japan";
 import { fetchYahooHistorical } from "../src/lib/sources/yahoo";
-import { fetchKr10y, fetchBokBaseRate } from "../src/lib/sources/ecos";
+import { fetchKr10y } from "../src/lib/sources/ecos";
 import { METRICS, type FetchedPoint } from "../src/lib/sources/types";
 
 const oneYearAgo = new Date();
@@ -83,7 +83,7 @@ async function main() {
     }
   }
 
-  // ECOS (한국 10년 국채, 기준금리)
+  // ECOS (한국 10년 국채)
   const ecosKey = process.env.ECOS_API_KEY;
   if (ecosKey) {
     try {
@@ -91,12 +91,6 @@ async function main() {
       await save(kr10y, "KR10Y (한국은행)");
     } catch (err) {
       console.log("❌ ECOS KR10Y 실패:", err instanceof Error ? err.message : err);
-    }
-    try {
-      const bokRate = await fetchBokBaseRate(ecosKey, oneYearAgo);
-      await save(bokRate, "BOK 기준금리");
-    } catch (err) {
-      console.log("❌ ECOS 기준금리 실패:", err instanceof Error ? err.message : err);
     }
   } else {
     console.log("⏭️  ECOS_API_KEY 없음, 스킵");

@@ -3,7 +3,7 @@ import { fetchCftcJpyNetPosition } from "@/lib/sources/cftc";
 import { fetchCoinGeckoLatest } from "@/lib/sources/coingecko";
 import { fetchJp10yLatest } from "@/lib/sources/mof-japan";
 import { fetchAllYahooLatest, fetchAllSectors } from "@/lib/sources/yahoo";
-import { fetchKr10y, fetchBokBaseRate } from "@/lib/sources/ecos";
+import { fetchKr10y } from "@/lib/sources/ecos";
 
 // 무료 데이터 소스 3종이 실제로 값을 가져오는지 확인하는 진단용 엔드포인트.
 // DB에는 저장하지 않는다(순수 연결 확인용). 개발 중에만 쓰고 배포 전에 지운다.
@@ -78,12 +78,6 @@ export async function GET() {
       result.kr10y_ecos = kr10y.slice(-3);
     } catch (err) {
       result.kr10y_ecos = { error: err instanceof Error ? err.message : String(err) };
-    }
-    try {
-      const bokRate = await fetchBokBaseRate(ecosKey, from);
-      result.bokRate_ecos = bokRate.slice(-3);
-    } catch (err) {
-      result.bokRate_ecos = { error: err instanceof Error ? err.message : String(err) };
     }
   } else {
     result.kr10y_ecos = { skipped: "ECOS_API_KEY 없음" };

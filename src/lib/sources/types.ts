@@ -17,11 +17,6 @@ export const METRICS = {
   US_PCE: "US_PCE", // 미국 PCE 물가지수(연준이 가장 중시하는 인플레 지표, 1단계 이벤트 서프라이즈 판정용)
   FED_FUNDS_RATE: "FED_FUNDS_RATE", // 연준 기준금리 상단(FOMC 실제 결정 판정용)
 
-  // 2단계 국내
-  BOK_RATE: "BOK_RATE", // 한국은행 기준금리
-  KR_CPI: "KR_CPI", // 국내 CPI
-  KOSPI_FOREIGN_NET: "KOSPI_FOREIGN_NET", // 외국인 순매수(코스피)
-
   // 3단계
   US10Y: "US10Y",
   JP10Y: "JP10Y",

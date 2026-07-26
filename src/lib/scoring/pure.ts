@@ -51,30 +51,11 @@ export function scoreStep2(input: Step2Input): Step2Result {
   const qualifyingCount = known.filter(Boolean).length;
   const overseasScore = known.length > 0 ? (qualifyingCount / known.length) * 10 : 5;
 
-  // 국내 지표 반영 — 8단계 "2단계 국내 지표 반영" 절.
-  let domesticAdjustment = 0;
-  if (input.domesticWeightHigh) {
-    const domesticFlags = [
-      input.bokRateEasing,
-      input.cpiNearTarget,
-      input.kospiForeignNetBuying,
-    ];
-    const domesticKnown = domesticFlags.filter((f) => f !== null) as boolean[];
-    const domesticGood = domesticKnown.filter(Boolean).length;
-    if (domesticKnown.length === 3) {
-      if (domesticGood <= 1) domesticAdjustment = -1; // 2개 이상 나쁨
-      else if (domesticGood === 3) domesticAdjustment = 1;
-    }
-  }
-
-  const finalScore = Math.max(0, Math.min(10, overseasScore + domesticAdjustment));
-
   return {
     overseasScore,
     overseasQualifyingCount: qualifyingCount,
     overseasTotalCount: known.length,
-    domesticAdjustment,
-    finalScore,
+    finalScore: overseasScore,
   };
 }
 

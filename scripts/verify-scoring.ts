@@ -20,8 +20,8 @@ const step1Veto = scoreStep1({ newsCountLast7Days: 4, hasRecentEventSurprise: fa
 console.assert(step1Veto.vetoTriggered === true, "❌ 뉴스 4건이면 거부권 발동해야 함");
 console.log(step1Veto, "\n");
 
-console.log("=== 2단계 국내지표 반영 ===");
-const step2Bad = scoreStep2({
+console.log("=== 2단계 해외 지표 충족 ===");
+const step2Full = scoreStep2({
   walclIncreasing: true,
   m2GrowthRising2Months: true,
   reservesRising4Weeks: true,
@@ -29,17 +29,13 @@ const step2Bad = scoreStep2({
   tgaDeclining: true,
   realRateFallingOrLowFlat: true,
   creditSpreadNarrowing: true,
-  domesticWeightHigh: true,
-  bokRateEasing: false,
-  cpiNearTarget: false,
-  kospiForeignNetBuying: false,
 });
-console.log(step2Bad);
+console.log(step2Full);
 console.assert(
-  step2Bad.overseasScore === 10 && step2Bad.finalScore === 9,
-  `❌ 해외 7/7 충족(10점)인데 국내 3개 다 나쁨(-1)이면 최종 9점이어야 함, 실제: ${step2Bad.finalScore}`
+  step2Full.overseasScore === 10 && step2Full.finalScore === 10,
+  `❌ 해외 7/7 충족이면 10점이어야 함, 실제: ${step2Full.finalScore}`
 );
-console.log("✅ 해외 만점(10) - 국내 조정(-1) = 9\n");
+console.log("✅ 해외 7/7 충족 → 10점\n");
 
 console.log("=== 4단계 진짜 2x2 ===");
 const step4 = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up" });
@@ -49,7 +45,7 @@ console.log(step4, "\n");
 console.log("=== 8단계 거부권 다운그레이드 ===");
 const step8 = scoreStep8({
   step1: { vetoTriggered: true, reason: "test" },
-  step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, domesticAdjustment: 0, finalScore: 10 },
+  step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, finalScore: 10 },
   step3: { spreadBp: 400, zone: "안정", score: 10, warning: null },
   step4: { quadrant: "test", score: 10, note: "", dollarConfirms: true },
   step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립", score: 10, cryptoAlignsWithRisk: null },

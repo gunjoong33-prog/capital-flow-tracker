@@ -45,18 +45,12 @@ export interface Step2Input {
   tgaDeclining: boolean | null;
   realRateFallingOrLowFlat: boolean | null;
   creditSpreadNarrowing: boolean | null;
-  // 국내 3개(참고용, 보정에만 씀)
-  domesticWeightHigh: boolean; // 한국 자산 비중 높은지(설정값)
-  bokRateEasing: boolean | null;
-  cpiNearTarget: boolean | null;
-  kospiForeignNetBuying: boolean | null;
 }
 export interface Step2Result {
   overseasScore: number; // 0~10
   overseasQualifyingCount: number;
   overseasTotalCount: number;
-  domesticAdjustment: number; // -1 | 0 | +1
-  finalScore: number; // overseasScore + domesticAdjustment (0~10 클램프)
+  finalScore: number; // overseasScore와 동일(0~10)
 }
 
 export interface Step3Input {
