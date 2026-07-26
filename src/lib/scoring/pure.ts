@@ -18,15 +18,20 @@ import type {
 } from "./types";
 
 // ── 1단계: 글로벌 환경 — 거부권 ─────────────────────────────
-// 노션 v2 프롬프트 8단계 "1단계 거부권" 절 그대로.
+// 노션 v2 프롬프트 8단계 "1단계 거부권" 절 그대로. 여기에 "단독 즉시발동"(hasSevereNewsInWindow)을
+// 추가했다 — 월가 GPR지수·BlackRock BGRI처럼 실제 리스크 지표는 건수만 세지 않고 사건의 심각도도
+// 반영한다. "3건 누적" 규칙만 있으면 전쟁 발발 같은 단일 사건도 다른 뉴스 2건이 더 나올 때까지
+// 며칠을 기다려야 하는 셈이라, 심각도가 "high"인 사건은 1건만 있어도 즉시 거부권이 발동하게 했다.
 export function scoreStep1(input: Step1Input): Step1Result {
-  const vetoTriggered = input.newsCountLast7Days >= 3 || input.hasRecentEventSurprise;
+  const vetoTriggered = input.newsCountLast7Days >= 3 || input.hasRecentEventSurprise || input.hasSevereNewsInWindow;
   return {
     vetoTriggered,
     reason: vetoTriggered
-      ? input.newsCountLast7Days >= 3
-        ? `최근 7일 내 시장을 흔들 뉴스 ${input.newsCountLast7Days}건`
-        : "최근 발표된 FOMC/CPI/고용지표 결과가 예상 밖(서프라이즈)"
+      ? input.hasSevereNewsInWindow
+        ? "최근 7일 내 단독으로도 시장을 크게 흔들 수준의 뉴스 발생"
+        : input.newsCountLast7Days >= 3
+          ? `최근 7일 내 시장을 흔들 뉴스 ${input.newsCountLast7Days}건`
+          : "최근 발표된 FOMC/CPI/고용지표 결과가 예상 밖(서프라이즈)"
       : "특이사항 없음",
   };
 }

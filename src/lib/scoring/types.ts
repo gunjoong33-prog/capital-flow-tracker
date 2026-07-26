@@ -7,12 +7,14 @@ export type Direction = "up" | "down" | "flat";
 export interface Step1Input {
   newsCountLast7Days: number; // 최근 7일 내 시장 흔들 뉴스 건수
   hasRecentEventSurprise: boolean; // 최근 발표된 FOMC/CPI/고용지표의 실제 결과가 통계적 서프라이즈였는지
+  hasSevereNewsInWindow: boolean; // 최근 7일 내 단독으로도 즉시 거부권 발동 수준(severity: high)인 뉴스가 있는지
 }
 export interface RiskyNewsItem {
   title: string;
   url: string;
   summary: string;
   date: string;
+  severity: "high" | "normal";
 }
 export interface UpcomingEventItem {
   name: string;

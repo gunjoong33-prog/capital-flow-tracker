@@ -543,12 +543,17 @@ export async function runDailyAnalysis(manualInputs: {
   const upcomingEvents = await getUpcomingMajorEvents(14);
   const recentOutcomes = await evaluateRecentEventOutcomes(5);
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
+  const hasSevereNews = riskyNews.some((n) => n.severity === "high");
   const step1 = {
     ...scoreStep1({
       newsCountLast7Days: riskyNews.length,
       hasRecentEventSurprise: hasEventSurprise,
+      hasSevereNewsInWindow: hasSevereNews,
     }),
-    riskyNews: riskyNews.map((n) => ({ title: n.title, url: n.url, summary: n.summary, date: n.date.toISOString().slice(0, 10) })),
+    riskyNews: riskyNews.map((n) => ({
+      title: n.title, url: n.url, summary: n.summary, date: n.date.toISOString().slice(0, 10),
+      severity: n.severity === "high" ? "high" as const : "normal" as const,
+    })),
     upcomingEvents: upcomingEvents.map((e) => ({ name: e.name, date: e.date.toISOString().slice(0, 10) })),
     recentEventOutcomes: recentOutcomes,
   };
@@ -558,6 +563,12 @@ export async function runDailyAnalysis(manualInputs: {
       criterion: "3건 미만",
       value: `${riskyNews.length}건`,
       met: riskyNews.length < 3,
+    },
+    {
+      label: "단독 즉시발동 수준(심각도 high) 뉴스",
+      criterion: "없음",
+      value: hasSevereNews ? "있음" : "없음",
+      met: !hasSevereNews,
     },
     ...recentOutcomes.map((o) => ({
       label: `${o.name}(${o.date}) 실제 결과`,

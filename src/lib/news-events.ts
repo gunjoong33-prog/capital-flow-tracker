@@ -10,12 +10,15 @@ const CATEGORY_PRIORITY: Record<NewsCategory, number> = {
   general: 2,
 };
 
+export type NewsSeverity = "high" | "normal";
+
 interface JudgedItem {
   title: string;
   url: string;
   summary: string;
   risky: boolean;
   category: NewsCategory;
+  severity: NewsSeverity;
 }
 
 async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
@@ -34,8 +37,14 @@ async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
    탐사보도(예: 정부 고위 인사·억만장자가 연루된 비공개 조직의 회원 명단이 유출된 사건)
 일반적인 경제 논평, 이미 알려진 사실 반복, 시장과 무관한 사건은 제외해라.
 
+골라낸 항목마다 심각도(severity)도 함께 매겨라:
+- "high": 이 사건 하나만으로도 시장이 즉시 크게 흔들릴 수준(예: 실제 무력 충돌·전쟁 발발, 국가 디폴트,
+  예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴)
+- "normal": 리스크 요인이긴 하지만 이 사건 하나만으로는 즉각적인 충격까진 아닌 경우(관세 인상 경고,
+  정책 발언, 무역분쟁 우려 등 — 여러 건이 쌓이면 리스크로 보는 게 맞는 것들)
+
 각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라:
-[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true}]
+[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "normal"}]
 
 risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게 없으면 빈 배열 []만 답해라.
 
@@ -62,7 +71,7 @@ ${list}`;
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return [];
 
-  let parsed: { index: number; summary: string; risky: boolean }[];
+  let parsed: { index: number; summary: string; risky: boolean; severity?: string }[];
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {
@@ -77,6 +86,7 @@ ${list}`;
       summary: p.summary,
       risky: true,
       category: headlines[p.index - 1].category,
+      severity: p.severity === "high" ? "high" : "normal",
     }));
 }
 
@@ -102,11 +112,11 @@ export async function syncNewsEvents(): Promise<{ found: number; errors: string[
       where: { date_url: { date: new Date(today), url: item.url } },
       create: {
         date: new Date(today), title: item.title, url: item.url, summary: item.summary,
-        source: item.category, priority: CATEGORY_PRIORITY[item.category],
+        source: item.category, priority: CATEGORY_PRIORITY[item.category], severity: item.severity,
       },
-      // 같은 날 재실행 시(수동 새로고침 등) 우선순위 분류가 최신 기준으로 갱신되게 한다 —
+      // 같은 날 재실행 시(수동 새로고침 등) 우선순위·심각도 분류가 최신 기준으로 갱신되게 한다 —
       // 예전엔 update:{}라 한 번 "judged"로 저장되면 분류 체계가 바뀌어도 그대로 남아있었다.
-      update: { source: item.category, priority: CATEGORY_PRIORITY[item.category] },
+      update: { source: item.category, priority: CATEGORY_PRIORITY[item.category], severity: item.severity },
     });
   }
 

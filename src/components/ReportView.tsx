@@ -62,7 +62,12 @@ export function ReportView({
           <div className="mt-3 space-y-2">
             {step1.riskyNews.map((n, i) => (
               <div key={i} className="rounded-md bg-rose-500/10 px-3 py-2 text-xs">
-                <p className="text-rose-300">{n.summary}</p>
+                <p className="text-rose-300">
+                  {n.severity === "high" && (
+                    <span className="mr-1 rounded bg-rose-500/30 px-1 py-0.5 text-[10px] font-medium text-rose-200">단독 즉시발동</span>
+                  )}
+                  {n.summary}
+                </p>
                 <a href={n.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-rose-400 underline hover:text-rose-300">
                   기사 보기 →
                 </a>
