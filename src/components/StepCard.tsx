@@ -59,10 +59,13 @@ function DetailTable({
             return (
               <tr key={i} className="border-b border-zinc-800/60 align-top last:border-0">
                 <td className="px-3 py-2.5">
-                  <div className="text-zinc-300">{labelMain}</div>
+                  {/* [word-break:keep-all]: 좁은 열에서 한글 단어가 음절 중간에 끊겨 다음 줄로
+                      넘어가는 걸 막는다(예: "신규매수"가 "신"/"규매수"로 갈라지는 문제) — 단어
+                      전체가 통째로 다음 줄로 내려가게 한다. */}
+                  <div className="[word-break:keep-all] text-zinc-300">{labelMain}</div>
                   {labelCode && <div className="mt-0.5 text-[10px] text-zinc-600">{labelCode}</div>}
                 </td>
-                <td className="px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
+                <td className="[word-break:keep-all] px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
                 <td className="px-3 py-2.5">
                   {/* whitespace-pre-line: run.ts가 한 부가설명 안에 "\n"으로 여러 항목을 이어붙이는
                       경우(예: 7단계 기관·내부자 매집의 매매 목록)가 있다 — 기본 white-space:normal은
