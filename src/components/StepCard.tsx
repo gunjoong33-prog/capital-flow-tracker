@@ -12,26 +12,33 @@ function splitLabel(label: string): { main: string; code: string | null } {
  * row.result가 있으면 마지막 열 헤더를 "결과"로 바꾸고 ✓/✕ 아이콘 대신 텍스트를 보여준다
  * (충족/불충족으로 나누기 애매한 범주형 판정용, 예: 5단계 위험선호/쏠림 여부).
  * wideCriterion=true면 지표열을 줄이고 기준열을 늘린다(기준 문장이 긴 표의 가독성용, 예: 6단계).
+ * narrowCriterion=true면 반대로 기준열을 줄이고 실제값열을 늘린다(기준은 짧고 실제값이 긴 서술형 표용,
+ * 예: 7단계 기관·내부자 매집).
+ * row.url이 하나라도 있으면 "바로가기" 열이 자동으로 추가돼 원본 출처 링크를 보여준다.
  */
 function DetailTable({
   rows,
   hideMetColumn = false,
   wideCriterion = false,
+  narrowCriterion = false,
 }: {
   rows: StepDetailRow[];
   hideMetColumn?: boolean;
   wideCriterion?: boolean;
+  narrowCriterion?: boolean;
 }) {
   const resultMode = rows.some((r) => r.result !== undefined);
+  const linkMode = rows.some((r) => r.url);
   const metHeader = resultMode ? "결과" : "충족";
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full table-fixed text-xs">
         <colgroup>
-          <col className={wideCriterion ? "w-[18%]" : "w-[26%]"} />
-          <col className={hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : wideCriterion ? "w-[40%]" : "w-[32%]"} />
-          <col className={hideMetColumn ? "w-[38%]" : resultMode ? "w-[36%]" : "w-[34%]"} />
+          <col className={narrowCriterion ? "w-[20%]" : wideCriterion ? "w-[18%]" : "w-[26%]"} />
+          <col className={narrowCriterion ? "w-[14%]" : hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : wideCriterion ? "w-[40%]" : "w-[32%]"} />
+          <col className={narrowCriterion ? (linkMode ? "w-[54%]" : "w-[66%]") : hideMetColumn ? "w-[38%]" : resultMode ? "w-[36%]" : "w-[34%]"} />
           {!hideMetColumn && <col className={resultMode ? "w-[20%]" : "w-[8%]"} />}
+          {linkMode && <col className="w-[12%]" />}
         </colgroup>
         <thead>
           <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
@@ -39,6 +46,7 @@ function DetailTable({
             <th className="px-3 py-2 font-normal">기준</th>
             <th className="px-3 py-2 font-normal">실제값</th>
             {!hideMetColumn && <th className="px-3 py-2 font-normal">{metHeader}</th>}
+            {linkMode && <th className="px-3 py-2 font-normal">바로가기</th>}
           </tr>
         </thead>
         <tbody>
@@ -71,6 +79,22 @@ function DetailTable({
                       <span className="text-emerald-400">✓</span>
                     ) : (
                       <span className="text-rose-400">✕</span>
+                    )}
+                  </td>
+                )}
+                {linkMode && (
+                  <td className="px-3 py-2.5">
+                    {row.url ? (
+                      <a
+                        href={row.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-zinc-400 underline hover:text-zinc-200"
+                      >
+                        확인 →
+                      </a>
+                    ) : (
+                      <span className="text-zinc-600">-</span>
                     )}
                   </td>
                 )}
@@ -168,6 +192,7 @@ export function StepCard({
   details,
   auxDetails,
   auxHideMetColumn,
+  auxNarrowCriterion,
   auxLabel = "보조 지표",
   aux2Details,
   aux2HideMetColumn,
@@ -183,6 +208,7 @@ export function StepCard({
   details?: StepDetailRow[];
   auxDetails?: StepDetailRow[];
   auxHideMetColumn?: boolean;
+  auxNarrowCriterion?: boolean;
   auxLabel?: string;
   aux2Details?: StepDetailRow[]; // 보조 표를 2개 두고 싶을 때(예: 5단계 지수·크립토 아래에 빅테크 7 별도 표)
   aux2HideMetColumn?: boolean;
@@ -242,7 +268,7 @@ export function StepCard({
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 {auxLabel} 보기 ({auxDetails.length}개, 집계 제외)
               </summary>
-              <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} />
+              <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} narrowCriterion={auxNarrowCriterion} />
             </details>
           )}
           {aux2Details && aux2Details.length > 0 && (

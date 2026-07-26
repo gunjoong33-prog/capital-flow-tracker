@@ -155,10 +155,12 @@ export function ReportView({
       <StepCard
         step={7}
         title="심리 필터(합산 제외, 포지션 크기 조절용)"
-        details={details?.step7}
         auxDetails={details?.step7Institutional}
         auxHideMetColumn
+        auxNarrowCriterion
         auxLabel="기관·내부자 매집 지표"
+        aux2Details={details?.step7}
+        aux2Label="공포와 탐욕 지수"
         tip={STEP_TIPS[7]}
         summary={details?.step7Summary}
       >

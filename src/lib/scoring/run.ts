@@ -279,7 +279,8 @@ function summarizeStep6(step6Result: { qualifying: string[] }, sectors: SectorIn
  */
 function summarizeStep7(
   institutional: InstitutionalSignals | undefined,
-  institutionalMatch: string,
+  sectorMatch: string | null, // 6단계 qualifying과 실제로 일치한 섹터 라벨(없으면 null)
+  tickerMatch: string | null, // 5단계 빅테크 7과 실제로 일치한 티커(없으면 null)
   vix: number | null,
   fearGreed: number | null,
   step7Result: { bothOverheated: boolean; fearZone: boolean }
@@ -287,16 +288,25 @@ function summarizeStep7(
   const lines: string[] = [];
 
   if (institutional) {
+    // flowDesc(자금이 몰린 곳)와 matchDesc(전단계 일치 여부)가 서로 다른 근거를 말하면 안 된다 —
+    // "금융 섹터로 몰렸고 일치합니다"인데 실제로는 티커 하나만 겹쳐서 일치 판정이 난 경우처럼
+    // 섹터 얘기를 해놓고 티커 근거로 "일치"라고 잘라 말하면 오해를 부른다. 그래서 섹터 일치와
+    // 티커 일치를 분리해서, flowDesc가 말하는 대상과 matchDesc의 근거가 항상 같은 걸 가리키게 한다.
     const flowDesc = institutional.topSectorLabel
       ? `${institutional.topSectorLabel} 섹터`
       : institutional.activityTickers[0]
         ? `${institutional.activityTickers[0]} 등 개별 종목 중심`
         : "뚜렷한 쏠림 없이 분산된 매수";
-    const matchDesc = institutionalMatch.startsWith("일치")
-      ? "5·6단계에서 짚은 종목·섹터와 일치해 신호가 서로 보강됩니다."
-      : institutionalMatch.startsWith("불일치")
-        ? "5·6단계 분석과는 다른 흐름이라 참고 자료로만 활용하는 게 좋습니다."
-        : "비교할 만큼 데이터가 충분하지 않습니다.";
+    let matchDesc: string;
+    if (sectorMatch) {
+      matchDesc = "6단계에서 짚은 충족 섹터와 일치해 신호가 서로 보강됩니다.";
+    } else if (tickerMatch) {
+      matchDesc = `섹터 자체는 6단계 충족 섹터와 다르지만, ${tickerMatch}은(는) 5단계 빅테크 매수와 겹쳐 부분적으로 참고할 만합니다.`;
+    } else if (institutional.topSectorLabel || institutional.activityTickers.length > 0) {
+      matchDesc = "5·6단계 분석과는 다른 흐름이라 참고 자료로만 활용하는 게 좋습니다.";
+    } else {
+      matchDesc = "비교할 만큼 데이터가 충분하지 않습니다.";
+    }
     lines.push(`슈퍼 투자자·내부자 자금은 최근 ${attachRo(flowDesc)} 몰렸고, ${matchDesc}`);
   } else {
     lines.push("기관·내부자 매집 데이터를 확인하지 못했습니다.");
@@ -853,26 +863,39 @@ export async function runDailyAnalysis(manualInputs: {
   // 기관·내부자 매집 신호(Dataroma·OpenInsider) — 5·6단계에서 이미 나온 종목·섹터와 일치하는지 대조.
   // 매칭은 여기서(run.ts) 한다: institutional-signals.ts는 외부 소스만 다루고, 5·6단계 결과는
   // run.ts에서만 알 수 있기 때문(bigTechReasons의 topBigTechMover 선정과 같은 원칙).
+  // 섹터 일치와 티커 일치는 서로 다른 근거라 하나로 뭉뚱그리지 않는다 — "금융 섹터로 몰렸는데
+  // 실제로는 티커 하나만 겹쳐서 일치 판정"처럼 표시가 근거와 안 맞는 걸 막기 위함.
   const institutional = manualInputs.institutionalSignals;
-  let institutionalMatch = "확인 안 됨";
-  if (institutional) {
-    const tickerMatch = institutional.activityTickers.find((t) => (BIG_TECH_TICKERS as readonly string[]).includes(t));
-    const sectorMatches = institutional.topSectorLabel !== null && step6.qualifying.includes(institutional.topSectorLabel);
-    if (tickerMatch) {
-      institutionalMatch = `일치(${tickerMatch})`;
-    } else if (sectorMatches && institutional.topSectorLabel) {
-      institutionalMatch = `일치(${institutional.topSectorLabel})`;
-    } else if (institutional.topSectorLabel || institutional.activityTickers.length > 0) {
-      institutionalMatch = `불일치 — 실제 매집: ${institutional.topSectorLabel ?? institutional.activityTickers[0]}`;
-    }
+  const tickerMatch = institutional?.activityTickers.find((t) => (BIG_TECH_TICKERS as readonly string[]).includes(t)) ?? null;
+  const sectorMatch =
+    institutional?.topSectorLabel && step6.qualifying.includes(institutional.topSectorLabel)
+      ? institutional.topSectorLabel
+      : null;
+
+  let institutionalMatch: string;
+  if (!institutional) {
+    institutionalMatch = "확인 안 됨";
+  } else if (sectorMatch && tickerMatch) {
+    institutionalMatch = `일치(섹터 ${sectorMatch}, 종목 ${tickerMatch})`;
+  } else if (sectorMatch) {
+    institutionalMatch = `일치(섹터 ${sectorMatch})`;
+  } else if (tickerMatch) {
+    institutionalMatch = `일치(종목 ${tickerMatch}) — 섹터는 불일치(${institutional.topSectorLabel ?? "확인 못함"})`;
+  } else if (institutional.topSectorLabel || institutional.activityTickers.length > 0) {
+    institutionalMatch = `불일치 — 실제 매집: ${institutional.topSectorLabel ?? institutional.activityTickers[0]}`;
+  } else {
+    institutionalMatch = "확인 안 됨";
   }
 
-  // 표를 2개로 나눈다 — ①기관·내부자 매집(신규, 충족열 없음) ②공포탐욕·VIX 지수(기존, 충족열 유지).
+  const DATAROMA_URL = "https://www.dataroma.com/m/allact.php?typ=a";
+  const OPENINSIDER_URL = "http://openinsider.com/latest-insider-trading";
+
+  // 표를 2개로 나눈다 — ①기관·내부자 매집(신규, 충족열 없음, 바로가기 열 있음) ②공포탐욕·VIX 지수(기존, 충족열 유지).
   details.step7Institutional = [
-    { label: "슈퍼 투자자 포트폴리오", criterion: "고래/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null },
-    { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null },
-    { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null },
-    { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null },
+    { label: "슈퍼 투자자 포트폴리오", criterion: "고래/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
+    { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
+    { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
+    { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null, url: OPENINSIDER_URL },
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
   ];
   details.step7 = [
@@ -881,7 +904,7 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
-  details.step7Summary = summarizeStep7(institutional, institutionalMatch, vix?.value ?? null, manualInputs.fearGreed, step7);
+  details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, manualInputs.fearGreed, step7);
 
   // 8단계
   const step8 = scoreStep8({ step1, step2, step3, step4, step5, step6, step7 });

@@ -149,6 +149,7 @@ export interface StepDetailRow {
   value: string;
   met: boolean | null;
   result?: string; // met 대신 "결과" 열에 텍스트로 보여줄 값(단순 충족/불충족이 아닌 범주형 판정에 씀, 예: 5단계 위험선호/쏠림 여부)
+  url?: string; // "바로가기" 열에 링크로 보여줄 원본 출처(예: 7단계 기관·내부자 매집의 Dataroma·OpenInsider 링크)
 }
 export type StepDetails = {
   step1: StepDetailRow[];
