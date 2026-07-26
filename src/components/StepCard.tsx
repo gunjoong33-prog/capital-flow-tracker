@@ -64,9 +64,17 @@ function DetailTable({
                 </td>
                 <td className="px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
                 <td className="px-3 py-2.5">
-                  <div className="font-medium text-zinc-200">{mainValue}</div>
+                  {/* whitespace-pre-line: run.ts가 한 부가설명 안에 "\n"으로 여러 항목을 이어붙이는
+                      경우(예: 7단계 기관·내부자 매집의 매매 목록)가 있다 — 기본 white-space:normal은
+                      \n을 공백으로 뭉개버려서 전부 한 문단으로 붙고, 그 문단이 좁은 열 너비에서
+                      임의의 지점(단어 중간일 수도 있음)에서 줄바꿈된다. pre-line으로 \n을 실제
+                      줄바꿈으로 살려야 의도한 자리에서 줄이 나뉜다.
+                      word-break:keep-all: 기본값은 한글 음절 사이 어디서나 줄바꿈을
+                      허용해서 "신규매수"가 "신" / "규매수"로 갈라지는 식으로 잘린다 — 공백이 있는
+                      지점에서만 줄바꿈되게 막는다. */}
+                  <div className="whitespace-pre-line [word-break:keep-all] font-medium text-zinc-200">{mainValue}</div>
                   {noteParts.map((part, j) => (
-                    <div key={j} className="mt-0.5 leading-snug text-zinc-500">{part}</div>
+                    <div key={j} className="mt-0.5 whitespace-pre-line [word-break:keep-all] leading-snug text-zinc-500">{part}</div>
                   ))}
                 </td>
                 {!hideMetColumn && (

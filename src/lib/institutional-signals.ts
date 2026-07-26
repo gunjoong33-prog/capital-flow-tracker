@@ -61,10 +61,19 @@ function translateMoveDetail(detail: string, action: "buy" | "sell"): string {
   return action === "buy" ? `비중 ${pct}% 확대` : `비중 ${pct}% 축소`;
 }
 
+// 표 열 너비가 좁아서 줄바꿈이 자주 일어나는데, 그냥 공백이면 "티커(회사명)"처럼 한 덩어리로
+// 읽혀야 할 구간이 회사명 중간에서 끊겨 다음 줄로 넘어가 버린다(예: "MOH(Molina Healthcare\nInc.)").
+// 줄바꿈 후보가 되는 공백을 줄바꿈 없는 공백(NBSP)으로 바꿔서 이 단위가 항상 붙어 다니게 한다.
+function nbsp(s: string): string {
+  return s.replace(/ /g, " ");
+}
+
+/** DetailTable이 실제값을 "핵심값 — 부가설명"으로 나누는 규칙과 충돌하지 않도록, 문장 내부에는
+ *  " — "(em dash)를 절대 쓰지 않는다 — 줄 구분은 "\n"만 쓴다(DetailTable이 whitespace-pre-line으로 살려준다). */
 function summarizeSuperInvestors(moves: SuperInvestorMove[]): string {
   if (moves.length === 0) return "확인 못함";
   const notable = [...moves].sort((a, b) => (b.portfolioPct ?? 0) - (a.portfolioPct ?? 0)).slice(0, 4);
-  const lines = notable.map((m) => `${m.manager}: ${m.ticker}(${m.company}) ${translateMoveDetail(m.detail, m.action)}`);
+  const lines = notable.map((m) => `${m.manager}: ${m.ticker}(${nbsp(m.company)}) ${translateMoveDetail(m.detail, m.action)}`);
   return `최근 분기(${moves[0].quarter}) 고래 매매 중 포트폴리오 비중 변화가 큰 순서:\n${lines.join("\n")}`;
 }
 
@@ -82,7 +91,7 @@ function summarizeStockConsensus(moves: SuperInvestorMove[]): string {
     .sort((a, b) => b[1].managers.size - a[1].managers.size)
     .slice(0, 5);
   if (consensus.length === 0) return "이번 분기 2명 이상이 동시 매수한 종목 없음";
-  const lines = consensus.map(([ticker, v]) => `${ticker}(${v.company}) — ${v.managers.size}명 동시 매수`);
+  const lines = consensus.map(([ticker, v]) => `${ticker}(${nbsp(v.company)}): ${v.managers.size}명 동시 매수`);
   return `여러 기관이 동시에 사들인 컨센서스 종목:\n${lines.join("\n")}`;
 }
 
@@ -95,7 +104,7 @@ function summarizeInsiderTrades(trades: InsiderTrade[]): string {
   const lines = notable.map((t) => {
     const actionKo = t.tradeType.startsWith("P") ? "매수" : "매도";
     const amount = `$${Math.abs(t.valueUsd!).toLocaleString("en-US")}`;
-    return `${t.ticker}(${t.company}) — ${t.insiderName}(${t.title}) ${actionKo} ${amount}`;
+    return `${t.ticker}(${nbsp(t.company)}): ${nbsp(t.insiderName)}(${nbsp(t.title)}) ${actionKo} ${amount}`;
   });
   return `금액 기준 최근 대형 내부자거래:\n${lines.join("\n")}`;
 }
