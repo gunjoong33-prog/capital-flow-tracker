@@ -2,7 +2,7 @@ import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePe
 import { getRecentRiskyNews } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
-import { METRICS, SECTOR_ETFS } from "@/lib/sources/types";
+import { METRICS, SECTOR_ETFS, BIG_TECH_TICKERS, BIG_TECH_LABELS } from "@/lib/sources/types";
 import {
   scoreStep1,
   scoreStep2,
@@ -169,13 +169,20 @@ function summarizeStep4(
  * 5단계(규모별·성격별 자금 도착) 판정 결과를 요약. summarizeStep2/3/4와 같은 원칙(결정론적, LLM 미사용).
  * 나스닥100 vs 러셀2000(쏠림 여부), 다우존스 vs S&P500(위험선호), 암호화폐 동조 여부 순서로 서술한다.
  */
+interface BigTechMover {
+  label: string;
+  change: { changePct: number | null };
+  reason: string;
+}
+
 function summarizeStep5(
   step5Result: Step5Result,
   ndxReturn20d: number,
   rutReturn20d: number,
   djiReturn20d: number,
   spxReturn20d: number,
-  gapPercentile: number | null
+  gapPercentile: number | null,
+  topBigTechMover: BigTechMover | null
 ): string {
   const lines: string[] = [];
 
@@ -203,6 +210,20 @@ function summarizeStep5(
       step5Result.cryptoAlignsWithRisk
         ? "비트코인·이더리움도 나스닥과 같은 방향으로 움직여 위험선호 심리에 동조하고 있습니다."
         : "비트코인·이더리움은 나스닥과 다른 방향으로 움직이고 있어 코인 고유 이슈(규제·수급 등)가 있을 가능성이 있습니다."
+    );
+  }
+
+  // 나스닥100 쏠림·순환매 판정이 실제로 어느 종목에서 나오는지 짚어준다 — 원인은 Gemini가 뉴스
+  // 헤드라인으로 판정한 값을 그대로 쓰고, 확인 안 된 경우 지어내지 않는다(데이터 정직성 원칙).
+  if (topBigTechMover && topBigTechMover.change.changePct !== null) {
+    const { label, reason } = topBigTechMover;
+    const pct = topBigTechMover.change.changePct;
+    const sign = pct >= 0 ? "+" : "";
+    const isUnresolved = reason === "명확한 원인 확인 안 됨" || reason === "원인 확인 못함(Gemini 미판정)";
+    lines.push(
+      isUnresolved
+        ? `빅테크 7 중 가장 크게 움직인 종목은 ${label}(${sign}${pct.toFixed(2)}%)이나, 뚜렷한 원인은 확인되지 않았습니다.`
+        : `빅테크 7 중 가장 크게 움직인 종목은 ${label}(${sign}${pct.toFixed(2)}%)입니다. ${reason}`
     );
   }
 
@@ -718,30 +739,29 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "이더리움(ETH)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(ethChange, "달러"), met: null },
   ];
 
-  details.step5Summary = summarizeStep5(step5, ndxReturn20d, rutReturn20d, djiReturn20d, spxReturn20d, gapPercentile);
-
-  // 세 번째 표(가장 아래) — 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동.
-  // 나스닥100 쏠림 신호를 실제로 이끄는 종목이 뭔지 드릴다운하는 참고용이라 충족열은 없다.
-  const [aaplChange, msftChange, googlChange, amznChange, nvdaChange, metaChange, tslaChange] = await Promise.all([
-    dailyChange(METRICS.AAPL),
-    dailyChange(METRICS.MSFT),
-    dailyChange(METRICS.GOOGL),
-    dailyChange(METRICS.AMZN),
-    dailyChange(METRICS.NVDA),
-    dailyChange(METRICS.META),
-    dailyChange(METRICS.TSLA),
-  ]);
+  // 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동·등락 원인 — 나스닥100 쏠림 신호를
+  // 실제로 이끄는 종목이 뭔지 드릴다운하는 참고용이라 충족열은 없다. 종합판단에서 가장 크게 움직인
+  // 종목을 짚어줄 수 있도록 summarizeStep5보다 먼저 계산해둔다.
+  const bigTechChanges = await Promise.all(BIG_TECH_TICKERS.map((ticker) => dailyChange(ticker)));
   const bigTechReasons = manualInputs.bigTechReasons ?? {};
   const reasonFor = (ticker: string) => bigTechReasons[ticker] ?? "원인 확인 못함(Gemini 미판정)";
-  details.step5BigTech = [
-    { label: "애플(AAPL)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(aaplChange, "달러")} — ${reasonFor(METRICS.AAPL)}`, met: null },
-    { label: "마이크로소프트(MSFT)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(msftChange, "달러")} — ${reasonFor(METRICS.MSFT)}`, met: null },
-    { label: "알파벳(GOOGL)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(googlChange, "달러")} — ${reasonFor(METRICS.GOOGL)}`, met: null },
-    { label: "아마존(AMZN)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(amznChange, "달러")} — ${reasonFor(METRICS.AMZN)}`, met: null },
-    { label: "엔비디아(NVDA)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(nvdaChange, "달러")} — ${reasonFor(METRICS.NVDA)}`, met: null },
-    { label: "메타(META)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(metaChange, "달러")} — ${reasonFor(METRICS.META)}`, met: null },
-    { label: "테슬라(TSLA)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(tslaChange, "달러")} — ${reasonFor(METRICS.TSLA)}`, met: null },
-  ];
+  const bigTechMovers = BIG_TECH_TICKERS.map((ticker, i) => ({
+    ticker, label: BIG_TECH_LABELS[ticker], change: bigTechChanges[i], reason: reasonFor(ticker),
+  }));
+  const topBigTechMover = bigTechMovers.reduce<typeof bigTechMovers[number] | null>((top, m) => {
+    if (m.change.changePct === null) return top;
+    if (!top || top.change.changePct === null) return m;
+    return Math.abs(m.change.changePct) > Math.abs(top.change.changePct) ? m : top;
+  }, null);
+
+  details.step5Summary = summarizeStep5(step5, ndxReturn20d, rutReturn20d, djiReturn20d, spxReturn20d, gapPercentile, topBigTechMover);
+
+  details.step5BigTech = bigTechMovers.map(({ ticker, label, change, reason }) => ({
+    label: `${label}(${ticker})`,
+    criterion: "마감가 · 전일 대비 변동 · 원인",
+    value: `${fmtDailyChange(change, "달러")} — ${reason}`,
+    met: null,
+  }));
 
   // 6단계
   const step6 = scoreStep6({ sectors: manualInputs.sectors });

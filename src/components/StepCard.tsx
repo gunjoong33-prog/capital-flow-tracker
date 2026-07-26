@@ -43,10 +43,10 @@ function DetailTable({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            // run.ts가 "핵심값 — 부가설명" 형태로 값을 만드는 경우가 많다 — 나눠서
-            // 핵심값은 굵게, 부가설명은 작은 보조 텍스트로 분리해야 표가 안 빽빽해진다.
+            // run.ts가 "핵심값 — 부가설명 — 부가설명2" 형태로 값을 만드는 경우가 많다 — 나눠서
+            // 핵심값은 굵게, 부가설명은 각각 줄을 나눠 작은 보조 텍스트로 분리해야 표가 안 빽빽해진다
+            // (예: 5단계 빅테크는 마감가 / 전일 대비 변동 / 등락 원인 3줄로 나뉜다).
             const [mainValue, ...noteParts] = row.value.split(" — ");
-            const note = noteParts.join(" — ");
             const { main: labelMain, code: labelCode } = splitLabel(row.label);
             return (
               <tr key={i} className="border-b border-zinc-800/60 align-top last:border-0">
@@ -57,7 +57,9 @@ function DetailTable({
                 <td className="px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
                 <td className="px-3 py-2.5">
                   <div className="font-medium text-zinc-200">{mainValue}</div>
-                  {note && <div className="mt-0.5 leading-snug text-zinc-500">{note}</div>}
+                  {noteParts.map((part, j) => (
+                    <div key={j} className="mt-0.5 leading-snug text-zinc-500">{part}</div>
+                  ))}
                 </td>
                 {!hideMetColumn && (
                   <td className="px-3 py-2.5">
