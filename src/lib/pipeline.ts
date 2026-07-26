@@ -100,7 +100,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   const sectors =
     sectorsResult.status === "fulfilled"
-      ? sectorsResult.value.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio }))
+      ? sectorsResult.value.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio }))
       : [];
   if (sectorsResult.status === "rejected") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 

@@ -16,7 +16,7 @@ async function main() {
   }
 
   const manualInputs = await getManualInputsForDate(date);
-  let sectors: { name: string; return5d: number; volumeRatio: number }[] = [];
+  let sectors: { name: string; return5d: number; changePct1d: number; volumeRatio: number }[] = [];
   try {
     sectors = await fetchAllSectors();
   } catch {
@@ -26,7 +26,7 @@ async function main() {
   const report = await runDailyAnalysis({
     domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
-    sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
+    sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
   });
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;

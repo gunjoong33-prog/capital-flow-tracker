@@ -52,17 +52,35 @@ export const METRICS = {
 
 export type MetricId = (typeof METRICS)[keyof typeof METRICS];
 
-// 섹터 ETF 티커 (6단계, finviz 대신 직접 계산용)
+// 섹터 ETF 티커 (6단계, finviz 대신 직접 계산용).
+// 방산·항공우주는 종목 구성이 겹치지만(보잉·록히드마틴 등) 서로 다른 실제 ETF로 구분한다 —
+// SHLD(Global X Defense Tech, 순수 방위산업 비중↑) vs ITA(iShares Aerospace & Defense, 항공기 제조 비중↑).
 export const SECTOR_ETFS = {
-  AI_TECH: "XLK", // 기술
+  AI: "AIQ", // AI — Global X Artificial Intelligence & Technology ETF
   FINANCE: "XLF", // 금융
+  TECH_SERVICES: "XLK", // 기술서비스
   HEALTHCARE: "XLV", // 헬스케어
   STAPLES: "XLP", // 필수소비재
   INDUSTRIALS: "XLI", // 제조
   ENERGY: "XLE", // 에너지+인프라
+  DEFENSE: "SHLD", // 방산
+  AEROSPACE: "ITA", // 항공우주
   MATERIALS: "XLB", // 원자재
-  AEROSPACE_DEFENSE: "ITA", // 방산·항공우주
 } as const;
+
+// 티커만 봐서는 무슨 섹터인지 알기 어려워 UI에 함께 표시할 한글 라벨.
+export const SECTOR_LABELS: Record<keyof typeof SECTOR_ETFS, string> = {
+  AI: "AI",
+  FINANCE: "금융",
+  TECH_SERVICES: "기술서비스",
+  HEALTHCARE: "헬스케어",
+  STAPLES: "필수소비재",
+  INDUSTRIALS: "제조",
+  ENERGY: "에너지(+인프라)",
+  DEFENSE: "방산",
+  AEROSPACE: "항공우주",
+  MATERIALS: "원자재",
+};
 
 export interface FetchedPoint {
   metric: string;

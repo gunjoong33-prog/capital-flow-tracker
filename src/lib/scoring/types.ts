@@ -103,13 +103,14 @@ export interface Step5Result {
 export interface SectorInput {
   name: string;
   return5d: number;
+  changePct1d?: number; // 전일 대비 등락률(%) — 표시용, 집계(top3+거래량)엔 안 씀
   volumeRatio: number; // 20일 평균 대비 배율
 }
 export interface Step6Input {
   sectors: SectorInput[];
 }
 export interface Step6Result {
-  qualifying: string[]; // 상위3위 안 + 거래량 120%+ 충족 섹터
+  qualifying: string[]; // 상위3위 안 + 거래량 130%+ 충족 섹터
   score: number; // 0~10
 }
 
@@ -159,6 +160,7 @@ export type StepDetails = {
   step4Summary?: string; // 4단계 지표 결과를 1~3줄로 요약한 종합판단
   step5Aux?: StepDetailRow[]; // 집계에 안 들어가는 원자료(4대 지수·BTC·ETH 마감가 및 전일 대비 변동) — 별도 토글, 충족열 없음
   step5Summary?: string; // 5단계 지표 결과를 1~3줄로 요약한 종합판단
+  step6Summary?: string; // 6단계 지표 결과를 1~3줄로 요약한 종합판단(어느 섹터로 자금이 몰렸는지)
   step3: StepDetailRow[];
   step4: StepDetailRow[];
   step5: StepDetailRow[];

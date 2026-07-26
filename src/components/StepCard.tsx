@@ -11,16 +11,25 @@ function splitLabel(label: string): { main: string; code: string | null } {
  * hideMetColumn=true면 마지막 열 자체를 없앤다(순수 실제값 나열용, 예: 5단계 마감가 원자료).
  * row.result가 있으면 마지막 열 헤더를 "결과"로 바꾸고 ✓/✕ 아이콘 대신 텍스트를 보여준다
  * (충족/불충족으로 나누기 애매한 범주형 판정용, 예: 5단계 위험선호/쏠림 여부).
+ * wideCriterion=true면 지표열을 줄이고 기준열을 늘린다(기준 문장이 긴 표의 가독성용, 예: 6단계).
  */
-function DetailTable({ rows, hideMetColumn = false }: { rows: StepDetailRow[]; hideMetColumn?: boolean }) {
+function DetailTable({
+  rows,
+  hideMetColumn = false,
+  wideCriterion = false,
+}: {
+  rows: StepDetailRow[];
+  hideMetColumn?: boolean;
+  wideCriterion?: boolean;
+}) {
   const resultMode = rows.some((r) => r.result !== undefined);
   const metHeader = resultMode ? "결과" : "충족";
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full table-fixed text-xs">
         <colgroup>
-          <col className="w-[26%]" />
-          <col className={hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : "w-[32%]"} />
+          <col className={wideCriterion ? "w-[18%]" : "w-[26%]"} />
+          <col className={hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : wideCriterion ? "w-[40%]" : "w-[32%]"} />
           <col className={hideMetColumn ? "w-[38%]" : resultMode ? "w-[36%]" : "w-[34%]"} />
           {!hideMetColumn && <col className={resultMode ? "w-[20%]" : "w-[8%]"} />}
         </colgroup>
@@ -157,6 +166,7 @@ export function StepCard({
   details,
   auxDetails,
   auxHideMetColumn,
+  detailsWideCriterion,
   tip,
   summary,
 }: {
@@ -167,6 +177,7 @@ export function StepCard({
   details?: StepDetailRow[];
   auxDetails?: StepDetailRow[];
   auxHideMetColumn?: boolean;
+  detailsWideCriterion?: boolean;
   tip?: string;
   summary?: string;
 }) {
@@ -213,7 +224,7 @@ export function StepCard({
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 분석 기준·지표 상세 보기 ({details.length}개)
               </summary>
-              <DetailTable rows={details} />
+              <DetailTable rows={details} wideCriterion={detailsWideCriterion} />
             </details>
           )}
           {auxDetails && auxDetails.length > 0 && (

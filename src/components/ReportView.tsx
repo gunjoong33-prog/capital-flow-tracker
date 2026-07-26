@@ -117,8 +117,26 @@ export function ReportView({
         )}
       </StepCard>
 
-      <StepCard step={6} title="자본의 최종 목적지(섹터, 사후 확인용)" score={step6.score} details={details?.step6} tip={STEP_TIPS[6]}>
+      <StepCard step={6} title="자본의 최종 목적지(섹터, 사후 확인용)" score={step6.score} details={details?.step6} detailsWideCriterion tip={STEP_TIPS[6]} summary={details?.step6Summary}>
         <Field label="충족 섹터" value={step6.qualifying.length > 0 ? step6.qualifying.join(", ") : "없음"} />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            href="https://finviz.com/map.ashx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          >
+            S&P500 히트맵(Finviz) →
+          </a>
+          <a
+            href="https://www.trendforce.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          >
+            산업 트렌드(TrendForce) →
+          </a>
+        </div>
       </StepCard>
 
       <StepCard step={7} title="심리 필터(합산 제외, 포지션 크기 조절용)" details={details?.step7} tip={STEP_TIPS[7]}>

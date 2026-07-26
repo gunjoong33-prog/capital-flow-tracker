@@ -1,4 +1,4 @@
-import { METRICS, SECTOR_ETFS, type FetchedPoint } from "./types";
+import { METRICS, SECTOR_ETFS, SECTOR_LABELS, type FetchedPoint } from "./types";
 
 // Yahoo Finance 비공식 차트 API. 무료, 키 불필요.
 // 공식 API가 아니므로 예고 없이 바뀌거나 막힐 수 있다 — 실패 시 "확인 못함"으로 처리하고
@@ -84,8 +84,10 @@ export async function fetchAllYahooLatest(): Promise<{
 
 // ── 6단계 섹터 ETF (finviz 대체 — 직접 계산용 원자료) ──────────
 export interface SectorRawData {
-  name: string;
+  name: string; // "한글라벨(티커)" 형태 — 티커만으로는 무슨 섹터인지 알기 어려워 라벨을 붙인다
+  ticker: string;
   return5d: number;
+  changePct1d: number; // 전일 대비 등락률(%)
   volumeRatio: number; // 최근 거래량 ÷ 20일 평균 거래량
 }
 
@@ -101,7 +103,8 @@ interface YahooChartWithVolume {
   };
 }
 
-async function fetchSectorRaw(ticker: string): Promise<SectorRawData> {
+async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<SectorRawData> {
+  const ticker = SECTOR_ETFS[sectorKey];
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1mo&interval=1d`;
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!res.ok) throw new Error(`Yahoo ${ticker} 요청 실패: ${res.status}`);
@@ -115,7 +118,9 @@ async function fetchSectorRaw(ticker: string): Promise<SectorRawData> {
   const last = closes.length;
   const close5dAgo = closes[Math.max(0, last - 6)];
   const closeLatest = closes[last - 1];
+  const closePrevDay = closes[Math.max(0, last - 2)];
   const return5d = ((closeLatest - close5dAgo) / close5dAgo) * 100;
+  const changePct1d = ((closeLatest - closePrevDay) / closePrevDay) * 100;
 
   // 주의: 장중에 호출하면 당일 거래량이 아직 다 안 찍혀서 volumeRatio가 낮게 나온다.
   // 매일 09시(KST) 파이프라인은 미국 장 마감 후라 이 문제가 없다 — 디버그용으로 장중에 호출할 때만 주의.
@@ -124,13 +129,13 @@ async function fetchSectorRaw(ticker: string): Promise<SectorRawData> {
     volumes.slice(-20).reduce((sum, v) => sum + v, 0) / Math.min(20, volumes.length);
   const volumeRatio = recentVolume / avgVolume20d;
 
-  return { name: ticker, return5d, volumeRatio };
+  return { name: `${SECTOR_LABELS[sectorKey]}(${ticker})`, ticker, return5d, changePct1d, volumeRatio };
 }
 
-/** 6단계 섹터 8개 원자료를 한 번에 가져온다. */
+/** 6단계 섹터 10개 원자료를 한 번에 가져온다. */
 export async function fetchAllSectors(): Promise<SectorRawData[]> {
-  const tickers = Object.values(SECTOR_ETFS);
-  const results = await Promise.allSettled(tickers.map(fetchSectorRaw));
+  const keys = Object.keys(SECTOR_ETFS) as (keyof typeof SECTOR_ETFS)[];
+  const results = await Promise.allSettled(keys.map(fetchSectorRaw));
   return results
     .filter((r): r is PromiseFulfilledResult<SectorRawData> => r.status === "fulfilled")
     .map((r) => r.value);

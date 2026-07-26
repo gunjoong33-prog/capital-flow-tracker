@@ -162,7 +162,7 @@ export function scoreStep6(input: Step6Input): Step6Result {
   const top3Names = new Set(sorted.slice(0, 3).map((s) => s.name));
 
   const qualifying = input.sectors
-    .filter((s) => top3Names.has(s.name) && s.volumeRatio >= 1.2)
+    .filter((s) => top3Names.has(s.name) && s.volumeRatio >= 1.3)
     .map((s) => s.name);
 
   const score =

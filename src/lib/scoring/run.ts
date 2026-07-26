@@ -209,6 +209,37 @@ function summarizeStep5(
   return lines.join("\n");
 }
 
+/**
+ * 6단계 섹터별 판정 근거를 규칙 기반으로 짧게 설명한다. 실제 뉴스·산업 동향을 조회해 서술하는 게 아니라
+ * (v2 프롬프트의 데이터 정직성 원칙상 확인 안 된 원인을 지어내지 않는다), 이미 계산된 수익률·거래량
+ * 수치만으로 판정 가능한 범위에서 해석한다. 실제 원인 조사는 카드 하단의 TrendForce·히트맵 링크로 유도한다.
+ */
+function sectorRationale(qualifying: boolean, return5d: number, volumeRatio: number): string {
+  if (qualifying) return "5일 수익률 상위권 + 거래량 급증 — 자금 유입 신호";
+  if (return5d > 0 && volumeRatio >= 1.3) return "거래량은 급증했지만 상위 3위 밖 — 관심 초기 단계일 수 있음";
+  if (return5d > 0) return "완만한 상승, 거래량 뒷받침은 부족";
+  return "5일 수익률 하락 — 자금 이탈 또는 관망 국면";
+}
+
+/**
+ * 6단계(섹터) 판정 결과를 요약. summarizeStep2~5와 같은 원칙(결정론적, LLM 미사용).
+ * 어느 섹터로 자금이 몰렸는지(qualifying) + 5일 수익률 1위 섹터를 알려준다.
+ */
+function summarizeStep6(step6Result: { qualifying: string[] }, sectors: SectorInput[]): string {
+  const lines: string[] = [];
+  lines.push(
+    step6Result.qualifying.length > 0
+      ? `자금은 ${step6Result.qualifying.join(", ")} 섹터로 몰리고 있습니다(5일 수익률 상위 3위 + 거래량 급증 동시 충족).`
+      : "5일 수익률 상위 3위이면서 거래량까지 급증한 섹터는 없어 뚜렷한 자금 쏠림은 감지되지 않았습니다."
+  );
+  const sorted = [...sectors].sort((a, b) => b.return5d - a.return5d);
+  if (sorted.length > 0) {
+    lines.push(`5일 수익률 1위는 ${sorted[0].name} (${sorted[0].return5d.toFixed(2)}%)입니다.`);
+  }
+  lines.push("정확한 이동 원인은 산업 트렌드 링크에서 직접 확인하는 걸 권장합니다.");
+  return lines.join("\n");
+}
+
 interface DailyChange {
   latest: number | null;
   changeAmount: number | null;
@@ -692,13 +723,18 @@ export async function runDailyAnalysis(manualInputs: {
   const step6 = scoreStep6({ sectors: manualInputs.sectors });
   const qualifyingSet = new Set(step6.qualifying);
   details.step6 = manualInputs.sectors.length > 0
-    ? manualInputs.sectors.map((s) => ({
-        label: s.name,
-        criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 120%+",
-        value: `${s.return5d.toFixed(2)}% / 거래량 ${s.volumeRatio.toFixed(2)}배`,
-        met: qualifyingSet.has(s.name),
-      }))
+    ? manualInputs.sectors.map((s) => {
+        const qualifying = qualifyingSet.has(s.name);
+        const dailyPart = s.changePct1d !== undefined ? ` · 1일 ${fmt(s.changePct1d, 2, "%")}` : "";
+        return {
+          label: s.name,
+          criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
+          value: `5일 ${fmt(s.return5d, 2, "%")}${dailyPart} · 거래량 ${s.volumeRatio.toFixed(2)}배 — ${sectorRationale(qualifying, s.return5d, s.volumeRatio)}`,
+          met: qualifying,
+        };
+      })
     : [{ label: "섹터 데이터", criterion: "-", value: "확인 못함", met: null }];
+  details.step6Summary = summarizeStep6(step6, manualInputs.sectors);
 
   // 7단계
   const vix = await getLatestMetric(METRICS.VIX);
