@@ -13,7 +13,7 @@ import {
   scoreStep7,
   scoreStep8,
 } from "./pure";
-import type { Direction, SectorInput, StepDetailRow, StepDetails } from "./types";
+import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
 
 /**
  * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
@@ -161,6 +161,50 @@ function summarizeStep4(
   }
   lines.push(`환율·유가는 ${riskStance} 흐름입니다.`);
   lines.push(reason);
+
+  return lines.join("\n");
+}
+
+/**
+ * 5단계(규모별·성격별 자금 도착) 판정 결과를 요약. summarizeStep2/3/4와 같은 원칙(결정론적, LLM 미사용).
+ * 나스닥100 vs 러셀2000(쏠림 여부), 다우존스 vs S&P500(위험선호), 암호화폐 동조 여부 순서로 서술한다.
+ */
+function summarizeStep5(
+  step5Result: Step5Result,
+  ndxReturn20d: number,
+  rutReturn20d: number,
+  djiReturn20d: number,
+  spxReturn20d: number,
+  gapPercentile: number | null
+): string {
+  const lines: string[] = [];
+
+  const concentrationDesc = step5Result.concentrationWarning
+    ? step5Result.gapPp > 0
+      ? "대형 기술주(나스닥100) 쪽으로 자금이 쏠리는 집중 장세"
+      : "중소형주(러셀2000) 쪽으로 자금이 쏠리는 구간"
+    : "나스닥100·러셀2000이 비슷하게 움직이는 건강한 순환매";
+  lines.push(
+    `나스닥100 ${ndxReturn20d.toFixed(2)}% / 러셀2000 ${rutReturn20d.toFixed(2)}%(20거래일)로 격차 ${step5Result.gapPp.toFixed(2)}%p — ${concentrationDesc}입니다.`
+  );
+  if (gapPercentile !== null) {
+    lines.push(`이 격차는 최근 1년 중 ${gapPercentile}%ile 수준입니다.`);
+  }
+
+  const riskDesc = step5Result.riskAppetite === "위험선호"
+    ? "S&P500이 다우존스를 앞서며 위험자산 선호 심리가 우세"
+    : step5Result.riskAppetite === "안전선호"
+      ? "다우존스가 S&P500을 앞서며 안전자산(전통 우량주) 선호 심리가 우세"
+      : "다우존스·S&P500이 비슷하게 움직여 위험선호 방향성은 중립";
+  lines.push(`다우존스 ${djiReturn20d.toFixed(2)}% / S&P500 ${spxReturn20d.toFixed(2)}%(20거래일)로 ${riskDesc}입니다.`);
+
+  if (step5Result.cryptoAlignsWithRisk !== null) {
+    lines.push(
+      step5Result.cryptoAlignsWithRisk
+        ? "비트코인·이더리움도 나스닥과 같은 방향으로 움직여 위험선호 심리에 동조하고 있습니다."
+        : "비트코인·이더리움은 나스닥과 다른 방향으로 움직이고 있어 코인 고유 이슈(규제·수급 등)가 있을 가능성이 있습니다."
+    );
+  }
 
   return lines.join("\n");
 }
@@ -585,16 +629,64 @@ export async function runDailyAnalysis(manualInputs: {
   const step5 = scoreStep5({
     ndxReturn20d, rutReturn20d, gapPercentile, djiReturn20d, spxReturn20d, btcReturn20d, ethReturn20d,
   });
+
+  // 마감가·전일 대비 변동폭·등락률 — 나스닥 카페 "매크로 환경 및 주요 지수 마감 동향" 형식 참고.
+  const ndxChange = await dailyChange(METRICS.NDX);
+  const rutChange = await dailyChange(METRICS.RUT);
+  const djiChange = await dailyChange(METRICS.DJI);
+  const spxChange = await dailyChange(METRICS.SPX);
+  const btcChange = await dailyChange(METRICS.BTC);
+  const ethChange = await dailyChange(METRICS.ETH);
+
+  const concentrationResult = step5.concentrationWarning
+    ? step5.gapPp > 0
+      ? "대형 기술주 쏠림 심화"
+      : "중소형주 쏠림 심화"
+    : "기술주·중소형주 균형적 순환매";
+  const cryptoResult = step5.cryptoAlignsWithRisk === null
+    ? "확인 못함"
+    : step5.cryptoAlignsWithRisk
+      ? "나스닥과 동조"
+      : "나스닥과 괴리";
+
+  // 첫 번째 표 — vs 비교 지표 2개 + 암호화폐 동조 분석. 단순 충족/불충족이 아니라
+  // 범주형 판정이라 met 대신 result(텍스트)로 결과열을 채운다.
   details.step5 = [
-    { label: "나스닥100(NDX) 20거래일 누적수익률", criterion: "참고용", value: fmt(ndxReturn20d, 2, "%"), met: null },
-    { label: "러셀2000(RUT) 20거래일 누적수익률", criterion: "참고용", value: fmt(rutReturn20d, 2, "%"), met: null },
-    { label: "나스닥-러셀 격차", criterion: "3%p 초과 시 쏠림 경계", value: `${step5.gapPp.toFixed(2)}%p`, met: !step5.concentrationWarning },
-    { label: "격차 최근 1년 백분위", criterion: "낮을수록(격차 작을수록) 고득점", value: gapPercentile !== null ? `${gapPercentile}%ile` : "데이터 부족(1년 미만)", met: null },
-    { label: "다우존스(DJI) 20거래일 누적수익률", criterion: "SPX와 비교해 위험선호 판정", value: fmt(djiReturn20d, 2, "%"), met: null },
-    { label: "S&P500(SPX) 20거래일 누적수익률", criterion: "DJI와 비교해 위험선호 판정", value: fmt(spxReturn20d, 2, "%"), met: null },
-    { label: "비트코인 20거래일 누적수익률", criterion: "나스닥과 동조 여부 참고", value: fmt(btcReturn20d, 2, "%"), met: null },
-    { label: "이더리움 20거래일 누적수익률", criterion: "참고용", value: fmt(ethReturn20d, 2, "%"), met: null },
+    {
+      label: "나스닥100 vs 러셀2000 (자금 쏠림)",
+      criterion: "20거래일 수익률 격차 3%p 초과 시 쏠림 경계",
+      value: `나스닥100 ${fmt(ndxReturn20d, 2, "%")} / 러셀2000 ${fmt(rutReturn20d, 2, "%")} — 격차 ${step5.gapPp.toFixed(2)}%p(${gapPercentile !== null ? `${gapPercentile}%ile` : "데이터 부족"})`,
+      met: null,
+      result: concentrationResult,
+    },
+    {
+      label: "다우존스 vs S&P500 (위험선호)",
+      criterion: "SPX 우세=위험선호, DJI 우세=안전선호, 동률=중립",
+      value: `다우존스 ${fmt(djiReturn20d, 2, "%")} / S&P500 ${fmt(spxReturn20d, 2, "%")} — (20거래일)`,
+      met: null,
+      result: step5.riskAppetite,
+    },
+    {
+      label: "암호화폐 동조 분석",
+      criterion: "나스닥과 같은 방향이면 위험선호 동조, 다르면 코인 고유 이슈 가능",
+      value: `비트코인 ${fmt(btcReturn20d, 2, "%")} / 이더리움 ${fmt(ethReturn20d, 2, "%")} — (20거래일)`,
+      met: null,
+      result: cryptoResult,
+    },
   ];
+
+  // 두 번째 표 — 4대 지수 + 암호화폐 2종의 마감가·전일 대비 변동 원자료. 집계엔 안 들어가는 참고용이라
+  // 충족열 없이 실제값만 나열한다(StepCard의 auxHideMetColumn).
+  details.step5Aux = [
+    { label: "나스닥100(NDX)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(ndxChange, "포인트"), met: null },
+    { label: "러셀2000(RUT)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(rutChange, "포인트"), met: null },
+    { label: "다우존스(DJI)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(djiChange, "포인트"), met: null },
+    { label: "S&P500(SPX)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(spxChange, "포인트"), met: null },
+    { label: "비트코인(BTC)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(btcChange, "달러"), met: null },
+    { label: "이더리움(ETH)", criterion: "마감가 · 전일 대비 변동", value: fmtDailyChange(ethChange, "달러"), met: null },
+  ];
+
+  details.step5Summary = summarizeStep5(step5, ndxReturn20d, rutReturn20d, djiReturn20d, spxReturn20d, gapPercentile);
 
   // 6단계
   const step6 = scoreStep6({ sectors: manualInputs.sectors });

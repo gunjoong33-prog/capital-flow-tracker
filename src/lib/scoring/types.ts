@@ -147,6 +147,7 @@ export interface StepDetailRow {
   criterion: string;
   value: string;
   met: boolean | null;
+  result?: string; // met 대신 "결과" 열에 텍스트로 보여줄 값(단순 충족/불충족이 아닌 범주형 판정에 씀, 예: 5단계 위험선호/쏠림 여부)
 }
 export type StepDetails = {
   step1: StepDetailRow[];
@@ -156,6 +157,8 @@ export type StepDetails = {
   step3Summary?: string; // 3단계 지표 결과를 1~3줄로 요약한 종합판단
   step4Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(환율 USD/KRW·USD/JPY, 유가 WTI·브렌트의 전일 대비 변동) — 별도 토글
   step4Summary?: string; // 4단계 지표 결과를 1~3줄로 요약한 종합판단
+  step5Aux?: StepDetailRow[]; // 집계에 안 들어가는 원자료(4대 지수·BTC·ETH 마감가 및 전일 대비 변동) — 별도 토글, 충족열 없음
+  step5Summary?: string; // 5단계 지표 결과를 1~3줄로 요약한 종합판단
   step3: StepDetailRow[];
   step4: StepDetailRow[];
   step5: StepDetailRow[];

@@ -7,22 +7,29 @@ function splitLabel(label: string): { main: string; code: string | null } {
   return match ? { main: match[1], code: match[2] } : { main: label, code: null };
 }
 
-function DetailTable({ rows }: { rows: StepDetailRow[] }) {
+/**
+ * hideMetColumn=true면 마지막 열 자체를 없앤다(순수 실제값 나열용, 예: 5단계 마감가 원자료).
+ * row.result가 있으면 마지막 열 헤더를 "결과"로 바꾸고 ✓/✕ 아이콘 대신 텍스트를 보여준다
+ * (충족/불충족으로 나누기 애매한 범주형 판정용, 예: 5단계 위험선호/쏠림 여부).
+ */
+function DetailTable({ rows, hideMetColumn = false }: { rows: StepDetailRow[]; hideMetColumn?: boolean }) {
+  const resultMode = rows.some((r) => r.result !== undefined);
+  const metHeader = resultMode ? "결과" : "충족";
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-800">
       <table className="w-full table-fixed text-xs">
         <colgroup>
           <col className="w-[26%]" />
-          <col className="w-[32%]" />
-          <col className="w-[34%]" />
-          <col className="w-[8%]" />
+          <col className={hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : "w-[32%]"} />
+          <col className={hideMetColumn ? "w-[38%]" : resultMode ? "w-[36%]" : "w-[34%]"} />
+          {!hideMetColumn && <col className={resultMode ? "w-[20%]" : "w-[8%]"} />}
         </colgroup>
         <thead>
           <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
             <th className="px-3 py-2 font-normal">지표</th>
             <th className="px-3 py-2 font-normal">기준</th>
             <th className="px-3 py-2 font-normal">실제값</th>
-            <th className="px-3 py-2 font-normal">충족</th>
+            {!hideMetColumn && <th className="px-3 py-2 font-normal">{metHeader}</th>}
           </tr>
         </thead>
         <tbody>
@@ -43,15 +50,19 @@ function DetailTable({ rows }: { rows: StepDetailRow[] }) {
                   <div className="font-medium text-zinc-200">{mainValue}</div>
                   {note && <div className="mt-0.5 leading-snug text-zinc-500">{note}</div>}
                 </td>
-                <td className="px-3 py-2.5">
-                  {row.met === null ? (
-                    <span className="text-zinc-600">-</span>
-                  ) : row.met ? (
-                    <span className="text-emerald-400">✓</span>
-                  ) : (
-                    <span className="text-rose-400">✕</span>
-                  )}
-                </td>
+                {!hideMetColumn && (
+                  <td className="px-3 py-2.5">
+                    {row.result !== undefined ? (
+                      <span className="text-zinc-300">{row.result}</span>
+                    ) : row.met === null ? (
+                      <span className="text-zinc-600">-</span>
+                    ) : row.met ? (
+                      <span className="text-emerald-400">✓</span>
+                    ) : (
+                      <span className="text-rose-400">✕</span>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -145,6 +156,7 @@ export function StepCard({
   children,
   details,
   auxDetails,
+  auxHideMetColumn,
   tip,
   summary,
 }: {
@@ -154,6 +166,7 @@ export function StepCard({
   children: ReactNode;
   details?: StepDetailRow[];
   auxDetails?: StepDetailRow[];
+  auxHideMetColumn?: boolean;
   tip?: string;
   summary?: string;
 }) {
@@ -208,7 +221,7 @@ export function StepCard({
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 보조 지표 보기 ({auxDetails.length}개, 집계 제외)
               </summary>
-              <DetailTable rows={auxDetails} />
+              <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} />
             </details>
           )}
         </div>
