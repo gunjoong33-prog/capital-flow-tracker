@@ -49,9 +49,13 @@ ${sections}`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        // gemini-flash-latest가 내부적으로 thinking 모델로 풀려서 추론에 토큰을 많이 쓴다 —
-        // 종목 7개를 판정하기엔 2048로 부족해서 MAX_TOKENS로 잘렸었다(news-events.ts와 같은 문제).
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+        // gemini-flash-latest가 내부적으로 thinking 모델로 풀려서 추론에 토큰을 얼마나 쓸지가
+        // 매 호출마다 들쭉날쭉하다 — maxOutputTokens를 아무리 올려도 thinking이 그 예산을
+        // 통째로 먹어버리면 여전히 MAX_TOKENS로 잘린다(news-events.ts에서 겪은 것보다 근본적인
+        // 문제). thinkingBudget을 0으로 끄는 건 이 모델이 거부해서(400), 512로 캡을 씌워
+        // thinking이 답변 예산을 침범하지 못하게 막는다 — 이 작업은 헤드라인·등락률을 보고
+        // 1문장 요약하는 단순 판단이라 깊은 추론이 필요 없다.
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 512 } },
       }),
     }
   );
