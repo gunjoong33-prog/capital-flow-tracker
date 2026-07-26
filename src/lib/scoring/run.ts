@@ -579,7 +579,7 @@ export async function runDailyAnalysis(manualInputs: {
       label: "14일 내 예정된 이벤트",
       criterion: "-",
       value: upcomingEvents.length > 0
-        ? upcomingEvents.map((e) => `${e.name}(${e.date.toISOString().slice(0, 10)})`).join(", ")
+        ? upcomingEvents.map((e) => `${e.name}(${e.date.toISOString().slice(0, 10)})`).join("\n")
         : "없음",
       met: null,
     },
