@@ -10,6 +10,7 @@ const EVENT_LABEL: Record<string, string> = {
   "미국 고용지표 발표": "고용지표",
   "미국 PPI 발표": "PPI",
   "미국 PCE 물가지표 발표": "PCE",
+  "일본금융정책결정회의(BOJ 금리 결정)": "BOJ",
 };
 
 export const dynamic = "force-dynamic";

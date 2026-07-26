@@ -15,6 +15,20 @@ const FOMC_DATES_2026 = [
   "2026-12-09",
 ];
 
+// 일본은행 금융정책결정회의(BOJ Monetary Policy Meeting) — 일본은행이 매년 미리 공개하는 고정
+// 일정(boj.or.jp, "Scheduled Dates of Monetary Policy Meetings in 2026" PDF, 2025-07-31 발표분
+// 기준). 이틀짜리 회의라 FOMC와 같은 원칙으로 정책 발표가 나오는 둘째 날 날짜를 썼다.
+const BOJ_DATES_2026 = [
+  "2026-01-23",
+  "2026-03-19",
+  "2026-04-28",
+  "2026-06-16",
+  "2026-07-31",
+  "2026-09-18",
+  "2026-10-30",
+  "2026-12-18",
+];
+
 const FRED_RELEASES: { id: number; name: string }[] = [
   { id: 10, name: "미국 CPI 발표" },
   { id: 50, name: "미국 고용지표 발표" },
@@ -44,7 +58,7 @@ async function fetchFredReleaseDates(releaseId: number, apiKey: string): Promise
 }
 
 /**
- * FOMC(고정 목록) + CPI/고용지표(FRED 실시간 조회) 발표일을 MajorEvent 테이블에 동기화.
+ * FOMC·BOJ(고정 목록) + CPI/고용지표(FRED 실시간 조회) 발표일을 MajorEvent 테이블에 동기화.
  * 매일 파이프라인에서 한 번 호출 — 캘린더 UI와 1단계 "14일 내 큰 이벤트" 판정이 여기서 읽어간다.
  */
 export async function syncMajorEvents(): Promise<{ synced: number; errors: string[] }> {
@@ -53,6 +67,10 @@ export async function syncMajorEvents(): Promise<{ synced: number; errors: strin
 
   for (const date of FOMC_DATES_2026) {
     rows.push({ date, name: "FOMC 회의 결과 발표", source: "fed" });
+  }
+
+  for (const date of BOJ_DATES_2026) {
+    rows.push({ date, name: "일본금융정책결정회의(BOJ 금리 결정)", source: "boj" });
   }
 
   const fredKey = process.env.FRED_API_KEY;
