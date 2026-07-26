@@ -11,7 +11,7 @@ export interface Headline {
   publishedAt: string | null;
 }
 
-function decodeXmlEntities(text: string): string {
+export function decodeXmlEntities(text: string): string {
   return text
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")

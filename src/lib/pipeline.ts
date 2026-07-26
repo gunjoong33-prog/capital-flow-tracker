@@ -15,6 +15,7 @@ import { getManualInputsForDate } from "@/lib/manual-inputs";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
 import { computeBigTechReasons } from "@/lib/bigtech-reasons";
+import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, type FetchedPoint } from "@/lib/sources/types";
 
 export interface DailyPipelineResult {
@@ -109,11 +110,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   const manualInputs = await getManualInputsForDate(today);
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
   if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Gemini)", error: bigTechErrors.join("; ") });
+  const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
+  if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
   const report = await runDailyAnalysis({
     domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors,
     bigTechReasons,
+    institutionalSignals,
   });
 
   // 3) 해설 생성

@@ -3,6 +3,7 @@ import { getRecentRiskyNews } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
 import { METRICS, SECTOR_ETFS, BIG_TECH_TICKERS, BIG_TECH_LABELS } from "@/lib/sources/types";
+import type { InstitutionalSignals } from "@/lib/institutional-signals";
 import {
   scoreStep1,
   scoreStep2,
@@ -458,6 +459,7 @@ export async function runDailyAnalysis(manualInputs: {
   fearGreed: number | null;
   sectors: SectorInput[];
   bigTechReasons?: Record<string, string>;
+  institutionalSignals?: InstitutionalSignals;
 }) {
   const details = {} as StepDetails;
 
@@ -784,7 +786,30 @@ export async function runDailyAnalysis(manualInputs: {
   // 7단계
   const vix = await getLatestMetric(METRICS.VIX);
   const step7 = scoreStep7({ vix: vix?.value ?? null, fearGreed: manualInputs.fearGreed });
+
+  // 기관·내부자 매집 신호(Dataroma·OpenInsider) — 5·6단계에서 이미 나온 종목·섹터와 일치하는지 대조.
+  // 매칭은 여기서(run.ts) 한다: institutional-signals.ts는 외부 소스만 다루고, 5·6단계 결과는
+  // run.ts에서만 알 수 있기 때문(bigTechReasons의 topBigTechMover 선정과 같은 원칙).
+  const institutional = manualInputs.institutionalSignals;
+  let institutionalMatch = "확인 안 됨";
+  if (institutional) {
+    const tickerMatch = institutional.activityTickers.find((t) => (BIG_TECH_TICKERS as readonly string[]).includes(t));
+    const sectorMatches = institutional.topSectorLabel !== null && step6.qualifying.includes(institutional.topSectorLabel);
+    if (tickerMatch) {
+      institutionalMatch = `일치(${tickerMatch})`;
+    } else if (sectorMatches && institutional.topSectorLabel) {
+      institutionalMatch = `일치(${institutional.topSectorLabel})`;
+    } else if (institutional.topSectorLabel || institutional.activityTickers.length > 0) {
+      institutionalMatch = `불일치 — 실제 매집: ${institutional.topSectorLabel ?? institutional.activityTickers[0]}`;
+    }
+  }
+
   details.step7 = [
+    { label: "슈퍼 투자자 포트폴리오", criterion: "거손/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null },
+    { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null },
+    { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null },
+    { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null },
+    { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
     { label: "VIX", criterion: "<15 과열 / >25 공포", value: fmt(vix?.value ?? null, 2), met: null },
     { label: "CNN 공포와 탐욕지수", criterion: ">75 과열 / <25 공포 (자동 미연동)", value: manualInputs.fearGreed !== null ? `${manualInputs.fearGreed}` : "확인 못함", met: null },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },

@@ -7,6 +7,7 @@ import { runDailyAnalysis } from "../src/lib/scoring/run";
 import { getManualInputsForDate } from "../src/lib/manual-inputs";
 import { fetchAllSectors } from "../src/lib/sources/yahoo";
 import { computeBigTechReasons } from "../src/lib/bigtech-reasons";
+import { computeInstitutionalSignals } from "../src/lib/institutional-signals";
 import { BIG_TECH_TICKERS } from "../src/lib/sources/types";
 
 async function main() {
@@ -26,12 +27,14 @@ async function main() {
   }
 
   const { reasons: bigTechReasons } = await computeBigTechReasons(BIG_TECH_TICKERS);
+  const { signals: institutionalSignals } = await computeInstitutionalSignals();
 
   const report = await runDailyAnalysis({
     domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
     bigTechReasons,
+    institutionalSignals,
   });
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
