@@ -80,6 +80,7 @@ model NewsEvent {
   url       String
   summary   String
   source    String // google-news | fed-press
+  priority  Int      @default(2) // 0=백악관·연준 공식 발표, 1=권력 네트워크·엘리트 그룹 유출/폭로, 2=일반 지정학 뉴스
   createdAt DateTime @default(now())
 
   @@unique([date, url])

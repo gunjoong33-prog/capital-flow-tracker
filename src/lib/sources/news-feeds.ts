@@ -4,11 +4,16 @@
 // (federalreserve.gov/feeds/feeds.htm, whitehouse.gov/news/feed/ 에서 확인).
 // v2 프롬프트 1단계 원문이 "Bloomberg ASIA·백악관·Fed"를 직접 지정한 소스라 그대로 반영.
 
+// 1단계 뉴스 우선순위(사용자 지정): 0=백악관·연준 공식 발표, 1=권력 네트워크·엘리트 그룹 유출/폭로
+// (예: Peter Thiel 'Dialog' 비밀결사 유출 보도류), 2=그 외 일반 지정학 뉴스(구글 검색).
+export type NewsCategory = "official" | "power-network" | "general";
+
 export interface Headline {
   title: string;
   url: string;
   source: string;
   publishedAt: string | null;
+  category: NewsCategory;
 }
 
 export function decodeXmlEntities(text: string): string {
@@ -27,21 +32,22 @@ function extractTag(block: string, tag: string): string | null {
   return plainMatch ? decodeXmlEntities(plainMatch[1].trim()) : null;
 }
 
-function parseRssItems(xml: string, source: string, limit: number): Headline[] {
+function parseRssItems(xml: string, source: string, category: NewsCategory, limit: number): Headline[] {
   const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
   return items.slice(0, limit).map((block) => ({
     title: extractTag(block, "title") ?? "",
     url: extractTag(block, "link") ?? "",
     source,
+    category,
     publishedAt: extractTag(block, "pubDate"),
   })).filter((h) => h.title && h.url);
 }
 
-async function fetchRss(url: string, source: string, limit: number): Promise<Headline[]> {
+async function fetchRss(url: string, source: string, category: NewsCategory, limit: number): Promise<Headline[]> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
   if (!res.ok) throw new Error(`${source} RSS 조회 실패: ${res.status}`);
   const xml = await res.text();
-  return parseRssItems(xml, source, limit);
+  return parseRssItems(xml, source, category, limit);
 }
 
 const GEOPOLITICAL_QUERIES = [
@@ -50,18 +56,30 @@ const GEOPOLITICAL_QUERIES = [
   "election market risk",
 ];
 
-/** 지정학 리스크 후보 헤드라인 — Google News RSS 검색 몇 개 + 연준 공식 보도자료. 판정은 이후 LLM이 한다. */
+// 사용자가 예시로 준 기사(Peter Thiel 'Dialog' 비밀결사 유출 보도 등) 같은 "권력 네트워크·엘리트 집단
+// 유출/폭로"류 뉴스. 이런 건 특정 사건이라 매번 같은 키워드로 다시 잡히진 않지만, 비슷한 성격의
+// 후속 보도를 최대한 넓게 잡으려고 광범위한 주제어로 검색한다.
+const POWER_NETWORK_QUERIES = [
+  "leaked documents expose elite network",
+  "secret society members leaked",
+  "investigation exposes influence network politicians",
+];
+
+/** 지정학 리스크 후보 헤드라인 — Google News RSS 검색 몇 개 + 연준·백악관 공식 보도자료. 판정은 이후 LLM이 한다. */
 export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]; errors: string[] }> {
   const errors: string[] = [];
   const headlines: Headline[] = [];
 
   const results = await Promise.allSettled([
     ...GEOPOLITICAL_QUERIES.map((q) =>
-      fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news", 5)
+      fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news", "general", 5)
     ),
-    fetchRss("https://www.federalreserve.gov/feeds/press_all.xml", "fed-press", 10),
-    fetchRss("https://www.federalreserve.gov/feeds/speeches_and_testimony.xml", "fed-speeches", 10),
-    fetchRss("https://www.whitehouse.gov/news/feed/", "whitehouse", 10),
+    ...POWER_NETWORK_QUERIES.map((q) =>
+      fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news-power", "power-network", 5)
+    ),
+    fetchRss("https://www.federalreserve.gov/feeds/press_all.xml", "fed-press", "official", 10),
+    fetchRss("https://www.federalreserve.gov/feeds/speeches_and_testimony.xml", "fed-speeches", "official", 10),
+    fetchRss("https://www.whitehouse.gov/news/feed/", "whitehouse", "official", 10),
   ]);
 
   for (const r of results) {
@@ -104,6 +122,7 @@ export async function fetchBigTechHeadlines(): Promise<{
       fetchRss(
         `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:1d&hl=en-US&gl=US&ceid=US:en`,
         `google-news-${ticker}`,
+        "general",
         3
       ).then((headlines) => ({ ticker, headlines }))
     )
