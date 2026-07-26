@@ -159,6 +159,7 @@ export type StepDetails = {
   step4Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(환율 USD/KRW·USD/JPY, 유가 WTI·브렌트의 전일 대비 변동) — 별도 토글
   step4Summary?: string; // 4단계 지표 결과를 1~3줄로 요약한 종합판단
   step5Aux?: StepDetailRow[]; // 집계에 안 들어가는 원자료(4대 지수·BTC·ETH 마감가 및 전일 대비 변동) — 별도 토글, 충족열 없음
+  step5BigTech?: StepDetailRow[]; // 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동 — 별도 토글(step5Aux 아래), 충족열 없음
   step5Summary?: string; // 5단계 지표 결과를 1~3줄로 요약한 종합판단
   step6Summary?: string; // 6단계 지표 결과를 1~3줄로 요약한 종합판단(어느 섹터로 자금이 몰렸는지)
   step3: StepDetailRow[];

@@ -79,3 +79,40 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
 
   return { headlines: deduped, errors };
 }
+
+// 빅테크 7 종목별 등락 원인 판정용 헤드라인 — 종목마다 별도 검색어로 조회해 티커별로 묶어서 반환한다
+// (지정학 리스크용 fetchCandidateHeadlines와 달리 종목 단위 판정이라 결과를 티커로 구분해야 한다).
+const BIG_TECH_QUERIES: { ticker: string; query: string }[] = [
+  { ticker: "AAPL", query: "Apple AAPL stock" },
+  { ticker: "MSFT", query: "Microsoft MSFT stock" },
+  { ticker: "GOOGL", query: "Google Alphabet GOOGL stock" },
+  { ticker: "AMZN", query: "Amazon AMZN stock" },
+  { ticker: "NVDA", query: "Nvidia NVDA stock" },
+  { ticker: "META", query: "Meta Platforms META stock" },
+  { ticker: "TSLA", query: "Tesla TSLA stock" },
+];
+
+export async function fetchBigTechHeadlines(): Promise<{
+  byTicker: Record<string, Headline[]>;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  const byTicker: Record<string, Headline[]> = {};
+
+  const results = await Promise.allSettled(
+    BIG_TECH_QUERIES.map(({ ticker, query }) =>
+      fetchRss(
+        `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:1d&hl=en-US&gl=US&ceid=US:en`,
+        `google-news-${ticker}`,
+        3
+      ).then((headlines) => ({ ticker, headlines }))
+    )
+  );
+
+  for (const r of results) {
+    if (r.status === "fulfilled") byTicker[r.value.ticker] = r.value.headlines;
+    else errors.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+  }
+
+  return { byTicker, errors };
+}

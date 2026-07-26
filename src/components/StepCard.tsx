@@ -166,6 +166,10 @@ export function StepCard({
   details,
   auxDetails,
   auxHideMetColumn,
+  auxLabel = "보조 지표",
+  aux2Details,
+  aux2HideMetColumn,
+  aux2Label = "보조 지표",
   detailsWideCriterion,
   tip,
   summary,
@@ -177,6 +181,10 @@ export function StepCard({
   details?: StepDetailRow[];
   auxDetails?: StepDetailRow[];
   auxHideMetColumn?: boolean;
+  auxLabel?: string;
+  aux2Details?: StepDetailRow[]; // 보조 표를 2개 두고 싶을 때(예: 5단계 지수·크립토 아래에 빅테크 7 별도 표)
+  aux2HideMetColumn?: boolean;
+  aux2Label?: string;
   detailsWideCriterion?: boolean;
   tip?: string;
   summary?: string;
@@ -217,7 +225,7 @@ export function StepCard({
         </div>
       )}
 
-      {((details && details.length > 0) || (auxDetails && auxDetails.length > 0)) && (
+      {((details && details.length > 0) || (auxDetails && auxDetails.length > 0) || (aux2Details && aux2Details.length > 0)) && (
         <div className="mt-3 space-y-2">
           {details && details.length > 0 && (
             <details>
@@ -230,9 +238,17 @@ export function StepCard({
           {auxDetails && auxDetails.length > 0 && (
             <details>
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
-                보조 지표 보기 ({auxDetails.length}개, 집계 제외)
+                {auxLabel} 보기 ({auxDetails.length}개, 집계 제외)
               </summary>
               <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} />
+            </details>
+          )}
+          {aux2Details && aux2Details.length > 0 && (
+            <details>
+              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+                {aux2Label} 보기 ({aux2Details.length}개, 집계 제외)
+              </summary>
+              <DetailTable rows={aux2Details} hideMetColumn={aux2HideMetColumn} />
             </details>
           )}
         </div>

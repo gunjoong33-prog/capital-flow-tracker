@@ -435,6 +435,7 @@ export async function runDailyAnalysis(manualInputs: {
   domesticWeightHigh: boolean;
   fearGreed: number | null;
   sectors: SectorInput[];
+  bigTechReasons?: Record<string, string>;
 }) {
   const details = {} as StepDetails;
 
@@ -718,6 +719,29 @@ export async function runDailyAnalysis(manualInputs: {
   ];
 
   details.step5Summary = summarizeStep5(step5, ndxReturn20d, rutReturn20d, djiReturn20d, spxReturn20d, gapPercentile);
+
+  // 세 번째 표(가장 아래) — 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동.
+  // 나스닥100 쏠림 신호를 실제로 이끄는 종목이 뭔지 드릴다운하는 참고용이라 충족열은 없다.
+  const [aaplChange, msftChange, googlChange, amznChange, nvdaChange, metaChange, tslaChange] = await Promise.all([
+    dailyChange(METRICS.AAPL),
+    dailyChange(METRICS.MSFT),
+    dailyChange(METRICS.GOOGL),
+    dailyChange(METRICS.AMZN),
+    dailyChange(METRICS.NVDA),
+    dailyChange(METRICS.META),
+    dailyChange(METRICS.TSLA),
+  ]);
+  const bigTechReasons = manualInputs.bigTechReasons ?? {};
+  const reasonFor = (ticker: string) => bigTechReasons[ticker] ?? "원인 확인 못함(Gemini 미판정)";
+  details.step5BigTech = [
+    { label: "애플(AAPL)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(aaplChange, "달러")} — ${reasonFor(METRICS.AAPL)}`, met: null },
+    { label: "마이크로소프트(MSFT)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(msftChange, "달러")} — ${reasonFor(METRICS.MSFT)}`, met: null },
+    { label: "알파벳(GOOGL)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(googlChange, "달러")} — ${reasonFor(METRICS.GOOGL)}`, met: null },
+    { label: "아마존(AMZN)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(amznChange, "달러")} — ${reasonFor(METRICS.AMZN)}`, met: null },
+    { label: "엔비디아(NVDA)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(nvdaChange, "달러")} — ${reasonFor(METRICS.NVDA)}`, met: null },
+    { label: "메타(META)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(metaChange, "달러")} — ${reasonFor(METRICS.META)}`, met: null },
+    { label: "테슬라(TSLA)", criterion: "마감가 · 전일 대비 변동 · 원인", value: `${fmtDailyChange(tslaChange, "달러")} — ${reasonFor(METRICS.TSLA)}`, met: null },
+  ];
 
   // 6단계
   const step6 = scoreStep6({ sectors: manualInputs.sectors });

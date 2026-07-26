@@ -14,7 +14,8 @@ import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { getManualInputsForDate } from "@/lib/manual-inputs";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
-import type { FetchedPoint } from "@/lib/sources/types";
+import { computeBigTechReasons } from "@/lib/bigtech-reasons";
+import { BIG_TECH_TICKERS, type FetchedPoint } from "@/lib/sources/types";
 
 export interface DailyPipelineResult {
   date: string;
@@ -106,10 +107,13 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   // 2) 채점 — 뉴스·이벤트·엔화급등은 위에서 이미 동기화·계산됨. CNN F&G·국내비중만 여전히 수동.
   const manualInputs = await getManualInputsForDate(today);
+  const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
+  if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Gemini)", error: bigTechErrors.join("; ") });
   const report = await runDailyAnalysis({
     domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors,
+    bigTechReasons,
   });
 
   // 3) 해설 생성

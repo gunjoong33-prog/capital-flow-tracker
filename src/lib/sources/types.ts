@@ -44,6 +44,15 @@ export const METRICS = {
   BTC: "BTC",
   ETH: "ETH",
 
+  // 5단계 — 빅테크 7(Magnificent 7), 나스닥100 쏠림을 실제로 이끄는 개별 종목 드릴다운
+  AAPL: "AAPL",
+  MSFT: "MSFT",
+  GOOGL: "GOOGL",
+  AMZN: "AMZN",
+  NVDA: "NVDA",
+  META: "META",
+  TSLA: "TSLA",
+
   // 7단계
   VIX: "VIX",
   CNN_FEAR_GREED: "CNN_FEAR_GREED", // 수동 입력
@@ -51,6 +60,21 @@ export const METRICS = {
 } as const;
 
 export type MetricId = (typeof METRICS)[keyof typeof METRICS];
+
+// 빅테크 7(Magnificent 7) — 5단계 개별 종목 드릴다운 + 등락 원인 판정(news-feeds.ts, bigtech-reasons.ts)에서 공용으로 쓴다.
+export const BIG_TECH_TICKERS = [
+  METRICS.AAPL, METRICS.MSFT, METRICS.GOOGL, METRICS.AMZN, METRICS.NVDA, METRICS.META, METRICS.TSLA,
+] as const;
+
+export const BIG_TECH_LABELS: Record<string, string> = {
+  [METRICS.AAPL]: "애플",
+  [METRICS.MSFT]: "마이크로소프트",
+  [METRICS.GOOGL]: "알파벳",
+  [METRICS.AMZN]: "아마존",
+  [METRICS.NVDA]: "엔비디아",
+  [METRICS.META]: "메타",
+  [METRICS.TSLA]: "테슬라",
+};
 
 // 섹터 ETF 티커 (6단계, finviz 대신 직접 계산용).
 // 방산·항공우주는 종목 구성이 겹치지만(보잉·록히드마틴 등) 서로 다른 실제 ETF로 구분한다 —

@@ -6,6 +6,8 @@ import { Prisma } from "../src/generated/prisma/client";
 import { runDailyAnalysis } from "../src/lib/scoring/run";
 import { getManualInputsForDate } from "../src/lib/manual-inputs";
 import { fetchAllSectors } from "../src/lib/sources/yahoo";
+import { computeBigTechReasons } from "../src/lib/bigtech-reasons";
+import { BIG_TECH_TICKERS } from "../src/lib/sources/types";
 
 async function main() {
   const date = process.argv[2] ?? new Date().toISOString().slice(0, 10);
@@ -23,10 +25,13 @@ async function main() {
     // 섹터 조회 실패해도 나머지는 갱신
   }
 
+  const { reasons: bigTechReasons } = await computeBigTechReasons(BIG_TECH_TICKERS);
+
   const report = await runDailyAnalysis({
     domesticWeightHigh: manualInputs.domesticWeightHigh,
     fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
+    bigTechReasons,
   });
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;

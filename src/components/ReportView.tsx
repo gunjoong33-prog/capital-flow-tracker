@@ -108,7 +108,20 @@ export function ReportView({
         <Field label="달러 확인" value={step4.dollarConfirms ? "실질금리와 동행(신호 강함)" : "디커플링(경계)"} />
       </StepCard>
 
-      <StepCard step={5} title="규모별·성격별 자금 도착" score={step5.score} details={details?.step5} auxDetails={details?.step5Aux} auxHideMetColumn tip={STEP_TIPS[5]} summary={details?.step5Summary}>
+      <StepCard
+        step={5}
+        title="규모별·성격별 자금 도착"
+        score={step5.score}
+        details={details?.step5}
+        auxDetails={details?.step5Aux}
+        auxHideMetColumn
+        auxLabel="지수·크립토 마감 시세"
+        aux2Details={details?.step5BigTech}
+        aux2HideMetColumn
+        aux2Label="빅테크 7 마감 시세"
+        tip={STEP_TIPS[5]}
+        summary={details?.step5Summary}
+      >
         <Field label="나스닥-러셀 격차" value={`${step5.gapPp.toFixed(2)}%p`} />
         <Field label="쏠림 경계" value={step5.concentrationWarning ? "예" : "아니오"} />
         <Field label="위험선호" value={step5.riskAppetite} />

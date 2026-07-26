@@ -14,6 +14,13 @@ const YAHOO_TICKERS: Record<string, string> = {
   [METRICS.DJI]: "^DJI",
   [METRICS.SPX]: "^GSPC",
   [METRICS.VIX]: "^VIX",
+  [METRICS.AAPL]: "AAPL",
+  [METRICS.MSFT]: "MSFT",
+  [METRICS.GOOGL]: "GOOGL",
+  [METRICS.AMZN]: "AMZN",
+  [METRICS.NVDA]: "NVDA",
+  [METRICS.META]: "META",
+  [METRICS.TSLA]: "TSLA",
 };
 
 interface YahooChartResult {
