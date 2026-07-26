@@ -223,8 +223,9 @@ function summarizeStep5(
     lines.push(
       isUnresolved
         ? `빅테크 7 중 가장 크게 움직인 종목은 ${label}(${sign}${pct.toFixed(2)}%)이나, 뚜렷한 원인은 확인되지 않았습니다.`
-        : `빅테크 7 중 가장 크게 움직인 종목은 ${label}(${sign}${pct.toFixed(2)}%)입니다. ${reason}`
+        : `빅테크 7 중 가장 크게 움직인 종목은 ${label}(${sign}${pct.toFixed(2)}%)입니다.`
     );
+    if (!isUnresolved) lines.push(reason);
   }
 
   return lines.join("\n");
