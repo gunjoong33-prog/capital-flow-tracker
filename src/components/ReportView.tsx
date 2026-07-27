@@ -66,7 +66,7 @@ export function ReportView({
           <DecisionBadge decision={step8.finalDecision} />
           <ScoreBadge score={step8.macroTrendScore} label="투자 적합도 점수" />
           {step8.vetoApplied && (
-            <span className="rounded-full border border-rose-500/30 bg-rose-500/15 px-3 py-1 text-xs text-rose-400">
+            <span className="[word-break:keep-all] rounded-full border border-rose-500/30 bg-rose-500/15 px-3 py-1 text-xs text-rose-400">
               1단계 거부권 발동 — 한 단계 하향 조정됨
             </span>
           )}
@@ -106,7 +106,7 @@ export function ReportView({
               const style = SEVERITY_STYLE[n.severity];
               return (
                 <div key={i} className={`rounded-md px-3 py-2 text-xs ${style.box}`}>
-                  <p className={style.text}>
+                  <p className={`[word-break:keep-all] ${style.text}`}>
                     <span className={`mr-1 rounded px-1 py-0.5 text-[10px] font-medium ${style.badge}`}>
                       {style.label}
                     </span>
@@ -123,7 +123,7 @@ export function ReportView({
         {step1.recentEventOutcomes && step1.recentEventOutcomes.filter((o) => o.risky).length > 0 && (
           <div className="mt-3 space-y-2">
             {step1.recentEventOutcomes.filter((o) => o.risky).map((o, i) => (
-              <div key={i} className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+              <div key={i} className="[word-break:keep-all] rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
                 {o.name}({o.date}) 결과가 예상 밖입니다 — {o.detail}
               </div>
             ))}

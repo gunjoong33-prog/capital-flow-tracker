@@ -202,20 +202,20 @@ function TipBlock({ block }: { block: string }) {
   }
 
   if (items.length === 0) {
-    return <p className="leading-relaxed text-zinc-400">{heading}</p>;
+    return <p className="[word-break:keep-all] leading-relaxed text-zinc-400">{heading}</p>;
   }
 
   return (
     <div>
-      {heading && <p className="mb-1.5 leading-relaxed text-zinc-300">{heading}</p>}
+      {heading && <p className="[word-break:keep-all] mb-1.5 leading-relaxed text-zinc-300">{heading}</p>}
       <ul className="space-y-2">
         {items.map((item, idx) => (
           <li key={idx} className="flex gap-2 leading-relaxed">
             <span className="shrink-0 text-zinc-600">{item.marker}</span>
-            <span className="text-zinc-400">
+            <span className="[word-break:keep-all] text-zinc-400">
               {item.text}
               {item.sub.map((s, j) => (
-                <span key={j} className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
+                <span key={j} className="[word-break:keep-all] mt-0.5 block text-[11px] leading-snug text-zinc-600">
                   {s}
                 </span>
               ))}
@@ -303,7 +303,7 @@ export function StepCard({
       {summary && (
         <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">종합판단</p>
-          <p className="whitespace-pre-line text-xs leading-relaxed text-zinc-300">{summary}</p>
+          <p className="whitespace-pre-line [word-break:keep-all] text-xs leading-relaxed text-zinc-300">{summary}</p>
         </div>
       )}
 
