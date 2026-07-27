@@ -50,12 +50,10 @@ export interface ReportViewData {
 export function ReportView({
   dateLabel,
   report,
-  narrative,
   details,
 }: {
   dateLabel: string;
   report: ReportViewData;
-  narrative?: string | null;
   details?: StepDetails | null;
 }) {
   const { step1, step2, step3, step4, step5, step6, step7, step8 } = report;
@@ -78,12 +76,6 @@ export function ReportView({
         </div>
       </header>
 
-      {narrative && (
-        <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300">
-          {narrative}
-        </p>
-      )}
-
       {details?.comprehensiveReport && (
         <div>
           <input type="checkbox" id="comprehensive-report-toggle" className="peer hidden" />
@@ -99,7 +91,7 @@ export function ReportView({
           >
             종합 보고서 접기
           </label>
-          <div className="mt-3 hidden whitespace-pre-line rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300 peer-checked:block">
+          <div className="mt-3 hidden whitespace-pre-line [word-break:keep-all] rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300 peer-checked:block">
             {details.comprehensiveReport}
           </div>
         </div>

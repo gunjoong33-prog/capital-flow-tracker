@@ -37,7 +37,6 @@ export default async function CalendarDayPage({
         <ReportView
           dateLabel={dateLabel}
           report={reportData}
-          narrative={report.narrative}
           details={report.details as unknown as StepDetails | null}
         />
       </main>
