@@ -101,9 +101,12 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   const sectors =
     sectorsResult.status === "fulfilled"
-      ? sectorsResult.value.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio }))
+      ? sectorsResult.value.sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio }))
       : [];
-  if (sectorsResult.status === "rejected") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
+  const missingSectorLabels = sectorsResult.status === "fulfilled" ? sectorsResult.value.errors.map((e) => e.sector) : [];
+  if (sectorsResult.status === "fulfilled") {
+    for (const e of sectorsResult.value.errors) sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
+  } else sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 
   // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
@@ -112,6 +115,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
   const report = await runDailyAnalysis({
     sectors,
+    missingSectorLabels,
     bigTechReasons,
     institutionalSignals,
   });

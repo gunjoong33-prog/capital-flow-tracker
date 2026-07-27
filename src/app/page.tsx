@@ -36,10 +36,13 @@ function extractBigTechReasons(details: PersistedDetails | null): Record<string,
 
 async function getReport() {
   let sectors: { name: string; return5d: number; volumeRatio: number }[] = [];
+  let missingSectorLabels: string[] = [];
   try {
-    sectors = await fetchAllSectors();
+    const result = await fetchAllSectors();
+    sectors = result.sectors;
+    missingSectorLabels = result.errors.map((e) => e.sector);
   } catch {
-    // 섹터 조회 실패해도 나머지 분석은 계속 — 6단계만 빈 값으로
+    // 섹터 조회 전체 실패해도 나머지 분석은 계속 — 6단계만 빈 값으로(details.step6가 확인 못함 처리)
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -47,6 +50,7 @@ async function getReport() {
 
   const report = await runDailyAnalysis({
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
+    missingSectorLabels,
     bigTechReasons: extractBigTechReasons(persistedDetails),
   });
 

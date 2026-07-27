@@ -19,10 +19,13 @@ async function main() {
   }
 
   let sectors: { name: string; return5d: number; changePct1d: number; volumeRatio: number }[] = [];
+  let missingSectorLabels: string[] = [];
   try {
-    sectors = await fetchAllSectors();
+    const result = await fetchAllSectors();
+    sectors = result.sectors;
+    missingSectorLabels = result.errors.map((e) => e.sector);
   } catch {
-    // 섹터 조회 실패해도 나머지는 갱신
+    // 섹터 조회 전체 실패해도 나머지는 갱신
   }
 
   const { reasons: bigTechReasons } = await computeBigTechReasons(BIG_TECH_TICKERS);
@@ -30,6 +33,7 @@ async function main() {
 
   const report = await runDailyAnalysis({
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
+    missingSectorLabels,
     bigTechReasons,
     institutionalSignals,
   });

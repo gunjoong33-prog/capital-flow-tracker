@@ -575,6 +575,7 @@ async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | n
  */
 export async function runDailyAnalysis(manualInputs: {
   sectors: SectorInput[];
+  missingSectorLabels?: string[]; // fetchAllSectors에서 개별적으로 실패한 섹터 이름("라벨(티커)") — 확인 못함으로 명시
   bigTechReasons?: Record<string, string>;
   institutionalSignals?: InstitutionalSignals;
 }) {
@@ -903,21 +904,34 @@ export async function runDailyAnalysis(manualInputs: {
     met: null,
   }));
 
-  // 6단계
+  // 6단계 — 섹터는 시계열로 저장하지 않고 매번 라이브로만 조회해서(볼륨까지 필요해 MetricValue
+  // 스키마와 안 맞음) "N일 전 데이터" 폴백은 구조적으로 불가능하다. 대신 3·4·5·7단계와 같은 원칙으로,
+  // 일부 섹터만 조회 실패해도 조용히 빠뜨리지 않고 그 섹터만 이름을 남겨 확인 못함으로 명시한다
+  // (기존엔 fetchAllSectors가 실패분을 필터링해 사라져서, 몇 개가 빠졌는지 알 길이 없었다).
   const step6 = scoreStep6({ sectors: manualInputs.sectors });
   const qualifyingSet = new Set(step6.qualifying);
-  details.step6 = manualInputs.sectors.length > 0
-    ? manualInputs.sectors.map((s) => {
-        const qualifying = qualifyingSet.has(s.name);
-        const dailyPart = s.changePct1d !== undefined ? ` · 1일 ${fmt(s.changePct1d, 2, "%")}` : "";
-        return {
-          label: s.name,
-          criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
-          value: `5일 ${fmt(s.return5d, 2, "%")}${dailyPart} · 거래량 ${s.volumeRatio.toFixed(2)}배 — ${sectorRationale(qualifying, s.return5d, s.volumeRatio)}`,
-          met: qualifying,
-        };
-      })
-    : [{ label: "섹터 데이터", criterion: "-", value: "확인 못함", met: null }];
+  const missingSectorLabels = manualInputs.missingSectorLabels ?? [];
+  details.step6 =
+    manualInputs.sectors.length === 0 && missingSectorLabels.length === 0
+      ? [{ label: "섹터 데이터", criterion: "-", value: "확인 못함", met: null }]
+      : [
+          ...manualInputs.sectors.map((s) => {
+            const qualifying = qualifyingSet.has(s.name);
+            const dailyPart = s.changePct1d !== undefined ? ` · 1일 ${fmt(s.changePct1d, 2, "%")}` : "";
+            return {
+              label: s.name,
+              criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
+              value: `5일 ${fmt(s.return5d, 2, "%")}${dailyPart} · 거래량 ${s.volumeRatio.toFixed(2)}배 — ${sectorRationale(qualifying, s.return5d, s.volumeRatio)}`,
+              met: qualifying,
+            };
+          }),
+          ...missingSectorLabels.map((label) => ({
+            label,
+            criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
+            value: "확인 못함",
+            met: null,
+          })),
+        ];
   details.step6Summary = summarizeStep6(step6, manualInputs.sectors);
 
   // 7단계

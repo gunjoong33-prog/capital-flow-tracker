@@ -139,11 +139,21 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
   return { name: `${SECTOR_LABELS[sectorKey]}(${ticker})`, ticker, return5d, changePct1d, volumeRatio };
 }
 
-/** 6단계 섹터 10개 원자료를 한 번에 가져온다. */
-export async function fetchAllSectors(): Promise<SectorRawData[]> {
+/**
+ * 6단계 섹터 10개 원자료를 한 번에 가져온다.
+ * 일부만 실패해도(예: Yahoo가 특정 티커만 막음) 성공한 것만 조용히 돌려주면 몇 개가 빠졌는지
+ * 알 길이 없다 — 3·4·5·7단계처럼 실패한 섹터는 이름을 남겨서 "확인 못함"으로 명시할 수 있게 한다.
+ * 섹터 데이터는 시계열로 저장하지 않고 매번 라이브로만 조회하므로(볼륨까지 필요해 MetricValue
+ * 스키마와 안 맞음), "N일 전 데이터" 폴백은 구조적으로 불가능하고 확인 못함 처리만 가능하다.
+ */
+export async function fetchAllSectors(): Promise<{ sectors: SectorRawData[]; errors: { sector: string; message: string }[] }> {
   const keys = Object.keys(SECTOR_ETFS) as (keyof typeof SECTOR_ETFS)[];
   const results = await Promise.allSettled(keys.map(fetchSectorRaw));
-  return results
-    .filter((r): r is PromiseFulfilledResult<SectorRawData> => r.status === "fulfilled")
-    .map((r) => r.value);
+  const sectors: SectorRawData[] = [];
+  const errors: { sector: string; message: string }[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") sectors.push(r.value);
+    else errors.push({ sector: `${SECTOR_LABELS[keys[i]]}(${SECTOR_ETFS[keys[i]]})`, message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+  });
+  return { sectors, errors };
 }
