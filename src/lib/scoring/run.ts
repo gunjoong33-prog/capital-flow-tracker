@@ -277,6 +277,15 @@ function summarizeStep6(step6Result: { qualifying: string[] }, sectors: SectorIn
  * VIX·F&G "변동 원인"은 뉴스 근거 없이 지어낼 수 없으므로(데이터 정직성 원칙), 실제 원인 서술이
  * 아니라 현재 수치가 어느 구간인지·그게 뭘 의미하는지로 해석한다.
  */
+/** CNN 공식 사이트(edition.cnn.com/markets/fear-and-greed)의 5단계 분류 기준. */
+function cnnFearGreedRating(value: number): string {
+  if (value < 25) return "극단적 공포";
+  if (value < 45) return "공포";
+  if (value <= 55) return "중립";
+  if (value <= 75) return "탐욕";
+  return "극단적 탐욕";
+}
+
 function summarizeStep7(
   institutional: InstitutionalSignals | undefined,
   sectorMatch: string | null, // 6단계 qualifying과 실제로 일치한 섹터 라벨(없으면 null)
@@ -319,13 +328,10 @@ function summarizeStep7(
       : vix > 25
         ? `VIX ${vix.toFixed(2)}(공포 구간, 25 초과)`
         : `VIX ${vix.toFixed(2)}(중립)`;
-  const fgDesc = fearGreed === null
-    ? "공포탐욕지수 확인 못함"
-    : fearGreed > 75
-      ? `공포탐욕지수 ${fearGreed.toFixed(1)}(과열 구간, 75 초과)`
-      : fearGreed < 25
-        ? `공포탐욕지수 ${fearGreed.toFixed(1)}(공포 구간, 25 미만)`
-        : `공포탐욕지수 ${fearGreed.toFixed(1)}(중립)`;
+  const fgDesc =
+    fearGreed === null
+      ? "공포탐욕지수 확인 못함"
+      : `공포탐욕지수 ${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)}, CNN 기준)`;
   const implication = step7Result.bothOverheated
     ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
     : step7Result.fearZone
@@ -898,7 +904,12 @@ export async function runDailyAnalysis(manualInputs: {
   ];
   details.step7 = [
     { label: "VIX", criterion: "<15 과열 / >25 공포", value: fmt(vix?.value ?? null, 2), met: null },
-    { label: "CNN 공포와 탐욕지수", criterion: ">75 과열 / <25 공포", value: fearGreed !== null ? `${fearGreed.toFixed(1)}` : "확인 못함", met: null },
+    {
+      label: "CNN 공포와 탐욕지수",
+      criterion: "0~24 극단적공포 · 25~44 공포 · 45~55 중립 · 56~75 탐욕 · 76~100 극단적탐욕",
+      value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
+      met: null,
+    },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
