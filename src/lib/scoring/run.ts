@@ -382,13 +382,20 @@ async function dailyChange(metric: string): Promise<DailyChange> {
 
 /** dailyChange 결과를 "값 (단위) — 전일 대비 ±값 (단위), ±값%" 형태의 표시 문자열로 만든다. */
 function fmtDailyChange(c: DailyChange, unit: string, decimals = 2): string {
-  if (c.latest === null) return "확인 못함";
+  // 며칠째 값이 안 갱신됐으면(Yahoo·CoinGecko 등 소스 불문) "오늘 값"인 척하지 않고 확인 못함으로 처리.
+  if (c.latest === null || (c.daysOld !== null && c.daysOld >= STALE_UNKNOWN_DAYS)) return "확인 못함";
   const latestStr = fmt(c.latest, decimals, unit);
-  // Yahoo가 실패해 FRED로 대체된 값이면, 며칠 전 값인지 명시해서 "당일 값"으로 오해하지 않게 한다.
-  const fallbackNote = c.source === "fred" ? ` (FRED 대체, ${c.daysOld}일 전)` : "";
-  if (c.changeAmount === null || c.changePct === null) return `${latestStr}${fallbackNote}`;
+  // Yahoo가 실패해 FRED로 대체된 값이면 그 사실을, 대체 없이 그냥 며칠 묵은 값이면 "N일 전 데이터"를
+  // 명시해서 "당일 값"으로 오해하지 않게 한다.
+  const staleNote =
+    c.source === "fred"
+      ? ` (FRED 대체, ${c.daysOld}일 전)`
+      : c.daysOld !== null && c.daysOld >= STALE_WARN_DAYS
+        ? ` (${c.daysOld}일 전 데이터)`
+        : "";
+  if (c.changeAmount === null || c.changePct === null) return `${latestStr}${staleNote}`;
   const sign = c.changeAmount >= 0 ? "+" : "";
-  return `${latestStr}${fallbackNote} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
+  return `${latestStr}${staleNote} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
 }
 
 interface TrendCheck {
@@ -508,6 +515,24 @@ async function directionOf(metric: string): Promise<Direction | null> {
   if (curr.value > prev.value) return "up";
   if (curr.value < prev.value) return "down";
   return "flat";
+}
+
+// Yahoo(등 매일 갱신을 전제로 하는 소스)가 며칠째 막혔을 때, "확인 못함"으로 완전히 숨기지도
+// "오늘 값"인 척 보여주지도 않기 위한 2단계 경계값. 주말·짧은 휴장 정도는 정상 범위로 넘어가고
+// (WARN 미만은 라벨 없이 그대로 표시), 그보다 오래되면 "N일 전 데이터" 라벨을 붙이고, 20일 수익률·
+// z-score 같은 일별 계산에 쓰기엔 너무 오래되면(UNKNOWN 이상) 확인 못함으로 처리한다.
+// FRED 월간 지표(REAL_RATE 등)에는 적용하지 않는다 — 발표 주기 자체가 몇 달이라 오작동으로 오인한다.
+const STALE_WARN_DAYS = 4;
+const STALE_UNKNOWN_DAYS = 10;
+
+/** directionOf와 같지만, 최신 데이터포인트가 며칠 전 것인지(daysOld)도 함께 돌려준다(Yahoo 일별 지표 전용). */
+async function directionOfWithFreshness(metric: string): Promise<{ direction: Direction | null; daysOld: number | null }> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+  if (!prev || !curr) return { direction: null, daysOld: null };
+  const daysOld = Math.round((Date.now() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  if (curr.value > prev.value) return { direction: "up", daysOld };
+  if (curr.value < prev.value) return { direction: "down", daysOld };
+  return { direction: "flat", daysOld };
 }
 
 /**
@@ -730,16 +755,33 @@ export async function runDailyAnalysis(manualInputs: {
 
   details.step3Summary = summarizeStep3(step3, spreadPercentile, cftcPercentile, jpySpike);
 
-  // 4단계
-  const goldDir = (await directionOf(METRICS.GOLD)) ?? "flat";
+  // 4단계 — 금·달러(USD/KRW)는 Yahoo 일별 지표라 며칠째 안 갱신되면 방향 판정 자체가 낡은 값 비교가
+  // 될 수 있다. 실질금리(REAL_RATE)는 FRED 월간 지표라 이 신선도 검사 대상이 아니다.
+  const goldFresh = await directionOfWithFreshness(METRICS.GOLD);
+  const goldStale = goldFresh.daysOld !== null && goldFresh.daysOld >= STALE_UNKNOWN_DAYS;
+  const goldDir = goldStale ? "flat" : goldFresh.direction ?? "flat";
   const realRateDir = (await directionOf(METRICS.REAL_RATE)) ?? "flat";
-  const dollarDir = (await directionOf(METRICS.USDKRW)) ?? "flat";
+  const dollarFresh = await directionOfWithFreshness(METRICS.USDKRW);
+  const dollarStale = dollarFresh.daysOld !== null && dollarFresh.daysOld >= STALE_UNKNOWN_DAYS;
+  const dollarDir = dollarStale ? "flat" : dollarFresh.direction ?? "flat";
   const step4 = scoreStep4({ goldDirection: goldDir, realRateDirection: realRateDir, dollarDirection: dollarDir });
   const dirLabel = (d: Direction) => (d === "up" ? "상승" : d === "down" ? "하락" : "보합");
+  const staleSuffix = (daysOld: number | null, stale: boolean) =>
+    !stale && daysOld !== null && daysOld >= STALE_WARN_DAYS ? ` (${daysOld}일 전 데이터)` : "";
   details.step4 = [
-    { label: "금 가격 방향", criterion: "하락 시 충족(사분면 최고점 조합의 방향)", value: dirLabel(goldDir), met: goldDir === "down" },
+    {
+      label: "금 가격 방향",
+      criterion: "하락 시 충족(사분면 최고점 조합의 방향)",
+      value: goldStale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(goldFresh.daysOld, goldStale)}`,
+      met: goldStale ? null : goldDir === "down",
+    },
     { label: "실질금리 방향", criterion: "상승 시 충족(사분면 최고점 조합의 방향)", value: dirLabel(realRateDir), met: realRateDir === "up" },
-    { label: "달러 방향(USD/KRW)", criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함", value: dirLabel(dollarDir), met: step4.dollarConfirms },
+    {
+      label: "달러 방향(USD/KRW)",
+      criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함",
+      value: dollarStale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollarFresh.daysOld, dollarStale)}`,
+      met: dollarStale ? null : step4.dollarConfirms,
+    },
     { label: "사분면 판정", criterion: "위험선호 우호적 조합(금↓+실질금리↑ 또는 금↑+실질금리↓/보합) 시 충족", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
 
@@ -879,10 +921,14 @@ export async function runDailyAnalysis(manualInputs: {
   details.step6Summary = summarizeStep6(step6, manualInputs.sectors);
 
   // 7단계
-  const vix = await getLatestMetric(METRICS.VIX);
+  const vixRow = await getLatestMetric(METRICS.VIX);
+  const vixDaysOld = vixRow ? Math.round((Date.now() - vixRow.date.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const vixStale = vixDaysOld !== null && vixDaysOld >= STALE_UNKNOWN_DAYS;
+  const vix = vixStale ? null : (vixRow?.value ?? null);
+  const vixStaleNote = !vixStale && vixDaysOld !== null && vixDaysOld >= STALE_WARN_DAYS ? ` (${vixDaysOld}일 전 데이터)` : "";
   const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED);
   const fearGreed = fearGreedMetric?.value ?? null;
-  const step7 = scoreStep7({ vix: vix?.value ?? null, fearGreed });
+  const step7 = scoreStep7({ vix, fearGreed });
 
   // 기관·내부자 매집 신호(Dataroma·OpenInsider) — 5·6단계에서 이미 나온 종목·섹터와 일치하는지 대조.
   // 매칭은 여기서(run.ts) 한다: institutional-signals.ts는 외부 소스만 다루고, 5·6단계 결과는
@@ -926,8 +972,8 @@ export async function runDailyAnalysis(manualInputs: {
     {
       label: "VIX",
       criterion: [nbsp("15 미만 과열"), nbsp("25 초과 공포")].join(" · "),
-      value: fmt(vix?.value ?? null, 2),
-      met: vix?.value == null ? null : vix.value >= 15 && vix.value <= 25,
+      value: vix === null ? "확인 못함" : `${fmt(vix, 2)}${vixStaleNote}`,
+      met: vix === null ? null : vix >= 15 && vix <= 25,
     },
     {
       label: "CNN 공포와 탐욕지수",
@@ -946,7 +992,7 @@ export async function runDailyAnalysis(manualInputs: {
     // 좋다/나쁘다로 판정할 대상이 아니다(공포=매수 기회라는 원칙과 met:false가 모순되면 안 됨).
     { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
-  details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, fearGreed, step7);
+  details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix, fearGreed, step7);
 
   // 8단계
   const step8 = scoreStep8({ step1, step2, step3, step4, step5, step6, step7 });
