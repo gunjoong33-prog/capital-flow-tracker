@@ -152,6 +152,7 @@ export interface StepDetailRow {
   url?: string; // "바로가기" 열에 링크로 보여줄 원본 출처(예: 7단계 기관·내부자 매집의 Dataroma·OpenInsider 링크)
 }
 export type StepDetails = {
+  comprehensiveReport?: string; // 1단계 카드 위 "보고서" 버튼이 보여주는 종합 해설(경제 초심자용, 1~8단계 인과관계 서술)
   step1: StepDetailRow[];
   step2: StepDetailRow[];
   step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드) — 별도 토글

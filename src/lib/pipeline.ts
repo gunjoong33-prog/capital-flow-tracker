@@ -10,6 +10,7 @@ import { fetchKr10y } from "@/lib/sources/ecos";
 import { fetchCnnFearGreedLatest } from "@/lib/sources/cnn-feargreed";
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
+import { generateComprehensiveReport } from "@/lib/comprehensive-report";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { syncMajorEvents } from "@/lib/major-events";
@@ -121,6 +122,12 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     narrative = await generateNarrative(buildDailyNarrativePrompt(report));
   } catch (err) {
     narrative = `[해설 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+  }
+
+  try {
+    report.details.comprehensiveReport = await generateComprehensiveReport(report);
+  } catch (err) {
+    report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
   }
 
   // 4) DB 저장

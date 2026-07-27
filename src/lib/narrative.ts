@@ -17,7 +17,7 @@ interface GeminiResponse {
   error?: { message: string };
 }
 
-export async function generateNarrative(prompt: string): Promise<string> {
+export async function generateNarrative(prompt: string, maxOutputTokens = 2048): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return "[해설 생성 안 됨 — GEMINI_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
@@ -30,7 +30,7 @@ export async function generateNarrative(prompt: string): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0.4, maxOutputTokens },
       }),
     }
   );

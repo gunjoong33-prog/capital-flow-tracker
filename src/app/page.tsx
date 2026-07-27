@@ -14,6 +14,7 @@ interface PersistedDetails {
   step5BigTech?: { value: string }[];
   step7Institutional?: { label: string; criterion: string; value: string; met: boolean | null }[];
   step7Summary?: string;
+  comprehensiveReport?: string;
 }
 
 async function getPersistedDetails(date: string): Promise<PersistedDetails | null> {
@@ -56,6 +57,9 @@ async function getReport() {
   }
   if (persistedDetails?.step7Summary) {
     report.details.step7Summary = persistedDetails.step7Summary;
+  }
+  if (persistedDetails?.comprehensiveReport) {
+    report.details.comprehensiveReport = persistedDetails.comprehensiveReport;
   }
 
   return report;

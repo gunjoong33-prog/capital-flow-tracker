@@ -7,6 +7,7 @@ import { runDailyAnalysis } from "../src/lib/scoring/run";
 import { fetchAllSectors } from "../src/lib/sources/yahoo";
 import { computeBigTechReasons } from "../src/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "../src/lib/institutional-signals";
+import { generateComprehensiveReport } from "../src/lib/comprehensive-report";
 import { BIG_TECH_TICKERS } from "../src/lib/sources/types";
 
 async function main() {
@@ -32,6 +33,12 @@ async function main() {
     bigTechReasons,
     institutionalSignals,
   });
+
+  try {
+    report.details.comprehensiveReport = await generateComprehensiveReport(report);
+  } catch (err) {
+    report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+  }
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
   await db.dailyReport.update({

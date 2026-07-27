@@ -84,6 +84,27 @@ export function ReportView({
         </p>
       )}
 
+      {details?.comprehensiveReport && (
+        <div>
+          <input type="checkbox" id="comprehensive-report-toggle" className="peer hidden" />
+          <label
+            htmlFor="comprehensive-report-toggle"
+            className="flex cursor-pointer select-none items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800 peer-checked:hidden"
+          >
+            종합 보고서 보기
+          </label>
+          <label
+            htmlFor="comprehensive-report-toggle"
+            className="hidden cursor-pointer select-none items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800 peer-checked:flex"
+          >
+            종합 보고서 접기
+          </label>
+          <div className="mt-3 hidden whitespace-pre-line rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300 peer-checked:block">
+            {details.comprehensiveReport}
+          </div>
+        </div>
+      )}
+
       <StepCard step={1} title="글로벌 환경" details={details?.step1} tip={STEP_TIPS[1]}>
         <Field label="거부권 발동" value={step1.vetoTriggered ? "예" : "아니오"} />
         <Field label="사유" value={step1.reason} />
