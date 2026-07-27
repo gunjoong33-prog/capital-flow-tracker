@@ -53,7 +53,7 @@ export default async function ReportArchivePage({
 
         {reports.length === 0 && (
           <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm text-zinc-500">
-            아직 마감된 {LABEL[type]} 리포트가 없다. 해당 주기가 끝나는 날 자동으로 생성된다.
+            아직 마감된 {LABEL[type]} 리포트가 없다. 해당 주기가 끝난 다음 주기 첫날(예: 주간은 일요일, 월간은 매월 1일)에 자동으로 생성된다.
           </p>
         )}
 
