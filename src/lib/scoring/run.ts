@@ -1,5 +1,5 @@
 import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculateCumulativeReturn } from "@/lib/metrics";
-import { getRecentRiskyNews } from "@/lib/news-events";
+import { getRecentRiskyNews, newsItemWeight } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
 import { METRICS, SECTOR_ETFS, BIG_TECH_TICKERS, BIG_TECH_LABELS } from "@/lib/sources/types";
@@ -15,6 +15,7 @@ import {
   scoreStep8,
 } from "./pure";
 import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
+import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
 
 /**
  * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
@@ -545,33 +546,38 @@ export async function runDailyAnalysis(manualInputs: {
 }) {
   const details = {} as StepDetails;
 
-  // 1단계 — 거부권은 "뉴스 3건 이상" 또는 "최근 발표된 FOMC/CPI/고용지표 결과가 서프라이즈"일 때 발동.
-  // (예정된 이벤트가 있다는 것만으로 발동하면 FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 —
-  // 그래서 "예정" 여부가 아니라 "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
+  // 1단계 — 거부권은 "리스크 뉴스 가중점수가 기준 이상" 또는 "최근 발표된 FOMC/CPI/고용지표 결과가
+  // 서프라이즈"일 때 발동. 가중점수는 건수가 아니라 심각도·출처 신뢰도·최근성을 곱해 합산한 값이다
+  // (월가 GPR·BGRI 방식 — newsItemWeight() 참고). (예정된 이벤트가 있다는 것만으로 발동하면
+  // FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 — 그래서 "예정" 여부가 아니라
+  // "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
   const riskyNews = await getRecentRiskyNews(7);
   const upcomingEvents = await getUpcomingMajorEvents(14);
   const recentOutcomes = await evaluateRecentEventOutcomes(5);
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
   const hasSevereNews = riskyNews.some((n) => n.severity === "high");
+  const now = new Date();
+  const newsRiskScore = riskyNews.reduce((sum, n) => sum + newsItemWeight(n, now), 0);
   const step1 = {
     ...scoreStep1({
-      newsCountLast7Days: riskyNews.length,
+      newsRiskScore,
       hasRecentEventSurprise: hasEventSurprise,
       hasSevereNewsInWindow: hasSevereNews,
     }),
     riskyNews: riskyNews.map((n) => ({
       title: n.title, url: n.url, summary: n.summary, date: n.date.toISOString().slice(0, 10),
-      severity: n.severity === "high" ? "high" as const : "normal" as const,
+      severity:
+        n.severity === "high" ? ("high" as const) : n.severity === "low" ? ("low" as const) : ("medium" as const),
     })),
     upcomingEvents: upcomingEvents.map((e) => ({ name: e.name, date: e.date.toISOString().slice(0, 10) })),
     recentEventOutcomes: recentOutcomes,
   };
   details.step1 = [
     {
-      label: "최근 7일 시장을 흔든 뉴스",
-      criterion: "3건 미만",
-      value: `${riskyNews.length}건`,
-      met: riskyNews.length < 3,
+      label: "최근 7일 리스크 뉴스 가중점수",
+      criterion: `${NEWS_RISK_SCORE_THRESHOLD}점 미만(심각도·출처·최근성 반영)`,
+      value: `${newsRiskScore.toFixed(1)}점(${riskyNews.length}건)`,
+      met: newsRiskScore < NEWS_RISK_SCORE_THRESHOLD,
     },
     {
       label: "단독 즉시발동 수준(심각도 high) 뉴스",

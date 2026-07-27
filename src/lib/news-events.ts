@@ -10,7 +10,35 @@ const CATEGORY_PRIORITY: Record<NewsCategory, number> = {
   general: 2,
 };
 
-export type NewsSeverity = "high" | "normal";
+export type NewsSeverity = "high" | "medium" | "low";
+
+// 월가 리스크 지수(Fed GPR: Threats/Acts 구분, BlackRock BGRI: 출처·최근성 가중)를 참고해
+// "건수"가 아니라 "심각도 × 출처 신뢰도 × 최근성"을 곱한 가중점수로 거부권을 판단한다.
+// 심각도 가중치. "normal"은 심각도가 2단계(high/normal)였던 과거 데이터와의 호환용 — 새 분류에서는
+// 나오지 않지만, 전환 시점엔 최근 7일 창에 예전 방식으로 저장된 기록이 섞여 있을 수 있어 medium과
+// 동일하게 취급한다(7일이 지나면 창에서 자연히 빠짐).
+const SEVERITY_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1, normal: 2 };
+
+// 출처 가중치(NewsEvent.priority 기준: 0=백악관·연준, 1=권력 네트워크 유출, 2=일반). BGRI가 브로커리지
+// 리포트(전문 소스)에 일반 뉴스보다 더 큰 비중을 두는 것과 같은 원리 — 백악관·연준의 공식 발표가 같은
+// 심각도라도 일반 뉴스보다 신뢰도·직접성이 높다고 보고 더 크게 반영한다.
+const PRIORITY_WEIGHT: Record<number, number> = { 0: 1.5, 1: 1.2, 2: 1.0 };
+
+/** 발행일로부터 지난 일수에 따른 최근성 감쇠. BGRI가 최근 뉴스에 더 큰 비중을 두는 것과 같은 원리 —
+ * 6일 전 소소한 뉴스가 오늘 뉴스와 똑같은 무게로 누적되는 걸 막는다. */
+function recencyWeight(daysAgo: number): number {
+  if (daysAgo <= 1) return 1.0;
+  if (daysAgo <= 4) return 0.7;
+  return 0.4;
+}
+
+/** 개별 뉴스 항목의 리스크 가중치(심각도 × 출처 × 최근성). */
+export function newsItemWeight(item: { priority: number; severity: string; date: Date }, asOf: Date): number {
+  const daysAgo = Math.floor((asOf.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24));
+  const severityWeight = SEVERITY_WEIGHT[item.severity] ?? 1;
+  const priorityWeight = PRIORITY_WEIGHT[item.priority] ?? 1.0;
+  return severityWeight * priorityWeight * recencyWeight(Math.max(0, daysAgo));
+}
 
 interface JudgedItem {
   title: string;
@@ -37,14 +65,16 @@ async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
    탐사보도(예: 정부 고위 인사·억만장자가 연루된 비공개 조직의 회원 명단이 유출된 사건)
 일반적인 경제 논평, 이미 알려진 사실 반복, 시장과 무관한 사건은 제외해라.
 
-골라낸 항목마다 심각도(severity)도 함께 매겨라:
+골라낸 항목마다 심각도(severity)도 함께 매겨라(3단계):
 - "high": 이 사건 하나만으로도 시장이 즉시 크게 흔들릴 수준(예: 실제 무력 충돌·전쟁 발발, 국가 디폴트,
   예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴)
-- "normal": 리스크 요인이긴 하지만 이 사건 하나만으로는 즉각적인 충격까진 아닌 경우(관세 인상 경고,
-  정책 발언, 무역분쟁 우려 등 — 여러 건이 쌓이면 리스크로 보는 게 맞는 것들)
+- "medium": 명확한 리스크 요인이고 시장이 반응할 만하지만, 이미 진행 중인 사안의 추가 조치·확전 신호
+  수준(예: 관세 "인상 발표·시행"처럼 실제 조치, 새로운 제재, 무력 충돌 관련 긴장 고조)
+- "low": 리스크 요인이긴 하나 아직 경고·발언·우려 표명 수준이라 단독 영향은 제한적인 경우(정책 발언,
+  경고성 언급, 무역분쟁 "우려" 등 — 여러 건이 쌓여야 리스크로 볼 만한 것들)
 
 각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라:
-[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "normal"}]
+[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "medium"}]
 
 risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게 없으면 빈 배열 []만 답해라.
 
@@ -86,7 +116,7 @@ ${list}`;
       summary: p.summary,
       risky: true,
       category: headlines[p.index - 1].category,
-      severity: p.severity === "high" ? "high" : "normal",
+      severity: p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium",
     }));
 }
 

@@ -4,8 +4,12 @@
 
 export type Direction = "up" | "down" | "flat";
 
+// 1단계 거부권 가중점수 기준. 뉴스 가중치 계산은 news-events.ts의 newsItemWeight()가 담당하지만,
+// pure.ts는 DB 접근 없이 순수해야 해서(verify-scoring.ts가 DB 없이 이 파일만 테스트) 상수만 여기 둔다.
+export const NEWS_RISK_SCORE_THRESHOLD = 5;
+
 export interface Step1Input {
-  newsCountLast7Days: number; // 최근 7일 내 시장 흔들 뉴스 건수
+  newsRiskScore: number; // 최근 7일 내 리스크 뉴스의 (심각도 × 출처 가중치 × 최근성 감쇠) 합산 점수
   hasRecentEventSurprise: boolean; // 최근 발표된 FOMC/CPI/고용지표의 실제 결과가 통계적 서프라이즈였는지
   hasSevereNewsInWindow: boolean; // 최근 7일 내 단독으로도 즉시 거부권 발동 수준(severity: high)인 뉴스가 있는지
 }
@@ -14,7 +18,7 @@ export interface RiskyNewsItem {
   url: string;
   summary: string;
   date: string;
-  severity: "high" | "normal";
+  severity: "high" | "medium" | "low";
 }
 export interface UpcomingEventItem {
   name: string;

@@ -16,9 +16,14 @@ console.assert(step3.spreadBp === 190, `❌ 스프레드 계산 오류: ${step3.
 console.log("✅ 11번 섹션 재해석과 일치: 190bp → 3구간(위험)\n");
 
 console.log("=== 1단계 거부권 ===");
-const step1Veto = scoreStep1({ newsCountLast7Days: 4, hasRecentEventSurprise: false, hasSevereNewsInWindow: false });
-console.assert(step1Veto.vetoTriggered === true, "❌ 뉴스 4건이면 거부권 발동해야 함");
+const step1Veto = scoreStep1({ newsRiskScore: 6, hasRecentEventSurprise: false, hasSevereNewsInWindow: false });
+console.assert(step1Veto.vetoTriggered === true, "❌ 가중점수 6점이면 거부권 발동해야 함(기준 5점)");
 console.log(step1Veto, "\n");
+
+console.log("=== 1단계 거부권(가중점수 미달) ===");
+const step1NoVeto = scoreStep1({ newsRiskScore: 3, hasRecentEventSurprise: false, hasSevereNewsInWindow: false });
+console.assert(step1NoVeto.vetoTriggered === false, "❌ 가중점수 3점이면 거부권 발동하면 안 됨(기준 5점 미만)");
+console.log(step1NoVeto, "\n");
 
 console.log("=== 2단계 해외 지표 충족 ===");
 const step2Full = scoreStep2({
