@@ -218,7 +218,7 @@ export function ReportView({
       </StepCard>
 
       {details?.step8 && details.step8.length > 0 && (
-        <StepCard step={8} title="최종 결론 계산" details={details.step8} tip={STEP_TIPS[8]}>
+        <StepCard step={8} title="최종 결론 계산" details={details.step8} detailsHideMetColumn tip={STEP_TIPS[8]}>
           <Field label="투자 적합도 점수" value={step8.macroTrendScore.toFixed(2)} />
           <Field label="최종 결론" value={step8.finalDecision} />
         </StepCard>

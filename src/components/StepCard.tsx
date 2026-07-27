@@ -252,6 +252,7 @@ export function StepCard({
   aux2HideMetColumn,
   aux2Label = "보조 지표",
   detailsWideCriterion,
+  detailsHideMetColumn,
   tip,
   summary,
 }: {
@@ -268,6 +269,7 @@ export function StepCard({
   aux2HideMetColumn?: boolean;
   aux2Label?: string;
   detailsWideCriterion?: boolean;
+  detailsHideMetColumn?: boolean; // 메인 상세표의 충족열 자체를 없앤다(예: 8단계 — 전부 met:null이라 의미 없는 열이었음)
   tip?: string;
   summary?: string;
 }) {
@@ -314,7 +316,7 @@ export function StepCard({
               <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
                 분석 기준·지표 상세 보기 ({details.length}개)
               </summary>
-              <DetailTable rows={details} wideCriterion={detailsWideCriterion} />
+              <DetailTable rows={details} wideCriterion={detailsWideCriterion} hideMetColumn={detailsHideMetColumn} />
             </details>
           )}
           {auxDetails && auxDetails.length > 0 && (
