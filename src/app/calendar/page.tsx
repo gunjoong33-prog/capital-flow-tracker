@@ -106,20 +106,24 @@ export default async function CalendarPage({
             const isToday = key === todayKey;
             const cell = (
               <div
-                className={`min-h-24 bg-zinc-950 p-2 ${inMonth ? "" : "opacity-30"} ${isToday ? "ring-1 ring-inset ring-zinc-500" : ""}`}
+                className={`min-h-24 max-sm:min-h-14 bg-zinc-950 p-2 max-sm:p-1 ${inMonth ? "" : "opacity-30"} ${isToday ? "ring-1 ring-inset ring-zinc-500" : ""}`}
               >
                 <div className="text-xs text-zinc-500">{d.getUTCDate()}</div>
                 {step8 && (
                   <span
-                    className={`mt-1 inline-block rounded-full border px-1.5 py-0.5 text-[10px] ${DECISION_COLOR[step8.finalDecision] ?? ""}`}
+                    className={`mt-1 inline-block rounded-full border px-1.5 py-0.5 text-[10px] max-sm:px-1 ${DECISION_COLOR[step8.finalDecision] ?? ""}`}
                   >
-                    {step8.finalDecision} {step8.macroTrendScore.toFixed(1)}
+                    {/* 좁은 모바일 화면(7열 그리드)에서는 "현금비중늘리기 3.6" 같은 긴 텍스트가
+                        칸 안에 안 들어가서, 점수만 남기고 결론 텍스트는 데스크톱에서만 보여준다
+                        (배지 색으로도 매수/지켜보기/현금비중늘리기 구분은 계속 가능). */}
+                    <span className="max-sm:hidden">{step8.finalDecision} </span>
+                    {step8.macroTrendScore.toFixed(1)}
                   </span>
                 )}
                 {events.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {events.map((ev, i) => (
-                      <span key={i} className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] text-sky-400">
+                      <span key={i} className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] max-sm:px-0.5 text-sky-400">
                         {ev}
                       </span>
                     ))}
