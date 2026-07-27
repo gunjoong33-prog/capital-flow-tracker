@@ -8,6 +8,7 @@ import { fetchCoinGeckoRange } from "../src/lib/sources/coingecko";
 import { fetchJp10yHistorical } from "../src/lib/sources/mof-japan";
 import { fetchYahooHistorical } from "../src/lib/sources/yahoo";
 import { fetchKr10y } from "../src/lib/sources/ecos";
+import { fetchCnnFearGreedHistorical } from "../src/lib/sources/cnn-feargreed";
 import { METRICS, type FetchedPoint } from "../src/lib/sources/types";
 
 const oneYearAgo = new Date();
@@ -94,6 +95,13 @@ async function main() {
     }
   } else {
     console.log("⏭️  ECOS_API_KEY 없음, 스킵");
+  }
+
+  try {
+    const fearGreed = await fetchCnnFearGreedHistorical();
+    await save(fearGreed, "CNN 공포탐욕지수");
+  } catch (err) {
+    console.log("❌ CNN 공포탐욕지수 실패:", err instanceof Error ? err.message : err);
   }
 
   // 파생 지표: 나스닥-러셀 20거래일 누적수익률 격차(5단계 백분위 계산용)

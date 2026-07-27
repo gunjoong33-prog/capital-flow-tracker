@@ -50,7 +50,7 @@ export const METRICS = {
 
   // 7단계
   VIX: "VIX",
-  CNN_FEAR_GREED: "CNN_FEAR_GREED", // 수동 입력
+  CNN_FEAR_GREED: "CNN_FEAR_GREED", // CNN 비공식 데이터 엔드포인트(cnn-feargreed.ts)로 자동 수집
   BTC_ETF_FLOW: "BTC_ETF_FLOW", // 수동 입력
 } as const;
 
@@ -105,7 +105,7 @@ export interface FetchedPoint {
   metric: string;
   date: string; // YYYY-MM-DD
   value: number;
-  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "manual";
+  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "manual";
 }
 
 export interface SourceFetchResult {

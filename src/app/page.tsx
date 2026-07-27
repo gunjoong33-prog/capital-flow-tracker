@@ -1,6 +1,5 @@
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { fetchAllSectors } from "@/lib/sources/yahoo";
-import { getManualInputsForDate } from "@/lib/manual-inputs";
 import { db } from "@/lib/db";
 import { BIG_TECH_TICKERS } from "@/lib/sources/types";
 import { ReportView } from "@/components/ReportView";
@@ -43,13 +42,9 @@ async function getReport() {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const [manualInputs, persistedDetails] = await Promise.all([
-    getManualInputsForDate(today),
-    getPersistedDetails(today),
-  ]);
+  const persistedDetails = await getPersistedDetails(today);
 
   const report = await runDailyAnalysis({
-    fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
     bigTechReasons: extractBigTechReasons(persistedDetails),
   });

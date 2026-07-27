@@ -4,7 +4,6 @@ import "dotenv/config";
 import { db } from "../src/lib/db";
 import { Prisma } from "../src/generated/prisma/client";
 import { runDailyAnalysis } from "../src/lib/scoring/run";
-import { getManualInputsForDate } from "../src/lib/manual-inputs";
 import { fetchAllSectors } from "../src/lib/sources/yahoo";
 import { computeBigTechReasons } from "../src/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "../src/lib/institutional-signals";
@@ -18,7 +17,6 @@ async function main() {
     return;
   }
 
-  const manualInputs = await getManualInputsForDate(date);
   let sectors: { name: string; return5d: number; changePct1d: number; volumeRatio: number }[] = [];
   try {
     sectors = await fetchAllSectors();
@@ -30,7 +28,6 @@ async function main() {
   const { signals: institutionalSignals } = await computeInstitutionalSignals();
 
   const report = await runDailyAnalysis({
-    fearGreed: manualInputs.fearGreed,
     sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio })),
     bigTechReasons,
     institutionalSignals,

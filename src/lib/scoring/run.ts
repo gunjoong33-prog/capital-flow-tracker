@@ -320,12 +320,12 @@ function summarizeStep7(
         ? `VIX ${vix.toFixed(2)}(공포 구간, 25 초과)`
         : `VIX ${vix.toFixed(2)}(중립)`;
   const fgDesc = fearGreed === null
-    ? "공포탐욕지수 미입력"
+    ? "공포탐욕지수 확인 못함"
     : fearGreed > 75
-      ? `공포탐욕지수 ${fearGreed}(과열 구간, 75 초과)`
+      ? `공포탐욕지수 ${fearGreed.toFixed(1)}(과열 구간, 75 초과)`
       : fearGreed < 25
-        ? `공포탐욕지수 ${fearGreed}(공포 구간, 25 미만)`
-        : `공포탐욕지수 ${fearGreed}(중립)`;
+        ? `공포탐욕지수 ${fearGreed.toFixed(1)}(공포 구간, 25 미만)`
+        : `공포탐욕지수 ${fearGreed.toFixed(1)}(중립)`;
   const implication = step7Result.bothOverheated
     ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
     : step7Result.fearZone
@@ -528,7 +528,6 @@ async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | n
  * 점수 계산과 별개 경로로 채워서, 표시용 가공이 점수 로직에 영향을 주지 않게 분리했다.
  */
 export async function runDailyAnalysis(manualInputs: {
-  fearGreed: number | null;
   sectors: SectorInput[];
   bigTechReasons?: Record<string, string>;
   institutionalSignals?: InstitutionalSignals;
@@ -855,7 +854,9 @@ export async function runDailyAnalysis(manualInputs: {
 
   // 7단계
   const vix = await getLatestMetric(METRICS.VIX);
-  const step7 = scoreStep7({ vix: vix?.value ?? null, fearGreed: manualInputs.fearGreed });
+  const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED);
+  const fearGreed = fearGreedMetric?.value ?? null;
+  const step7 = scoreStep7({ vix: vix?.value ?? null, fearGreed });
 
   // 기관·내부자 매집 신호(Dataroma·OpenInsider) — 5·6단계에서 이미 나온 종목·섹터와 일치하는지 대조.
   // 매칭은 여기서(run.ts) 한다: institutional-signals.ts는 외부 소스만 다루고, 5·6단계 결과는
@@ -897,11 +898,11 @@ export async function runDailyAnalysis(manualInputs: {
   ];
   details.step7 = [
     { label: "VIX", criterion: "<15 과열 / >25 공포", value: fmt(vix?.value ?? null, 2), met: null },
-    { label: "CNN 공포와 탐욕지수", criterion: ">75 과열 / <25 공포 (자동 미연동)", value: manualInputs.fearGreed !== null ? `${manualInputs.fearGreed}` : "확인 못함", met: null },
+    { label: "CNN 공포와 탐욕지수", criterion: ">75 과열 / <25 공포", value: fearGreed !== null ? `${fearGreed.toFixed(1)}` : "확인 못함", met: null },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
-  details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, manualInputs.fearGreed, step7);
+  details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, fearGreed, step7);
 
   // 8단계
   const step8 = scoreStep8({ step1, step2, step3, step4, step5, step6, step7 });
