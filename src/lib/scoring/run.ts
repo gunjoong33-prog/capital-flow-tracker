@@ -306,38 +306,43 @@ function summarizeStep7(
       : institutional.activityTickers[0]
         ? `${institutional.activityTickers[0]} 등 개별 종목 중심`
         : "뚜렷한 쏠림 없이 분산된 매수";
-    let matchDesc: string;
+    lines.push(`슈퍼 투자자·내부자 자금은 최근 ${attachRo(flowDesc)} 몰렸습니다.`);
+
     if (sectorMatch) {
-      matchDesc = "6단계에서 짚은 충족 섹터와 일치해 신호가 서로 보강됩니다.";
+      lines.push("6단계에서 짚은 충족 섹터와 일치해 신호가 서로 보강됩니다.");
     } else if (tickerMatch) {
-      matchDesc = `섹터 자체는 6단계 충족 섹터와 다르지만, ${tickerMatch}은(는) 5단계 빅테크 매수와 겹쳐 부분적으로 참고할 만합니다.`;
+      lines.push("섹터 자체는 6단계 충족 섹터와 다른 흐름입니다.");
+      lines.push(`다만 ${tickerMatch}은(는) 5단계 빅테크 매수와 겹쳐 부분적으로 참고할 만합니다.`);
     } else if (institutional.topSectorLabel || institutional.activityTickers.length > 0) {
-      matchDesc = "5·6단계 분석과는 다른 흐름이라 참고 자료로만 활용하는 게 좋습니다.";
+      lines.push("5·6단계 분석과는 다른 흐름이라 참고 자료로만 활용하는 게 좋습니다.");
     } else {
-      matchDesc = "비교할 만큼 데이터가 충분하지 않습니다.";
+      lines.push("비교할 만큼 데이터가 충분하지 않습니다.");
     }
-    lines.push(`슈퍼 투자자·내부자 자금은 최근 ${attachRo(flowDesc)} 몰렸고, ${matchDesc}`);
   } else {
     lines.push("기관·내부자 매집 데이터를 확인하지 못했습니다.");
   }
 
-  const vixDesc = vix === null
-    ? "VIX 데이터 없음"
-    : vix < 15
-      ? `VIX ${vix.toFixed(2)}(과열 구간, 15 미만)`
-      : vix > 25
-        ? `VIX ${vix.toFixed(2)}(공포 구간, 25 초과)`
-        : `VIX ${vix.toFixed(2)}(중립)`;
-  const fgDesc =
+  lines.push(
+    vix === null
+      ? "VIX 데이터를 확인하지 못했습니다."
+      : vix < 15
+        ? `VIX는 ${vix.toFixed(2)}로 과열 구간(15 미만)입니다.`
+        : vix > 25
+          ? `VIX는 ${vix.toFixed(2)}로 공포 구간(25 초과)입니다.`
+          : `VIX는 ${vix.toFixed(2)}로 중립입니다.`
+  );
+  lines.push(
     fearGreed === null
-      ? "공포탐욕지수 확인 못함"
-      : `공포탐욕지수 ${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)}, CNN 기준)`;
-  const implication = step7Result.bothOverheated
-    ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
-    : step7Result.fearZone
-      ? "공포 신호가 감지돼 역발상 매수 기회일 수 있지만, 추가 자금 이탈 위험도 함께 살펴야 합니다."
-      : "둘 다 극단적이지 않아 자본 유출입에 특별한 경고 신호는 없습니다.";
-  lines.push(`${vixDesc}, ${fgDesc} — ${implication}`);
+      ? "공포탐욕지수를 확인하지 못했습니다."
+      : `공포탐욕지수는 ${fearGreed.toFixed(1)}로 ${cnnFearGreedRating(fearGreed)} 구간입니다(CNN 기준).`
+  );
+  lines.push(
+    step7Result.bothOverheated
+      ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
+      : step7Result.fearZone
+        ? "공포 신호가 감지돼 역발상 매수 기회일 수 있지만, 추가 자금 이탈 위험도 함께 살펴야 합니다."
+        : "둘 다 극단적이지 않아 자본 유출입에 특별한 경고 신호는 없습니다."
+  );
 
   return lines.join("\n");
 }
