@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
+import { DateJumpForm } from "@/components/DateJumpForm";
 import { getMajorEventsInRange } from "@/lib/major-events";
 import type { Step8Result } from "@/lib/scoring/types";
 
@@ -72,6 +73,8 @@ export default async function CalendarPage({
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-4xl space-y-6">
         <SiteNav active="calendar" />
+
+        <DateJumpForm defaultYear={now.getUTCFullYear()} defaultMonth={now.getUTCMonth() + 1} defaultDay={now.getUTCDate()} />
 
         <div className="flex items-center justify-between">
           <Link
