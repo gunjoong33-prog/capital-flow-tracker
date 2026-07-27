@@ -914,15 +914,20 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
   ];
   details.step7 = [
-    { label: "VIX", criterion: "<15 과열 / >25 공포", value: fmt(vix?.value ?? null, 2), met: null },
+    {
+      label: "VIX",
+      criterion: "<15 과열 / >25 공포",
+      value: fmt(vix?.value ?? null, 2),
+      met: vix?.value == null ? null : vix.value >= 15 && vix.value <= 25,
+    },
     {
       label: "CNN 공포와 탐욕지수",
       criterion: "0~24 극단적공포 · 25~44 공포 · 45~55 중립 · 56~75 탐욕 · 76~100 극단적탐욕",
       value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
-      met: null,
+      met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
     },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
-    { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
+    { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: !step7.fearZone },
   ];
   details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, fearGreed, step7);
 
