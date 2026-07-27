@@ -927,7 +927,9 @@ export async function runDailyAnalysis(manualInputs: {
       met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
     },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
-    { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: !step7.fearZone },
+    // "공포 구간"은 위 행과 달리 페널티가 없다 — "예"는 경고가 아니라 역발상 매수 기회 참고용 신호라
+    // 좋다/나쁘다로 판정할 대상이 아니다(공포=매수 기회라는 원칙과 met:false가 모순되면 안 됨).
+    { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
   details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix?.value ?? null, fearGreed, step7);
 
