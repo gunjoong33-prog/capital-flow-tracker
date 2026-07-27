@@ -47,6 +47,13 @@ function attachRo(word: string): string {
   return `${word}${hasBatchim ? "으로" : "로"}`;
 }
 
+// 표 열 너비가 좁아 줄바꿈이 자주 일어나는데, 일반 공백이면 "0~24 극단적공포"처럼 한 덩어리로
+// 읽혀야 할 구간이 숫자와 라벨 사이에서 끊겨 다음 줄로 넘어가 버린다. 줄바꿈 후보인 공백을
+// 줄바꿈 없는 공백(NBSP)으로 바꿔서 이 단위가 항상 붙어 다니게 한다(institutional-signals.ts와 같은 패턴).
+function nbsp(s: string): string {
+  return s.replace(/ /g, " ");
+}
+
 function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
   // 돈 단위 큰 숫자는 천단위 콤마를 넣어야 자릿수를 한눈에 읽는다(6747378 -> 6,747,378).
@@ -916,13 +923,19 @@ export async function runDailyAnalysis(manualInputs: {
   details.step7 = [
     {
       label: "VIX",
-      criterion: "<15 과열 / >25 공포",
+      criterion: [nbsp("15 미만 과열"), nbsp("25 초과 공포")].join(" · "),
       value: fmt(vix?.value ?? null, 2),
       met: vix?.value == null ? null : vix.value >= 15 && vix.value <= 25,
     },
     {
       label: "CNN 공포와 탐욕지수",
-      criterion: "0~24 극단적공포 · 25~44 공포 · 45~55 중립 · 56~75 탐욕 · 76~100 극단적탐욕",
+      criterion: [
+        nbsp("0~24 극단적공포"),
+        nbsp("25~44 공포"),
+        nbsp("45~55 중립"),
+        nbsp("56~75 탐욕"),
+        nbsp("76~100 극단적탐욕"),
+      ].join(" · "),
       value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
       met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
     },
