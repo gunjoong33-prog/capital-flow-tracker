@@ -180,8 +180,12 @@ export function scoreStep7(input: Step7Input): Step7Result {
 }
 
 // ── 8단계: 최종 결론 ──────────────────────────────────────────
-const WEIGHTS = { step2: 2.5, step3: 2, step4: 1.5, step5: 1.5, step6: 0.5 };
-const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((a, b) => a + b, 0); // 8
+// 3단계(캐리 트레이드) 가중치는 원래 2였으나, 월가 방법론 대조 조사에서 Michael Howell(CrossBorder
+// Capital)이 "엔 캐리 트레이드는 내가 생각했던 만큼의 힘이 아니다"라며 상시 2순위급 취급을 명시적으로
+// 부정한 근거가 나와 1.5로 낮췄다(4·5단계와 동률) — 평상시엔 유동성보다 한 단계 낮은 보조 신호로,
+// 실제 청산 이벤트 같은 급발진 리스크는 1단계의 severe-news 즉시발동 규칙이 별도로 잡아준다.
+export const WEIGHTS = { step2: 2.5, step3: 1.5, step4: 1.5, step5: 1.5, step6: 0.5 };
+export const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((a, b) => a + b, 0); // 7.5
 
 export function scoreStep8(input: Step8Input): Step8Result {
   const weighted =

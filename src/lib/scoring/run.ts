@@ -13,6 +13,8 @@ import {
   scoreStep6,
   scoreStep7,
   scoreStep8,
+  WEIGHTS,
+  TOTAL_WEIGHT,
 } from "./pure";
 import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
 import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
@@ -949,12 +951,12 @@ export async function runDailyAnalysis(manualInputs: {
   // 8단계
   const step8 = scoreStep8({ step1, step2, step3, step4, step5, step6, step7 });
   details.step8 = [
-    { label: "2단계 유동성 (가중치 2.5)", criterion: "가중 반영", value: `${step2.finalScore.toFixed(2)} × 2.5 = ${(step2.finalScore * 2.5).toFixed(2)}`, met: null },
-    { label: "3단계 캐리 트레이드 (가중치 2.0)", criterion: "가중 반영", value: `${step3.score.toFixed(2)} × 2 = ${(step3.score * 2).toFixed(2)}`, met: null },
-    { label: "4단계 환율·금·유가 (가중치 1.5)", criterion: "가중 반영", value: `${step4.score.toFixed(2)} × 1.5 = ${(step4.score * 1.5).toFixed(2)}`, met: null },
-    { label: "5단계 자금 도착 (가중치 1.5)", criterion: "가중 반영", value: `${step5.score.toFixed(2)} × 1.5 = ${(step5.score * 1.5).toFixed(2)}`, met: null },
-    { label: "6단계 섹터 (가중치 0.5)", criterion: "가중 반영", value: `${step6.score.toFixed(2)} × 0.5 = ${(step6.score * 0.5).toFixed(2)}`, met: null },
-    { label: "투자 적합도 점수", criterion: "가중합 / 8", value: step8.macroTrendScore.toFixed(3), met: null },
+    { label: `2단계 유동성 (가중치 ${WEIGHTS.step2})`, criterion: "가중 반영", value: `${step2.finalScore.toFixed(2)} × ${WEIGHTS.step2} = ${(step2.finalScore * WEIGHTS.step2).toFixed(2)}`, met: null },
+    { label: `3단계 캐리 트레이드 (가중치 ${WEIGHTS.step3})`, criterion: "가중 반영", value: `${step3.score.toFixed(2)} × ${WEIGHTS.step3} = ${(step3.score * WEIGHTS.step3).toFixed(2)}`, met: null },
+    { label: `4단계 환율·금·유가 (가중치 ${WEIGHTS.step4})`, criterion: "가중 반영", value: `${step4.score.toFixed(2)} × ${WEIGHTS.step4} = ${(step4.score * WEIGHTS.step4).toFixed(2)}`, met: null },
+    { label: `5단계 자금 도착 (가중치 ${WEIGHTS.step5})`, criterion: "가중 반영", value: `${step5.score.toFixed(2)} × ${WEIGHTS.step5} = ${(step5.score * WEIGHTS.step5).toFixed(2)}`, met: null },
+    { label: `6단계 섹터 (가중치 ${WEIGHTS.step6})`, criterion: "가중 반영", value: `${step6.score.toFixed(2)} × ${WEIGHTS.step6} = ${(step6.score * WEIGHTS.step6).toFixed(2)}`, met: null },
+    { label: "투자 적합도 점수", criterion: `가중합 / ${TOTAL_WEIGHT}`, value: step8.macroTrendScore.toFixed(3), met: null },
     { label: "1단계 거부권 적용", criterion: "발동 시 한 단계 하향", value: step8.vetoApplied ? "적용됨" : "미적용", met: !step8.vetoApplied },
     { label: "최종 결론", criterion: "≥7.0 매수 / ≥5.0 지켜보기 / 미만 현금비중늘리기", value: step8.finalDecision, met: null },
   ];
