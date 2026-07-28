@@ -32,8 +32,8 @@ const HEATMAP_CONFIG = {
   locale: "kr",
   symbolUrl: "",
   colorTheme: "dark",
-  hasTopBar: false,
-  isDataSetEnabled: false,
+  hasTopBar: true,
+  isDataSetEnabled: true,
   isZoomEnabled: true,
   hasSymbolTooltip: true,
   isMonoSize: false,
@@ -90,7 +90,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[62.5fr_37.5fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[480px]">
+          <WidgetCard title="히트맵 — S&P 500" height="h-[540px]">
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
               config={HEATMAP_CONFIG}
