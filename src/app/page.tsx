@@ -67,6 +67,26 @@ const SENTIMENT_CONFIG = {
   colorTheme: "dark",
 };
 
+/** "→ 요약문장" 줄만 굵게 강조해서 나머지 설명과 시각적으로 구분한다(가독성 최적화). */
+function TipText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) =>
+        line.startsWith("→") ? (
+          <p key={i} className="[word-break:keep-all] pt-1 font-medium text-zinc-200">
+            {line}
+          </p>
+        ) : (
+          <p key={i} className="[word-break:keep-all]">
+            {line}
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
 function WidgetCard({
   title,
   height,
@@ -94,8 +114,8 @@ function WidgetCard({
         )}
       </div>
       {tip && (
-        <div className="peer-checked:block mb-2 hidden whitespace-pre-line [word-break:keep-all] rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
-          {tip}
+        <div className="peer-checked:block mb-2 hidden rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
+          <TipText text={tip} />
         </div>
       )}
       <div className={height}>{children}</div>
@@ -107,7 +127,9 @@ const HEATMAP_TIP = `S&P500 편입 종목을 섹터별 사각형으로 표시한
 - 사각형 크기 = 기본값은 시가총액 — 상단 "사이즈" 메뉴에서 거래량 등으로 바꿀 수 있다
 - 색상 = 등락률(초록 상승 · 빨강 하락) — 진할수록 변동폭이 크다는 뜻
 - 상단 "그룹 기준"에서 섹터별 · 개별 종목 등 묶는 기준을 바꿀 수 있다
-- 상단 "자료"에서 S&P500 외 다른 지수·업종으로 바꿔볼 수 있다`;
+- 상단 "자료"에서 S&P500 외 다른 지수·업종으로 바꿔볼 수 있다
+이 차트를 보면 오늘 시장이 전반적으로 오르고 있는지, 어떤 업종이 강한지, 약한지를 한눈에 알 수 있다.
+→ 오늘 미국 시장의 분위기와 자금이 몰리는 방향을 볼 때 확인`;
 
 const FX_TIP = `원·달러(USD/KRW) 환율 미니 차트.
 - 값이 오르면 달러 강세 · 원화 약세, 내리면 반대
