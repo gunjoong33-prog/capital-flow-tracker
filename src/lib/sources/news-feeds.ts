@@ -135,3 +135,50 @@ export async function fetchBigTechHeadlines(): Promise<{
 
   return { byTicker, errors };
 }
+
+// ── /news 페이지: 주제별 구글 뉴스 헤드라인 ─────────────────────
+// 위 fetchCandidateHeadlines/fetchBigTechHeadlines는 영문(hl=en-US) 검색어 기반이라 판정용으로만
+// 쓰지만, 뉴스 페이지는 사람이 직접 읽는 화면이라 한국어 결과(hl=ko&gl=KR)로 검색하고 실제 발행사
+// 이름(<source> 태그)도 그대로 보여준다.
+export type NewsPageCategoryKey = "world-politics" | "world-economy" | "domestic-politics" | "domestic-economy" | "tech";
+
+export const NEWS_PAGE_CATEGORIES: { key: NewsPageCategoryKey; label: string; query: string }[] = [
+  { key: "world-politics", label: "세계 정치", query: "국제 정치" },
+  { key: "world-economy", label: "세계 경제", query: "세계 경제" },
+  { key: "domestic-politics", label: "국내 정치", query: "국내 정치" },
+  { key: "domestic-economy", label: "국내 경제", query: "국내 경제" },
+  { key: "tech", label: "기술", query: "IT 기술" },
+];
+
+export interface CategoryHeadline {
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string | null;
+}
+
+function parseGoogleNewsItems(xml: string, limit: number): CategoryHeadline[] {
+  const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
+  return items.slice(0, limit).map((block) => {
+    const rawTitle = extractTag(block, "title") ?? "";
+    const source = extractTag(block, "source") ?? "Google News";
+    // 구글 뉴스 RSS는 title 끝에 " - 발행사명"을 항상 덧붙인다 — source를 따로 보여주므로 중복 제거.
+    const title = rawTitle.endsWith(` - ${source}`) ? rawTitle.slice(0, -(source.length + 3)) : rawTitle;
+    return {
+      title,
+      url: extractTag(block, "link") ?? "",
+      source,
+      publishedAt: extractTag(block, "pubDate"),
+    };
+  }).filter((h) => h.title && h.url);
+}
+
+export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
+  const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
+  if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
+  if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
+  const xml = await res.text();
+  return parseGoogleNewsItems(xml, limit);
+}
