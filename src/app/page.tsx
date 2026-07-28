@@ -1,86 +1,117 @@
-import { runDailyAnalysis } from "@/lib/scoring/run";
-import { fetchAllSectors } from "@/lib/sources/yahoo";
-import { db } from "@/lib/db";
-import { BIG_TECH_TICKERS } from "@/lib/sources/types";
-import { ReportView } from "@/components/ReportView";
+import type { ReactNode } from "react";
 import { SiteNav } from "@/components/SiteNav";
+import { TradingViewWidget } from "@/components/TradingViewWidget";
 
-export const dynamic = "force-dynamic"; // 매번 최신 DB 값으로 계산 — 캐시하면 안 됨
+// 노션 대시보드 페이지의 트레이딩뷰 위젯 구성(티커테이프 + 히트맵 + 환율 + 기술적분석)을
+// 그대로 옮긴 홈 화면 — 사이트 디자인 테마(zinc 다크)에 맞춰 껍데기만 새로 입혔다.
+const TICKER_TAPE_CONFIG = {
+  symbols: [
+    { proName: "FOREXCOM:SPXUSD", title: "S&P500" },
+    { proName: "FOREXCOM:NSXUSD", title: "나스닥100" },
+    { proName: "AMEX:DIA", title: "다우존스" },
+    { proName: "FX_IDC:USDKRW", title: "USD/KRW" },
+    { proName: "FX:USDJPY", title: "USD/JPY" },
+    { proName: "TVC:GOLD", title: "금" },
+    { proName: "TVC:USOIL", title: "WTI" },
+    { proName: "BITSTAMP:BTCUSD", title: "BTC" },
+  ],
+  colorTheme: "dark",
+  locale: "kr",
+  largeChartUrl: "",
+  isTransparent: true,
+  showSymbolLogo: true,
+  displayMode: "adaptive",
+};
 
-// 홈은 매번 새로 계산하지만, Gemini(빅테크 원인)·외부 스크래핑(기관·내부자 매집)까지
-// 접속마다 반복하면 무료 티어 소진·응답 지연이 생기므로 하루 1회(파이프라인)만 돌린 결과를
-// 오늘자 DB에서 읽어 재사용한다. 나머지(가격·점수 등)는 live 값을 그대로 쓴다.
-interface PersistedDetails {
-  step5BigTech?: { value: string }[];
-  step7Institutional?: { label: string; criterion: string; value: string; met: boolean | null }[];
-  step7Summary?: string;
-  comprehensiveReport?: string;
+const HEATMAP_CONFIG = {
+  exchanges: [],
+  dataSource: "SPX500",
+  grouping: "sector",
+  blockSize: "market_cap_basic",
+  blockColor: "change",
+  locale: "kr",
+  symbolUrl: "",
+  colorTheme: "dark",
+  hasTopBar: false,
+  isDataSetEnabled: false,
+  isZoomEnabled: true,
+  hasSymbolTooltip: true,
+  isMonoSize: false,
+  width: "100%",
+  height: "100%",
+};
+
+const FX_CONFIG = {
+  symbol: "FX_IDC:USDKRW",
+  width: "100%",
+  height: "100%",
+  locale: "kr",
+  dateRange: "1M",
+  colorTheme: "dark",
+  isTransparent: true,
+  autosize: true,
+  largeChartUrl: "",
+};
+
+// 노션 원본은 이 위젯을 "탐욕과 공포" 토글 아래 두었다 — CNN 공포탐욕지수(7단계에서 별도 스크래핑)와
+// 달리 여기선 트레이딩뷰 기술적분석 게이지(SPX, Strong Sell~Strong Buy)를 그대로 쓴다(기능 동일 이식).
+const SENTIMENT_CONFIG = {
+  interval: "1D",
+  width: "100%",
+  isTransparent: true,
+  height: "100%",
+  symbol: "AMEX:SPY",
+  showIntervalTabs: true,
+  displayMode: "single",
+  locale: "kr",
+  colorTheme: "dark",
+};
+
+function WidgetCard({ title, height, children }: { title: string; height: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+      <p className="mb-2 text-xs text-zinc-500">{title}</p>
+      <div className={height}>{children}</div>
+    </div>
+  );
 }
 
-async function getPersistedDetails(date: string): Promise<PersistedDetails | null> {
-  const persisted = await db.dailyReport.findUnique({ where: { date: new Date(date) } });
-  return (persisted?.details as PersistedDetails | null) ?? null;
-}
-
-/** 빅테크 등락 원인만 뽑아 티커별 맵으로 재구성한다(가격은 live 값을 쓰도록 원인 문구만 필요). */
-function extractBigTechReasons(details: PersistedDetails | null): Record<string, string> {
-  const rows = details?.step5BigTech;
-  if (!rows || rows.length !== BIG_TECH_TICKERS.length) return {};
-  const reasons: Record<string, string> = {};
-  rows.forEach((row, i) => {
-    const parts = row.value.split(" — ");
-    reasons[BIG_TECH_TICKERS[i]] = parts[parts.length - 1];
-  });
-  return reasons;
-}
-
-async function getReport() {
-  let sectors: { name: string; return5d: number; volumeRatio: number }[] = [];
-  let missingSectorLabels: string[] = [];
-  try {
-    const result = await fetchAllSectors();
-    sectors = result.sectors;
-    missingSectorLabels = result.errors.map((e) => e.sector);
-  } catch {
-    // 섹터 조회 전체 실패해도 나머지 분석은 계속 — 6단계만 빈 값으로(details.step6가 확인 못함 처리)
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const persistedDetails = await getPersistedDetails(today);
-
-  const report = await runDailyAnalysis({
-    sectors: sectors.map((s) => ({ name: s.name, return5d: s.return5d, volumeRatio: s.volumeRatio })),
-    missingSectorLabels,
-    bigTechReasons: extractBigTechReasons(persistedDetails),
-  });
-
-  // 기관·내부자 매집 표·종합판단은 오늘자 파이프라인이 이미 계산해둔 걸 그대로 갖다 붙인다
-  // (institutional-signals.ts는 live 경로에서 호출 안 해서 여기선 항상 "확인 못함" 자리표시자뿐임).
-  if (persistedDetails?.step7Institutional) {
-    report.details.step7Institutional = persistedDetails.step7Institutional;
-  }
-  if (persistedDetails?.step7Summary) {
-    report.details.step7Summary = persistedDetails.step7Summary;
-  }
-  if (persistedDetails?.comprehensiveReport) {
-    report.details.comprehensiveReport = persistedDetails.comprehensiveReport;
-  }
-
-  return report;
-}
-
-export default async function Home() {
-  const report = await getReport();
-
-  const today = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric", weekday: "long",
-  });
-
+export default function LandingPage() {
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-4">
-        <SiteNav active="home" />
-        <ReportView dateLabel={today} report={report} details={report.details} />
+      <main className="mx-auto max-w-5xl space-y-4">
+        <SiteNav active="landing" />
+
+        <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40">
+          <TradingViewWidget
+            src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
+            config={TICKER_TAPE_CONFIG}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[62.5fr_37.5fr]">
+          <WidgetCard title="히트맵 — S&P 500" height="h-[480px]">
+            <TradingViewWidget
+              src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
+              config={HEATMAP_CONFIG}
+            />
+          </WidgetCard>
+
+          <div className="space-y-4">
+            <WidgetCard title="환율 — 원·달러(USD/KRW)" height="h-[230px]">
+              <TradingViewWidget
+                src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
+                config={FX_CONFIG}
+              />
+            </WidgetCard>
+            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[230px]">
+              <TradingViewWidget
+                src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
+                config={SENTIMENT_CONFIG}
+              />
+            </WidgetCard>
+          </div>
+        </div>
       </main>
     </div>
   );
