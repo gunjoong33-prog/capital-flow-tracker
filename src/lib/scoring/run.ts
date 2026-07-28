@@ -660,7 +660,7 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "기준잔액(WRESBAL)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0, "백만달러"), met: reserves.met },
     { label: "RRP(역레포 잔액)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, "십억달러"), met: rrp.met },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
-    { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
+    { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락\n(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
       criterion: "최근 3기간 연속 축소",

@@ -81,7 +81,7 @@ function DetailTable({
                     <div className="[word-break:keep-all] text-zinc-300">{labelMain}</div>
                     {labelCode && <div className="mt-0.5 text-[10px] text-zinc-600">{labelCode}</div>}
                   </td>
-                  <td className="[word-break:keep-all] px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
+                  <td className="whitespace-pre-line [word-break:keep-all] px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
                   <td className="px-3 py-2.5">
                     {/* whitespace-pre-line: run.ts가 한 부가설명 안에 "\n"으로 여러 항목을 이어붙이는
                         경우(예: 7단계 기관·내부자 매집의 매매 목록)가 있다 — 기본 white-space:normal은
