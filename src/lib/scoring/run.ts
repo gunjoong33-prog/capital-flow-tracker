@@ -725,8 +725,11 @@ export async function runDailyAnalysis(manualInputs: {
   // 3단계
   const us10y = await getLatestMetric(METRICS.US10Y);
   const jp10y = await getLatestMetric(METRICS.JP10Y);
+  // "US10Y_JP10Y_SPREAD_BP" 전용 버킷 사용 — METRICS.US10Y_2Y10Y_SPREAD는 실제 FRED T10Y2Y(미국
+  // 2Y-10Y 곡선, -1~3%p 스케일) 원자료가 매일 그대로 쌓이는 버킷이라, 스케일이 전혀 다른 US10Y-JP10Y
+  // bp값(150~250 스케일)을 그 안에서 순위 매기면 사실상 항상 100%ile로 나오는 버그가 있었다.
   const spreadPercentile = us10y && jp10y
-    ? await calculatePercentile(METRICS.US10Y_2Y10Y_SPREAD, (us10y.value - jp10y.value) * 100)
+    ? await calculatePercentile("US10Y_JP10Y_SPREAD_BP", (us10y.value - jp10y.value) * 100)
     : null;
   const cftcLatest = await getLatestMetric(METRICS.CFTC_JPY_NET);
   const cftcPercentile = cftcLatest ? await calculatePercentile(METRICS.CFTC_JPY_NET, cftcLatest.value) : null;

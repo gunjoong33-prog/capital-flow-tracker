@@ -107,6 +107,9 @@ async function main() {
   // 파생 지표: 나스닥-러셀 20거래일 누적수익률 격차(5단계 백분위 계산용)
   await computeNdxRutGapSeries();
 
+  // 파생 지표: US10Y-JP10Y 스프레드(bp) — 3단계 백분위 계산용
+  await computeUsJpSpreadSeries();
+
   console.log("\n백필 완료");
   await db.$disconnect();
 }
@@ -137,6 +140,26 @@ async function computeNdxRutGapSeries() {
     saved++;
   }
   console.log(`✅ NDX_RUT_GAP (파생, 5단계 백분위용): ${saved}건 저장`);
+}
+
+async function computeUsJpSpreadSeries() {
+  const us10y = await db.metricValue.findMany({ where: { metric: METRICS.US10Y }, orderBy: { date: "asc" } });
+  const jp10y = await db.metricValue.findMany({ where: { metric: METRICS.JP10Y }, orderBy: { date: "asc" } });
+  const jpByDate = new Map(jp10y.map((r) => [r.date.toISOString().slice(0, 10), r.value]));
+
+  let saved = 0;
+  for (const us of us10y) {
+    const jp = jpByDate.get(us.date.toISOString().slice(0, 10));
+    if (jp === undefined) continue;
+    const spreadBp = (us.value - jp) * 100;
+    await db.metricValue.upsert({
+      where: { metric_date: { metric: "US10Y_JP10Y_SPREAD_BP", date: us.date } },
+      create: { metric: "US10Y_JP10Y_SPREAD_BP", date: us.date, value: spreadBp, source: "manual" },
+      update: { value: spreadBp },
+    });
+    saved++;
+  }
+  console.log(`✅ US10Y_JP10Y_SPREAD_BP (파생, 3단계 백분위용): ${saved}건 저장`);
 }
 
 main().catch((err) => {
