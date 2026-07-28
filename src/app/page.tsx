@@ -67,14 +67,52 @@ const SENTIMENT_CONFIG = {
   colorTheme: "dark",
 };
 
-function WidgetCard({ title, height, children }: { title: string; height: string; children: ReactNode }) {
+function WidgetCard({
+  title,
+  height,
+  tip,
+  children,
+}: {
+  title: string;
+  height: string;
+  tip?: string;
+  children: ReactNode;
+}) {
+  const tipId = tip ? `home-tip-${title}` : undefined;
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      <p className="mb-2 text-xs text-zinc-500">{title}</p>
+      {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
+      <div className="mb-2 flex items-center gap-1.5">
+        <p className="text-xs text-zinc-500">{title}</p>
+        {tip && (
+          <label
+            htmlFor={tipId}
+            className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-zinc-700 text-[10px] leading-none text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+          >
+            ?
+          </label>
+        )}
+      </div>
+      {tip && (
+        <div className="peer-checked:block mb-2 hidden whitespace-pre-line [word-break:keep-all] rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
+          {tip}
+        </div>
+      )}
       <div className={height}>{children}</div>
     </div>
   );
 }
+
+const HEATMAP_TIP = `S&P500 편입 종목을 섹터별 사각형으로 표시한 지도.
+- 사각형 크기 = 기본값은 시가총액 — 상단 "사이즈" 메뉴에서 거래량 등으로 바꿀 수 있다
+- 색상 = 등락률(초록 상승 · 빨강 하락) — 진할수록 변동폭이 크다는 뜻
+- 상단 "그룹 기준"에서 섹터별 · 개별 종목 등 묶는 기준을 바꿀 수 있다
+- 상단 "자료"에서 S&P500 외 다른 지수·업종으로 바꿔볼 수 있다`;
+
+const FX_TIP = `원·달러(USD/KRW) 환율 미니 차트.
+- 값이 오르면 달러 강세 · 원화 약세, 내리면 반대
+- 하단 기간 탭(1M 등)에서 조회 기간을 바꿀 수 있다
+- 해외 투자·환헤지 비용을 가늠할 때 참고하는 기초 지표다`;
 
 export default function LandingPage() {
   return (
@@ -89,8 +127,8 @@ export default function LandingPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[62.5fr_37.5fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[540px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[68fr_32fr]">
+          <WidgetCard title="히트맵 — S&P 500" height="h-[560px]" tip={HEATMAP_TIP}>
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
               config={HEATMAP_CONFIG}
@@ -98,13 +136,13 @@ export default function LandingPage() {
           </WidgetCard>
 
           <div className="space-y-4">
-            <WidgetCard title="환율 — 원·달러(USD/KRW)" height="h-[230px]">
+            <WidgetCard title="환율 — 원·달러(USD/KRW)" height="h-[200px]" tip={FX_TIP}>
               <TradingViewWidget
                 src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
                 config={FX_CONFIG}
               />
             </WidgetCard>
-            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[230px]">
+            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[200px]">
               <TradingViewWidget
                 src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
                 config={SENTIMENT_CONFIG}
