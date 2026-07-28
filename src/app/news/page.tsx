@@ -38,7 +38,7 @@ export default async function NewsPage({
         <SiteNav active="news" />
 
         <header className="space-y-3">
-          <p className="text-sm text-zinc-500">주제별 구글 뉴스</p>
+          <p className="text-sm text-zinc-500">주제별 뉴스</p>
           <nav className="flex flex-wrap gap-2">
             {NEWS_PAGE_CATEGORIES.map((c) => (
               <Link
