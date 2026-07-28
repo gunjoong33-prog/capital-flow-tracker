@@ -79,7 +79,7 @@ function WidgetCard({ title, height, children }: { title: string; height: string
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-5xl space-y-4">
+      <main className="mx-auto max-w-6xl space-y-4">
         <SiteNav active="landing" />
 
         <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40">
