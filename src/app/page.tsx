@@ -19,6 +19,7 @@ const TICKER_TAPE_CONFIG = {
     { proName: "FX:USDJPY", title: "USD/JPY" },
     { proName: "TVC:GOLD", title: "금" },
     { proName: "TVC:USOIL", title: "WTI" },
+    { proName: "TVC:UKOIL", title: "브렌트유" },
     { proName: "BITSTAMP:BTCUSD", title: "BTC" },
   ],
   colorTheme: "dark",
