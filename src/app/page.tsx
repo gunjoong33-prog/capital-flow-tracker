@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic"; // CNN 공포탐욕지수를 매 요청 
 const TICKER_TAPE_CONFIG = {
   symbols: [
     { proName: "FOREXCOM:SPXUSD", title: "S&P500" },
+    { proName: "AMEX:IWM", title: "러셀2000" },
     { proName: "FOREXCOM:NSXUSD", title: "나스닥100" },
     { proName: "AMEX:DIA", title: "다우존스" },
     { proName: "FX_IDC:USDKRW", title: "USD/KRW" },
