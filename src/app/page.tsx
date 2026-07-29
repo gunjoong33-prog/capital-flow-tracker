@@ -136,6 +136,13 @@ const FX_TIP = `원·달러(USD/KRW) 환율 미니 차트.
 - 하단 기간 탭(1M 등)에서 조회 기간을 바꿀 수 있다
 - 해외 투자·환헤지 비용을 가늠할 때 참고하는 기초 지표다`;
 
+const SENTIMENT_TIP = `SPY(S&P500 ETF) 가격의 최근 흐름을 여러 보조지표로 계산해 매수·매도 신호를 게이지로 보여주는 트레이딩뷰 기술적 분석 요약.
+- 이동평균선·오실레이터 등 지표 각각을 매도(셀) · 중립(뉴트럴) · 매수(바이)로 판정해 합산한다
+- 바늘이 오른쪽(바이)에 가까울수록 매수 신호 우세, 왼쪽(셀)에 가까울수록 매도 신호 우세
+- 하단 숫자는 셀/뉴트럴/바이로 판정된 지표 개수(예: 셀 10 · 뉴트럴 9 · 바이 7)
+- 상단 탭(1분·5분·1일 등)에서 기준 기간을 바꿀 수 있다
+→ 시장의 단기 과열·과매도 여부를 참고할 때 확인`;
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
@@ -150,7 +157,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[68fr_32fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[560px]" tip={HEATMAP_TIP}>
+          <WidgetCard title="히트맵 — S&P 500" height="h-[560px] lg:h-[300px]" tip={HEATMAP_TIP}>
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
               config={HEATMAP_CONFIG}
@@ -164,11 +171,16 @@ export default function LandingPage() {
                 config={FX_CONFIG}
               />
             </WidgetCard>
-            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[450px]">
-              <TradingViewWidget
-                src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
-                config={SENTIMENT_CONFIG}
-              />
+            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="relative h-[280px] overflow-hidden" tip={SENTIMENT_TIP}>
+              {/* 위젯 자체 헤더("SPY 에 대한 테크니컬 어낼리시스")가 카드 제목과 중복되고 번역도
+                  어색해서 위로 크롭해 숨기고, 하단은 "셀/뉴트럴/바이" 개수 줄 바로 아래에서 잘라
+                  로고 여백을 없앤다 — 위젯이 cross-origin iframe이라 내부 텍스트 자체는 못 바꾼다. */}
+              <div className="absolute inset-x-0 h-[450px]" style={{ top: "-78px" }}>
+                <TradingViewWidget
+                  src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
+                  config={SENTIMENT_CONFIG}
+                />
+              </div>
             </WidgetCard>
           </div>
         </div>
