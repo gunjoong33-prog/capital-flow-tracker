@@ -157,7 +157,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[68fr_32fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[560px] lg:h-[300px]" tip={HEATMAP_TIP}>
+          <WidgetCard title="히트맵 — S&P 500" height="h-[560px]" tip={HEATMAP_TIP}>
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
               config={HEATMAP_CONFIG}
@@ -181,6 +181,16 @@ export default function LandingPage() {
                   config={SENTIMENT_CONFIG}
                 />
               </div>
+              {/* 게이지 눈금·하단 개수 헤더는 항상 같은 자리에 뜨는 고정 라벨이라 배경색 패치로
+                  덮고 한글로 오버레이한다(cross-origin 위젯이라 내부 텍스트는 직접 못 바꾼다).
+                  바늘이 가리키는 결과(가운데 큰 글자)는 매일 바뀌는 값이라 잘못 덮어쓸 위험이
+                  있어 그대로 둔다. */}
+              <div className="pointer-events-none absolute left-1/2 top-[51px] -translate-x-1/2 bg-black px-2 pb-1 text-[11px] text-zinc-400">중립</div>
+              <div className="pointer-events-none absolute left-[27%] top-[65px] -translate-x-1/2 bg-black px-1.5 pb-1 text-[11px] text-rose-400">매도</div>
+              <div className="pointer-events-none absolute left-[73%] top-[65px] -translate-x-1/2 bg-black px-1.5 pb-1 text-[11px] text-zinc-400">매수</div>
+              <div className="pointer-events-none absolute left-[31%] top-[219px] -translate-x-1/2 bg-black px-1.5 pb-1 text-sm text-zinc-300">매도</div>
+              <div className="pointer-events-none absolute left-1/2 top-[219px] -translate-x-1/2 bg-black px-2 pb-1 text-sm text-zinc-300">중립</div>
+              <div className="pointer-events-none absolute left-[69%] top-[219px] -translate-x-1/2 bg-black px-1.5 pb-1 text-sm text-zinc-300">매수</div>
             </WidgetCard>
           </div>
         </div>
