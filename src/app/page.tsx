@@ -164,7 +164,7 @@ export default function LandingPage() {
                 config={FX_CONFIG}
               />
             </WidgetCard>
-            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[200px]">
+            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="h-[450px]">
               <TradingViewWidget
                 src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
                 config={SENTIMENT_CONFIG}
