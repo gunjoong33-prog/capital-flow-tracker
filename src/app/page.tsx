@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import { SiteNav } from "@/components/SiteNav";
 import { TradingViewWidget } from "@/components/TradingViewWidget";
+import { CnnFearGreedGauge } from "@/components/CnnFearGreedGauge";
+import { getLatestMetric } from "@/lib/metrics";
+import { METRICS } from "@/lib/sources/types";
+
+export const dynamic = "force-dynamic"; // CNN 공포탐욕지수를 매 요청 시 DB에서 최신값으로 조회
 
 // 노션 대시보드 페이지의 트레이딩뷰 위젯 구성(티커테이프 + 히트맵 + 환율 + 기술적분석)을
 // 그대로 옮긴 홈 화면 — 사이트 디자인 테마(zinc 다크)에 맞춰 껍데기만 새로 입혔다.
@@ -51,20 +56,6 @@ const FX_CONFIG = {
   isTransparent: true,
   autosize: true,
   largeChartUrl: "",
-};
-
-// 노션 원본은 이 위젯을 "탐욕과 공포" 토글 아래 두었다 — CNN 공포탐욕지수(7단계에서 별도 스크래핑)와
-// 달리 여기선 트레이딩뷰 기술적분석 게이지(SPX, Strong Sell~Strong Buy)를 그대로 쓴다(기능 동일 이식).
-const SENTIMENT_CONFIG = {
-  interval: "1D",
-  width: "100%",
-  isTransparent: true,
-  height: "100%",
-  symbol: "AMEX:SPY",
-  showIntervalTabs: true,
-  displayMode: "single",
-  locale: "kr",
-  colorTheme: "dark",
 };
 
 /** "→ 요약문장" 줄만 굵게 강조해서 나머지 설명과 시각적으로 구분한다(가독성 최적화). */
@@ -136,14 +127,20 @@ const FX_TIP = `원·달러(USD/KRW) 환율 미니 차트.
 - 하단 기간 탭(1M 등)에서 조회 기간을 바꿀 수 있다
 - 해외 투자·환헤지 비용을 가늠할 때 참고하는 기초 지표다`;
 
-const SENTIMENT_TIP = `SPY(S&P500 ETF) 가격의 최근 흐름을 여러 보조지표로 계산해 매수·매도 신호를 게이지로 보여주는 트레이딩뷰 기술적 분석 요약.
-- 이동평균선·오실레이터 등 지표 각각을 매도(셀) · 중립(뉴트럴) · 매수(바이)로 판정해 합산한다
-- 바늘이 오른쪽(바이)에 가까울수록 매수 신호 우세, 왼쪽(셀)에 가까울수록 매도 신호 우세
-- 하단 숫자는 셀/뉴트럴/바이로 판정된 지표 개수(예: 셀 10 · 뉴트럴 9 · 바이 7)
-- 상단 탭(1분·5분·1일 등)에서 기준 기간을 바꿀 수 있다
-→ 시장의 단기 과열·과매도 여부를 참고할 때 확인`;
+const CNN_FEARGREED_TIP = `CNN이 매일 발표하는 시장 심리 종합지수(0~100). 리포트 7단계에서 매수 비중 조절에 실제로 쓰는 지표와 같다.
+- 성격이 다른 7개 하위지표(주가 모멘텀·강도·폭, 풋/콜 옵션 비율, 변동성(VIX), 안전자산 수요, 정크본드 수요)를 종합한 값이다
+- 0~24 극단적 공포 · 25~44 공포 · 45~55 중립 · 56~75 탐욕 · 76~100 극단적 탐욕
+- SPY 한 종목의 기술적 지표가 아니라 시장 전체의 투자자 심리(공포·탐욕)를 재는 지수다
+- 매일 오전 9시(한국시간) 파이프라인이 갱신 — 그 전에는 전날 값이 표시된다
+→ 극단적 공포는 역발상 매수, 극단적 탐욕은 단기 조정 위험 신호로 참고`;
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED);
+  const fearGreedValue = fearGreedMetric?.value ?? null;
+  const fearGreedDateLabel = fearGreedMetric
+    ? fearGreedMetric.date.toLocaleDateString("ko-KR", { month: "long", day: "numeric", timeZone: "UTC" })
+    : null;
+
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-6xl space-y-4">
@@ -171,27 +168,12 @@ export default function LandingPage() {
                 config={FX_CONFIG}
               />
             </WidgetCard>
-            <WidgetCard title="탐욕과 공포 — S&P500 기술적 분석" height="relative h-[280px] overflow-hidden" tip={SENTIMENT_TIP}>
-              {/* 위젯 자체 헤더("SPY 에 대한 테크니컬 어낼리시스")가 카드 제목과 중복되고 번역도
-                  어색해서 위로 크롭해 숨기고, 하단은 "셀/뉴트럴/바이" 개수 줄 바로 아래에서 잘라
-                  로고 여백을 없앤다 — 위젯이 cross-origin iframe이라 내부 텍스트 자체는 못 바꾼다. */}
-              <div className="absolute inset-x-0 h-[450px]" style={{ top: "-78px" }}>
-                <TradingViewWidget
-                  src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js"
-                  config={SENTIMENT_CONFIG}
-                />
-              </div>
-              {/* 게이지 눈금·하단 개수 헤더는 항상 같은 자리에 뜨는 고정 라벨이라 배경색 패치로
-                  덮고 한글로 오버레이한다(cross-origin 위젯이라 내부 텍스트는 직접 못 바꾼다).
-                  바늘이 가리키는 결과(가운데 큰 글자)는 매일 바뀌는 값이라 잘못 덮어쓸 위험이
-                  있어 그대로 둔다. */}
-              <div className="pointer-events-none absolute left-1/2 top-[51px] -translate-x-1/2 bg-black px-2 pb-1 text-[11px] text-zinc-400">중립</div>
-              <div className="pointer-events-none absolute left-[27%] top-[65px] -translate-x-1/2 bg-black px-1.5 pb-1 text-[11px] text-rose-400">매도</div>
-              <div className="pointer-events-none absolute left-[73%] top-[65px] -translate-x-1/2 bg-black px-1.5 pb-1 text-[11px] text-zinc-400">매수</div>
-              <div className="pointer-events-none absolute left-[31%] top-[219px] -translate-x-1/2 bg-black px-1.5 pb-1 text-sm text-zinc-300">매도</div>
-              <div className="pointer-events-none absolute left-1/2 top-[219px] -translate-x-1/2 bg-black px-2 pb-1 text-sm text-zinc-300">중립</div>
-              <div className="pointer-events-none absolute left-[69%] top-[219px] -translate-x-1/2 bg-black px-1.5 pb-1 text-sm text-zinc-300">매수</div>
+            <WidgetCard title="CNN 공포와 탐욕 지수" height="h-[210px]" tip={CNN_FEARGREED_TIP}>
+              <CnnFearGreedGauge value={fearGreedValue} />
             </WidgetCard>
+            <p className="-mt-2 text-center text-[11px] text-zinc-600">
+              {fearGreedDateLabel ? `${fearGreedDateLabel} 기준` : "확인 못함"} · 매일 오전 9시(한국시간) 갱신
+            </p>
           </div>
         </div>
       </main>
