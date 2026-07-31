@@ -361,13 +361,16 @@ function summarizeStep7(
   lines.push(
     fearGreed === null
       ? "공포탐욕지수를 확인하지 못했습니다."
-      : `공포탐욕지수는 ${fearGreed.toFixed(1)}로 ${cnnFearGreedRating(fearGreed)} 구간입니다(CNN 기준).`
+      // "~구간입니다"라고 쓰면 아래 표의 "공포 구간(역발상 매수용 극단 신호, <25 또는 VIX>25만 해당)"
+      // 배지와 같은 문구로 오인돼 서로 다른 기준(CNN 5단계 vs 극단치)이 충돌해 보이는 문제가 있었다 —
+      // 여기서는 CNN 자체 등급명을 인용한다는 걸 명확히 하려고 "~단계"로 구분한다.
+      : `공포탐욕지수는 ${fearGreed.toFixed(1)}로 CNN 기준 '${cnnFearGreedRating(fearGreed)}' 단계입니다.`
   );
   lines.push(
     step7Result.bothOverheated
       ? "양쪽 다 과열 신호라 추가 자금 유입 여력은 줄고 단기 조정 위험이 커진 상태입니다."
       : step7Result.fearZone
-        ? "공포 신호가 감지돼 역발상 매수 기회일 수 있지만, 추가 자금 이탈 위험도 함께 살펴야 합니다."
+        ? "극단적 공포/VIX 급등 신호가 감지돼 역발상 매수 기회일 수 있지만, 추가 자금 이탈 위험도 함께 살펴야 합니다."
         : "둘 다 극단적이지 않아 자본 유출입에 특별한 경고 신호는 없습니다."
   );
 
@@ -803,9 +806,14 @@ export async function runDailyAnalysis(manualInputs: {
     cftcNetPositionPercentile: cftcPercentile,
     jpyVolSpike: jpySpike.spike,
   });
+  // FRED의 미국 10년물(DGS10)은 Yahoo 주가·환율보다 발표 자체가 1영업일 더 늦다 — 같은 리포트 안에서
+  // "오늘 배치가 받은 최신 주가"와 "오늘 배치가 받은 최신 국채 금리"가 서로 다른 거래일을 가리킬 수
+  // 있다는 뜻이다(외부 교차검증에서 실제로 확인된 사례: 주가는 T일 종가인데 US10Y는 T-1일 값). 날짜를
+  // 맞출 방법은 없으니(FRED가 그 시점에 아직 발표 전) 대신 실제 기준일을 그대로 보여줘 혼동을 막는다.
+  const dateLabel = (d: Date | undefined) => (d ? d.toISOString().slice(5, 10).replace("-", "/") : null);
   details.step3 = [
-    { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
-    { label: "일본 10년물(JP10Y)", criterion: "참고용", value: fmt(jp10y?.value ?? null, 2, "%"), met: null },
+    { label: "미국 10년물(US10Y)", criterion: "참고용 — FRED 발표가 주가보다 1영업일 늦을 수 있음", value: `${fmt(us10y?.value ?? null, 2, "%")}${dateLabel(us10y?.date) ? ` (${dateLabel(us10y?.date)} 기준)` : ""}`, met: null },
+    { label: "일본 10년물(JP10Y)", criterion: "참고용", value: `${fmt(jp10y?.value ?? null, 2, "%")}${dateLabel(jp10y?.date) ? ` (${dateLabel(jp10y?.date)} 기준)` : ""}`, met: null },
     {
       // 절대구간(안정/주의/위험)은 실제 3단계 점수(scoreStep3)에는 안 쓰이고 아래 백분위 행 하나로만
       // 채점된다 — 그런데도 여기 met을 true/false로 보여주면 같은 스프레드 값을 두 행에서 두 번
@@ -1088,7 +1096,10 @@ export async function runDailyAnalysis(manualInputs: {
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     // "공포 구간"은 위 행과 달리 페널티가 없다 — "예"는 경고가 아니라 역발상 매수 기회 참고용 신호라
     // 좋다/나쁘다로 판정할 대상이 아니다(공포=매수 기회라는 원칙과 met:false가 모순되면 안 됨).
-    { label: "공포 구간", criterion: "역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
+    // 라벨을 "극단적 공포/VIX 급등"으로 바꿔서 위 행의 CNN 5단계 등급명("공포", 25~44)과 여기서 쓰는
+    // 더 좁은 기준(공포탐욕<25 또는 VIX>25)이 같은 단어를 다르게 쓰는 것처럼 보이던 문제를 없앤다 —
+    // 외부 교차검증에서 "32.3=공포(위 행)인데 이 배지는 아니오"라며 자기모순으로 지적된 부분.
+    { label: "극단적 공포/VIX 급등", criterion: "공포탐욕<25 또는 VIX>25 시 역발상 매수 기회 고려", value: step7.fearZone ? "예" : "아니오", met: null },
   ];
   details.step7Summary = summarizeStep7(institutional, sectorMatch, tickerMatch, vix, fearGreed, step7);
 

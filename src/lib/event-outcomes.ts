@@ -130,9 +130,14 @@ async function fedRateChanged(meetingDate: Date): Promise<{ risky: boolean | nul
       ? "(만장일치)"
       : `(반대표 ${dissentCount}명)`;
 
+  // METRICS.FED_FUNDS_RATE는 FRED DFEDTARU(목표범위 상단)만 저장한다 — "동결/변경" 판정에는 상단
+  // 값 비교만으로 충분하지만, 그대로 "curr.value%로 동결"이라고 표시하면 실제로는 범위(폭 0.25%p
+  // 고정)인데 상단 하나만 보여주는 값처럼 오인된다(외부 교차검증 지적). 연준이 2008년 범위제 도입
+  // 이후 목표범위 폭을 항상 25bp로 유지해온 관례를 이용해 하단을 역산해 범위 전체를 표시한다.
+  const rangeLabel = (upper: number) => `${(upper - 0.25).toFixed(2)}~${upper.toFixed(2)}%`;
   return {
     risky: changed || dissentRisky,
-    detail: `${changed ? `${prev.value}% → ${curr.value}%로 변경` : `${curr.value}%로 동결`}${dissentNote}`,
+    detail: `${changed ? `${rangeLabel(prev.value)} → ${rangeLabel(curr.value)}로 변경` : `${rangeLabel(curr.value)}로 동결`}${dissentNote}`,
     url,
   };
 }
