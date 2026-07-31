@@ -68,13 +68,57 @@ function nbsp(s: string): string {
   return s.replace(/ /g, " ");
 }
 
+/** detail 문자열("Reduce -95.40%" 등)에서 절대값 퍼센트만 뽑는다. */
+function parseDetailPct(detail: string): number | null {
+  const m = detail.match(/(-?[\d.]+)%/);
+  return m ? Math.abs(Number(m[1])) : null;
+}
+
+/** 같은 매니저가 한 분기에 3종목 이상에서 90% 이상 비슷한 폭으로 줄이면(또는 늘리면), 개별 종목에 대한
+ *  판단이 아니라 "포트폴리오 전체 리셋·청산·13F 제출 방식 변경" 신호일 가능성이 높다 — 예를 들어
+ *  William Von Mueffling(Cantillon)이 한 분기에 10종목을 전부 ~95% 줄인 경우, 이걸 "이 종목이
+ *  안 좋아 보인다"는 종목별 시그널로 읽으면 안 된다. */
+function isPortfolioWideReset(managerMoves: SuperInvestorMove[]): boolean {
+  const bigMoves = managerMoves.filter((m) => {
+    const pct = parseDetailPct(m.detail);
+    return pct !== null && pct >= 90;
+  });
+  return bigMoves.length >= 3;
+}
+
 /** DetailTable이 실제값을 "핵심값 — 부가설명"으로 나누는 규칙과 충돌하지 않도록, 문장 내부에는
  *  " — "(em dash)를 절대 쓰지 않는다 — 줄 구분은 "\n"만 쓴다(DetailTable이 whitespace-pre-line으로 살려준다). */
 function summarizeSuperInvestors(moves: SuperInvestorMove[]): string {
   if (moves.length === 0) return "확인 못함";
-  const notable = [...moves].sort((a, b) => (b.portfolioPct ?? 0) - (a.portfolioPct ?? 0)).slice(0, 4);
-  const lines = notable.map((m) => `${m.manager}: ${m.ticker}(${nbsp(m.company)}) ${translateMoveDetail(m.detail, m.action)}`);
-  return `최근 분기(${moves[0].quarter}) 고래 매매 중 포트폴리오 비중 변화가 큰 순서:\n${lines.join("\n")}`;
+
+  // 같은 매니저가 여러 종목에 몰려 "포트폴리오 비중 변화 상위 N개"를 혼자 독점하는 걸 막는다
+  // (Von Mueffling처럼 한 매니저가 10종목 전부 큰 비중 변화를 보이면 "고래 동향"으로서 정보량이
+  // 0이 된다) — 매니저당 비중 변화가 가장 큰 종목 1개만 후보로 남긴다.
+  const byManager = new Map<string, SuperInvestorMove[]>();
+  for (const m of moves) {
+    const arr = byManager.get(m.manager) ?? [];
+    arr.push(m);
+    byManager.set(m.manager, arr);
+  }
+
+  const candidates = [...byManager.values()].map((managerMoves) => {
+    const top = [...managerMoves].sort((a, b) => (b.portfolioPct ?? 0) - (a.portfolioPct ?? 0))[0];
+    // 매니저 전체에 리셋 패턴이 있어도, 지금 뽑힌 top 자체가 그 패턴(≥90% 변화)에 안 속하면
+    // (예: 리셋과 무관한 별도 신규매수 1건) 경고를 붙이지 않는다 — 경고는 "이 특정 종목 변화가
+    // 리셋의 일부"일 때만 의미가 있다.
+    const topPct = parseDetailPct(top.detail);
+    const resetWarning = (topPct !== null && topPct >= 90) && isPortfolioWideReset(managerMoves);
+    return { top, resetWarning };
+  });
+
+  const notable = candidates.sort((a, b) => (b.top.portfolioPct ?? 0) - (a.top.portfolioPct ?? 0)).slice(0, 4);
+  const lines = notable.map(({ top: m, resetWarning }) => {
+    const base = `${m.manager}: ${m.ticker}(${nbsp(m.company)}) ${translateMoveDetail(m.detail, m.action)}`;
+    return resetWarning
+      ? `${base} (같은 매니저가 여러 종목에서 동시에 급변 — 종목별 시그널이 아니라 포트폴리오 전체 리셋·청산 가능성)`
+      : base;
+  });
+  return `최근 분기(${moves[0].quarter}) 고래 매매 중 포트폴리오 비중 변화가 큰 순서(매니저당 1건):\n${lines.join("\n")}\n※ 13F는 분기 마감 후 최대 45일 내 제출이라 "${moves[0].quarter}" 데이터는 이미 1~4개월 지난 정보일 수 있습니다.`;
 }
 
 function summarizeStockConsensus(moves: SuperInvestorMove[]): string {

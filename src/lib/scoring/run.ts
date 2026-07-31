@@ -152,7 +152,6 @@ function summarizeStep4(
   step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean },
   fxOilDirection: { dollarDir: Direction; oilDir: Direction; oilChangePct: number | null },
   context: {
-    vetoTriggered: boolean;
     overseasQualifyingCount: number;
     overseasTotalCount: number;
     carryZone: string;
@@ -183,11 +182,12 @@ function summarizeStep4(
         ? "Risk-On(신흥국으로 자금 확산)"
         : "혼조";
 
+  // 이전엔 여기서 1단계 거부권 발동 여부를 근거로 끌어다 썼는데, 거부권은 8단계에서 이미 한 번 더
+  // 등급을 깎는 데 쓰인다 — 4단계 서술이 1단계 결과를 다시 인용하면 같은 정보가 두 번 반영되는
+  // 셈이라 신호 독립성이 깨진다. 4단계는 4단계 자신과 2·3단계(유동성·캐리) 데이터만으로 서술한다.
   let reason: string;
   if (oilSpike) {
     reason = `유가가 하루 만에 ${fxOilDirection.oilChangePct!.toFixed(1)}% 급등해 공급 충격 우려가 원화 약세 신호보다 우선 반영된 것으로 보입니다.`;
-  } else if (context.vetoTriggered) {
-    reason = "1단계에서 지정학적·정책 리스크로 거부권이 발동된 만큼 안전자산 선호가 영향을 준 것으로 보입니다.";
   } else if (context.jpySpike || context.carryZone === "위험") {
     reason = "3단계 엔 캐리 트레이드 청산 압박(스프레드 위험 구간 또는 엔화 변동성 급등)이 환시 변동성을 키운 것으로 보입니다.";
   } else if (context.overseasTotalCount > 0 && context.overseasQualifyingCount / context.overseasTotalCount < 3 / 7) {
@@ -837,7 +837,9 @@ export async function runDailyAnalysis(manualInputs: {
   const goldStale = goldFresh.daysOld !== null && goldFresh.daysOld >= STALE_UNKNOWN_DAYS;
   const goldDir = goldStale ? "flat" : goldFresh.direction ?? "flat";
   const realRateDir = (await directionOf(METRICS.REAL_RATE)) ?? "flat";
-  const dollarFresh = await directionOfWithFreshness(METRICS.USDKRW);
+  // 달러 방향은 USD/KRW가 아니라 DXY(달러 인덱스) 기준 — 원화는 한국 고유 수급 노이즈가 커서
+  // 글로벌 달러 강약의 대리변수로 부적합하다(위 METRICS.DXY 주석 참고).
+  const dollarFresh = await directionOfWithFreshness(METRICS.DXY);
   const dollarStale = dollarFresh.daysOld !== null && dollarFresh.daysOld >= STALE_UNKNOWN_DAYS;
   const dollarDir = dollarStale ? "flat" : dollarFresh.direction ?? "flat";
   const step4 = scoreStep4({ goldDirection: goldDir, realRateDirection: realRateDir, dollarDirection: dollarDir });
@@ -859,7 +861,7 @@ export async function runDailyAnalysis(manualInputs: {
       label: "실질금리 방향", criterion: "참고용(사분면 조합의 한 축 — 단독 충족/미충족 판정은 2단계에서)", value: dirLabel(realRateDir), met: null,
     },
     {
-      label: "달러 방향(USD/KRW)",
+      label: "달러 방향(DXY)",
       criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함",
       value: dollarStale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollarFresh.daysOld, dollarStale)}`,
       met: dollarStale ? null : step4.dollarConfirms,
@@ -875,7 +877,7 @@ export async function runDailyAnalysis(manualInputs: {
   const brentChange = await dailyChange(METRICS.BRENT);
   const wtiDir = (await directionOf(METRICS.WTI)) ?? "flat";
   details.step4Aux = [
-    { label: "USD·KRW", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
     { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
     { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
     { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
@@ -885,7 +887,6 @@ export async function runDailyAnalysis(manualInputs: {
     step4,
     { dollarDir, oilDir: wtiDir, oilChangePct: wtiChange.changePct },
     {
-      vetoTriggered: step1.vetoTriggered,
       overseasQualifyingCount: step2.overseasQualifyingCount,
       overseasTotalCount: step2.overseasTotalCount,
       carryZone: step3.zone,

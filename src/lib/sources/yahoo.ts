@@ -9,6 +9,7 @@ const YAHOO_TICKERS: Record<string, string> = {
   [METRICS.BRENT]: "BZ=F",
   [METRICS.USDKRW]: "KRW=X",
   [METRICS.USDJPY]: "JPY=X",
+  [METRICS.DXY]: "DX-Y.NYB",
   [METRICS.NDX]: "^NDX",
   [METRICS.RUT]: "^RUT",
   [METRICS.DJI]: "^DJI",

@@ -79,13 +79,59 @@ async function corePceDetail(periods: number, thresholdZ: number): Promise<{ ris
   };
 }
 
-/** FOMC는 "얼마나 놀랐는지"보다 "실제로 금리를 바꿨는지" 자체가 신호 — 동결이면 안전, 조금이라도 바뀌면 리스크로 본다. */
-async function fedRateChanged(): Promise<{ risky: boolean; detail: string }> {
+/**
+ * FOMC 성명서 원문에서 반대표(dissent) 인원을 파싱한다. 실제 성명서는 예:
+ * "...approved the following statement for release by a 9 – 3 vote..."처럼 표결 집계를 그대로
+ * 텍스트에 담고 있다 — "동결/변경 여부"만으로는 못 잡는 "사실은 다수가 인상/인하를 원했다"는
+ * 매파적/비둘기파적 신호를 여기서 뽑아낸다.
+ * 반대자 이름 목록("Voting against... were A, B, and C")을 직접 세는 방식은 이름에 중간이니셜
+ * 마침표가 섞여 있어("Beth M. Hammack") 정규식이 문장 끝으로 오인하기 쉽다 — 대신 투표 집계
+ * 숫자 자체("9 – 3 vote")를 반대표 수의 근거로 쓴다. 원문 파싱이라 문구가 조금만 바뀌어도 실패할
+ * 수 있어 실패 시 조용히 null을 돌려주고(데이터 정직성 원칙), 기존 동결/변경 판정에는 영향을
+ * 주지 않는다.
+ */
+async function fetchFomcDissentCount(meetingDate: Date): Promise<{ dissentCount: number | null; url: string }> {
+  const dateStr = meetingDate.toISOString().slice(0, 10).replace(/-/g, "");
+  const url = `https://www.federalreserve.gov/newsevents/pressreleases/monetary${dateStr}a.htm`;
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
+    if (!res.ok) return { dissentCount: null, url };
+    const html = await res.text();
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+    // "by a 9 – 3 vote" / "by a 9-3 vote" 둘 다 매칭(구두점이 en-dash·hyphen 둘 다 쓰일 수 있음).
+    const voteMatch = text.match(/by a (\d+)\s*[–‒-]\s*(\d+) vote/);
+    if (!voteMatch) return { dissentCount: null, url }; // 표결 집계 문구를 못 찾으면 판정 보류
+    return { dissentCount: parseInt(voteMatch[2], 10), url };
+  } catch {
+    return { dissentCount: null, url };
+  }
+}
+
+/**
+ * FOMC는 "얼마나 놀랐는지"보다 "실제로 금리를 바꿨는지" 자체가 우선 신호지만, 동결이어도 다수가
+ * 반대(인상/인하를 원함)했다면 매파적/비둘기파적 서프라이즈로 봐야 한다 — "9-3 표결로 동결"은
+ * "만장일치 동결"과 시장에 주는 신호가 다르다. 반대표 2명 이상이면 risky로 취급한다(관례상
+ * FOMC 표결은 대개 만장일치에 가까워, 2명 이상 반대는 이례적인 수준).
+ */
+async function fedRateChanged(meetingDate: Date): Promise<{ risky: boolean; detail: string; url?: string }> {
   const history = await getMetricHistory(METRICS.FED_FUNDS_RATE, 400);
   if (history.length < 2) return { risky: false, detail: "데이터 부족" };
   const [prev, curr] = history.slice(-2);
   const changed = curr.value !== prev.value;
-  return { risky: changed, detail: changed ? `${prev.value}% → ${curr.value}%로 변경` : `${curr.value}%로 동결` };
+
+  const { dissentCount, url } = await fetchFomcDissentCount(meetingDate);
+  const dissentRisky = dissentCount !== null && dissentCount >= 2;
+  const dissentNote = dissentCount === null
+    ? ""
+    : dissentCount === 0
+      ? "(만장일치)"
+      : `(반대표 ${dissentCount}명)`;
+
+  return {
+    risky: changed || dissentRisky,
+    detail: `${changed ? `${prev.value}% → ${curr.value}%로 변경` : `${curr.value}%로 동결`}${dissentNote}`,
+    url,
+  };
 }
 
 /**
@@ -107,7 +153,7 @@ export async function evaluateRecentEventOutcomes(daysBack: number): Promise<Eve
     else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false);
     else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true);
     else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5);
-    else if (e.name.includes("FOMC")) result = await fedRateChanged();
+    else if (e.name.includes("FOMC")) result = await fedRateChanged(e.date);
     else continue;
 
     outcomes.push({ name: e.name, date: e.date.toISOString().slice(0, 10), risky: result.risky, detail: result.detail, url: result.url });

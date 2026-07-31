@@ -31,6 +31,9 @@ export const METRICS = {
   BRENT: "BRENT",
   USDKRW: "USDKRW",
   USDJPY: "USDJPY",
+  DXY: "DXY", // 달러 인덱스(ICE US Dollar Index, Yahoo DX-Y.NYB) — 4단계 달러 방향 판정 기준.
+  // USD/KRW는 한국 고유 수급(반도체 수출, 배당 송금, 연기금 헤지) 영향이 커서 글로벌 달러 강약의
+  // 대리변수로 부적합 — 원화는 "한국 투자자 관점 보조 지표"로만 남기고 판정 기준은 DXY로 바꾼다.
 
   // 5단계
   NDX: "NDX",

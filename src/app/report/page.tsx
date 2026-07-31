@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { BIG_TECH_TICKERS } from "@/lib/sources/types";
 import { ReportView } from "@/components/ReportView";
 import { SiteNav } from "@/components/SiteNav";
+import { FreshnessBanner } from "@/components/FreshnessBanner";
+import { checkReportFreshness } from "@/lib/report-freshness";
 
 export const dynamic = "force-dynamic"; // 매번 최신 DB 값으로 계산 — 캐시하면 안 됨
 
@@ -70,7 +72,7 @@ async function getReport() {
 }
 
 export default async function ReportPage() {
-  const report = await getReport();
+  const [report, freshness] = await Promise.all([getReport(), checkReportFreshness()]);
 
   const today = new Date().toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric", weekday: "long",
@@ -80,6 +82,7 @@ export default async function ReportPage() {
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-3xl space-y-4">
         <SiteNav active="report" />
+        <FreshnessBanner freshness={freshness} />
         <ReportView dateLabel={today} report={report} details={report.details} />
       </main>
     </div>

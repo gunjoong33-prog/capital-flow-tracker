@@ -171,9 +171,9 @@ export interface CategoryHeadline {
   publishedAt: string | null;
 }
 
-function parseGoogleNewsItems(xml: string, limit: number): CategoryHeadline[] {
+function parseGoogleNewsItems(xml: string): CategoryHeadline[] {
   const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
-  return items.slice(0, limit).map((block) => {
+  return items.map((block) => {
     const rawTitle = extractTag(block, "title") ?? "";
     const source = extractTag(block, "source") ?? "Google News";
     // 구글 뉴스 RSS는 title 끝에 " - 발행사명"을 항상 덧붙인다 — source를 따로 보여주므로 중복 제거.
@@ -187,6 +187,23 @@ function parseGoogleNewsItems(xml: string, limit: number): CategoryHeadline[] {
   }).filter((h) => h.title && h.url);
 }
 
+// "국내 정치"/"국내 경제" 검색어가 너무 넓어서(구글 뉴스가 "정치"·"경제" 단어만 봐도 매칭시킴)
+// 박람회·강좌·기념식·연구 발표처럼 자본흐름과 무관한 지역/행정 뉴스가 다수 섞였다. 제외 목록은
+// 무한히 늘어나는 예외를 다 못 잡으니, 대신 "이 사이트가 실제로 다루는 주제와 관련 있는가"를
+// 포함 키워드로 판정한다 — 아래 키워드가 하나도 없으면 노출하지 않는다(세계 정치/경제·기술
+// 카테고리는 검색어 자체가 이미 좁아서 이 필터를 안 쓴다).
+const DOMESTIC_RELEVANCE_KEYWORDS = [
+  "금리", "환율", "증시", "주가", "코스피", "코스닥", "국채", "채권", "수출", "수입", "무역", "관세",
+  "GDP", "성장률", "물가", "인플레", "실업", "고용", "부동산", "규제", "정책", "투자", "외국인",
+  "연기금", "국민연금", "세금", "과세", "예산", "재정", "통화", "한은", "기준금리", "대통령", "국회",
+  "법안", "총리", "개각", "여당", "야당", "선거", "경제", "기업", "산업", "반도체", "수급", "자산",
+  "펀드", "은행", "증권", "상장", "IPO", "인수", "합병", "실적", "매출", "영업이익", "적자", "흑자",
+];
+
+function isDomesticRelevant(title: string): boolean {
+  return DOMESTIC_RELEVANCE_KEYWORDS.some((kw) => title.includes(kw));
+}
+
 export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
   const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
   if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
@@ -194,5 +211,9 @@ export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
   if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
   const xml = await res.text();
-  return parseGoogleNewsItems(xml, limit);
+  const items = parseGoogleNewsItems(xml);
+  const filtered = key === "domestic-politics" || key === "domestic-economy"
+    ? items.filter((h) => isDomesticRelevant(h.title))
+    : items;
+  return filtered.slice(0, limit);
 }
