@@ -1,0 +1,20 @@
+name: JPY intraday check
+
+# 엔 캐리 트레이드 청산 감지(3단계)는 몇 시간 안에 벌어지는 사건이라 일일 배치(09시 KST 1회)로는
+# 원리상 못 잡는다는 지적을 보완한다. Vercel Hobby 플랜은 자체 크론이 하루 1회로 제한돼 있어서
+# (더 잦은 스케줄은 배포 자체가 실패) 대신 GitHub Actions의 무료 스케줄러로 하루 6번(4시간 간격)
+# /api/cron/jpy-check를 호출해 USD/JPY 최신 시세만 갱신한다. 리포트 계산(detectJpyVolSpike)은
+# 매 요청마다 실시간으로 다시 읽으므로, 이 워크플로만 있으면 별도 로직 없이 장중 변동이 반영된다.
+on:
+  schedule:
+    - cron: "0 */4 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call JPY check endpoint
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://capital-flow-tracker.vercel.app/api/cron/jpy-check

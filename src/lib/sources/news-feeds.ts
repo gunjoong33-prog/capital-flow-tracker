@@ -109,7 +109,45 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
     return true;
   });
 
-  return { headlines: deduped, errors };
+  return { headlines: dedupOfficialHeadlines(deduped), errors };
+}
+
+const STOPWORDS = new Set([
+  "the", "a", "an", "of", "on", "in", "to", "for", "with", "and", "or", "as", "is", "are", "that",
+  "this", "by", "from", "at", "be", "was", "were", "has", "have", "had", "will", "would", "our",
+  "their", "its", "president", "donald", "trump",
+]);
+
+function significantTokens(title: string): Set<string> {
+  return new Set(
+    title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w))
+  );
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  const intersection = [...a].filter((x) => b.has(x)).length;
+  const union = new Set([...a, ...b]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * 백악관·연준 공식 발표는 같은 정책 액션에 대해 "Fact Sheet"·"Presidential Determination"·
+ * "Executive Order"처럼 문서 종류만 다른 여러 건이 같이 올라오는 경우가 흔하다(예: DPA critical
+ * minerals 관련 문서 2건). Gemini judgeHeadlines()에 근접중복 병합 지침을 넣어뒀지만, 후보가
+ * 144건까지 늘어난 상태에서는 이런 미묘한 중복을 가끔 놓친다 — official 카테고리는 건수가 적어서
+ * (10~30건) 결정론적 제목 유사도 비교 비용이 낮다. 이 단계에서 먼저 걸러 Gemini에는 대표 1건만
+ * 넘긴다.
+ */
+function dedupOfficialHeadlines(headlines: Headline[]): Headline[] {
+  const official = headlines.filter((h) => h.category === "official");
+  const rest = headlines.filter((h) => h.category !== "official");
+  const kept: Headline[] = [];
+  for (const h of official) {
+    const tokens = significantTokens(h.title);
+    const isDup = kept.some((k) => jaccardSimilarity(tokens, significantTokens(k.title)) >= 0.25);
+    if (!isDup) kept.push(h);
+  }
+  return [...rest, ...kept];
 }
 
 // 빅테크 7 종목별 등락 원인 판정용 헤드라인 — 종목마다 별도 검색어로 조회해 티커별로 묶어서 반환한다

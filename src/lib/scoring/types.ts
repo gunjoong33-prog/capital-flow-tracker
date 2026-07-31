@@ -27,7 +27,7 @@ export interface UpcomingEventItem {
 export interface EventOutcomeItem {
   name: string;
   date: string;
-  risky: boolean;
+  risky: boolean | null; // null = 판정불가(데이터 부족) — false(서프라이즈 아님으로 확인됨)와 구분
   detail: string;
   url?: string;
 }

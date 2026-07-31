@@ -5,7 +5,10 @@ import { getMajorEventsInRange } from "@/lib/major-events";
 export interface EventOutcome {
   name: string;
   date: string;
-  risky: boolean;
+  // null = 판정불가(데이터 부족) — "서프라이즈 아님"(false)과 구분해야 한다. 데이터가 없다고
+  // "안전하다"로 기본값 처리하면(fail-open) 화재경보기 배터리가 없을 때 "화재 없음"으로 표시하는
+  // 것과 같다 — 모르면 모른다고 표시해야 한다(데이터 정직성 원칙).
+  risky: boolean | null;
   detail: string;
   url?: string; // 원본 출처(예: FRED 시리즈 페이지) — "바로가기" 열에 표시
 }
@@ -27,9 +30,9 @@ async function zScoreSurprise(
   periods: number,
   thresholdZ: number,
   onlyHotSurprise: boolean
-): Promise<{ risky: boolean; detail: string }> {
+): Promise<{ risky: boolean | null; detail: string }> {
   const recent = await getMetricHistoryByCount(metric, periods + 1);
-  if (recent.length < periods + 1) return { risky: false, detail: "데이터 부족(발표 반영 전이거나 이력 부족)" };
+  if (recent.length < periods + 1) return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
   const changes: number[] = [];
   for (let i = 1; i < recent.length; i++) changes.push(recent[i].value - recent[i - 1].value);
   const latestChange = changes[changes.length - 1];
@@ -49,11 +52,11 @@ async function zScoreSurprise(
  * CPI·PPI와 같은 이유로 "예상보다 덜 오름(z가 음수)"은 리스크로 잡지 않는다 — z > threshold(예상보다
  * 더 뜨거워짐)일 때만 risky로 본다.
  */
-async function corePceDetail(periods: number, thresholdZ: number): Promise<{ risky: boolean; detail: string; url: string }> {
+async function corePceDetail(periods: number, thresholdZ: number): Promise<{ risky: boolean | null; detail: string; url: string }> {
   const url = "https://www.bea.gov/data/personal-consumption-expenditures-price-index";
   const history = await getMetricHistoryByCount(METRICS.US_PCE_CORE, periods + 2); // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
   if (history.length < periods + 2) {
-    return { risky: false, detail: "데이터 부족(발표 반영 전이거나 이력 부족)", url };
+    return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가", url };
   }
   const changes: number[] = [];
   for (let i = 1; i < history.length; i++) changes.push(history[i].value - history[i - 1].value);
@@ -113,9 +116,9 @@ async function fetchFomcDissentCount(meetingDate: Date): Promise<{ dissentCount:
  * "만장일치 동결"과 시장에 주는 신호가 다르다. 반대표 2명 이상이면 risky로 취급한다(관례상
  * FOMC 표결은 대개 만장일치에 가까워, 2명 이상 반대는 이례적인 수준).
  */
-async function fedRateChanged(meetingDate: Date): Promise<{ risky: boolean; detail: string; url?: string }> {
+async function fedRateChanged(meetingDate: Date): Promise<{ risky: boolean | null; detail: string; url?: string }> {
   const history = await getMetricHistory(METRICS.FED_FUNDS_RATE, 400);
-  if (history.length < 2) return { risky: false, detail: "데이터 부족" };
+  if (history.length < 2) return { risky: null, detail: "데이터 부족 — 판정불가" };
   const [prev, curr] = history.slice(-2);
   const changed = curr.value !== prev.value;
 
@@ -148,7 +151,7 @@ export async function evaluateRecentEventOutcomes(daysBack: number): Promise<Eve
 
   const outcomes: EventOutcome[] = [];
   for (const e of events) {
-    let result: { risky: boolean; detail: string; url?: string };
+    let result: { risky: boolean | null; detail: string; url?: string };
     if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true);
     else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false);
     else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true);

@@ -641,7 +641,9 @@ export async function runDailyAnalysis(manualInputs: {
       label: `${o.name}(${slashDate(o.date)}) 실제 결과`,
       criterion: "예상 범위 내(서프라이즈 아님)",
       value: o.detail,
-      met: !o.risky,
+      // o.risky는 null(판정불가)일 수 있다 — !null이 true가 돼서 "충족(✓)"으로 잘못 보이면
+      // 데이터가 없는데 "안전"이라고 말하는 fail-open이 된다. null은 met도 null(회색 "-")로 남긴다.
+      met: o.risky === null ? null : !o.risky,
       url: o.url,
     })),
     {
