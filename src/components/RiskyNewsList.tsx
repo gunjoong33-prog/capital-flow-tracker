@@ -38,15 +38,19 @@ const SEVERITY_STYLE: Record<Severity, { box: string; text: string; badge: strin
 const SEVERITY_ORDER: Severity[] = ["high", "medium", "low"];
 
 export function RiskyNewsList({ riskyNews }: { riskyNews: RiskyNewsItem[] }) {
-  const [filter, setFilter] = useState<Filter>("all");
+  // 처음엔 아무 버튼도 안 눌린 상태(null)라 뉴스 목록을 안 보여준다 — 버튼을 눌러야 그 등급의
+  // 뉴스가 나오게 해달라는 요청. 41건이 접힌 채로 시작해 화면이 한결 짧아진다.
+  const [filter, setFilter] = useState<Filter | null>(null);
 
   const counts: Record<Severity, number> = { high: 0, medium: 0, low: 0 };
   for (const n of riskyNews) counts[n.severity]++;
 
   const shown =
-    filter === "all"
-      ? [...riskyNews].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
-      : riskyNews.filter((n) => n.severity === filter);
+    filter === null
+      ? []
+      : filter === "all"
+        ? [...riskyNews].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
+        : riskyNews.filter((n) => n.severity === filter);
 
   const tabs: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "전체", count: riskyNews.length },
@@ -62,7 +66,7 @@ export function RiskyNewsList({ riskyNews }: { riskyNews: RiskyNewsItem[] }) {
           <button
             key={t.key}
             type="button"
-            onClick={() => setFilter(t.key)}
+            onClick={() => setFilter(filter === t.key ? null : t.key)}
             className={
               "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors " +
               (filter === t.key
