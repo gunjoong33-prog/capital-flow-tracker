@@ -266,6 +266,23 @@ const DOMESTIC_RELEVANCE_KEYWORDS: Partial<Record<NewsPageCategoryKey, string[]>
   ],
 };
 
+// "비즈니스" 토픽은 gl=KR(한국 편집판)으로 조회하기 때문에 삼성전자·SK하이닉스·코스피처럼
+// 국내 기업/증시 뉴스가 상당수 섞여 나온다 — "세계 경제" 탭 취지(해외 이슈)에 안 맞아 걸러서
+// "국내 경제" 탭으로 넘긴다. 국가를 불문하고 걸릴 수 있는 일반 명사("정부"·"당국"·"국회" 등,
+// "일본 정부"처럼 다른 나라 기사에도 오탐 가능)는 빼고, 한국에서만 의미가 성립하는 고유명사
+// (기업명·지명)와 관용 표현("한국"·"국내"·"대한민국")만 쓴다.
+const KOREA_INDICATOR_KEYWORDS = [
+  "한국", "대한민국", "국내", "코스피", "코스닥", "원화", "한은", "한국은행",
+  "삼성", "SK하이닉스", "SK텔레콤", "SKT", "LG전자", "LG화학", "현대차", "현대자동차", "기아",
+  "한화", "포스코", "카카오", "네이버", "KT", "홈플러스", "이마트", "롯데", "두산", "쿠팡",
+  "서울", "강남", "부산", "명동", "국세청",
+  "국힘", "국민의힘", "민주당", "개미", "반대매매", "사이드카",
+];
+
+function isKoreaRelated(title: string): boolean {
+  return KOREA_INDICATOR_KEYWORDS.some((kw) => title.includes(kw));
+}
+
 async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
   if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
@@ -291,13 +308,27 @@ export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20
       seen.add(h.url);
       return true;
     });
-    const filtered = merged.filter((h) => domesticKeywords.some((kw) => h.title.includes(kw)));
+    let filtered = merged.filter((h) => domesticKeywords.some((kw) => h.title.includes(kw)));
+
+    if (key === "domestic-economy") {
+      // 세계 경제 탭에서 걸러낸 국내 기업/증시 뉴스를 그대로 받는다 — 이미 "비즈니스" 토픽
+      // 큐레이션을 통과한 뉴스라 경제 키워드 재필터 없이 바로 채택(회사명만 있고 "실적"·"증시" 같은
+      // 일반 경제 키워드가 없는 기사가 재필터에서 빠지는 걸 막는다).
+      const businessUrl = `https://news.google.com/rss/topics/${GOOGLE_NEWS_TOPIC_IDS["world-economy"]}?hl=ko&gl=KR&ceid=KR:ko`;
+      const businessItems = await fetchGoogleNewsRss(businessUrl);
+      const koreaBusinessItems = businessItems.filter((h) => isKoreaRelated(h.title) && !seen.has(h.url));
+      koreaBusinessItems.forEach((h) => seen.add(h.url));
+      filtered = [...filtered, ...koreaBusinessItems];
+    }
+
     return filtered.slice(0, limit);
   }
 
   const topicId = GOOGLE_NEWS_TOPIC_IDS[key];
   const items = await fetchGoogleNewsRss(topicId ? `https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko` : searchUrl);
-  // world 카테고리는 이미 구글 자체 편집 큐레이션(토픽)이라 필터가 불필요하고, tech는 좁은 주제
+  // world-politics는 이미 구글 자체 편집 큐레이션(토픽)이라 필터가 불필요하고, tech는 좁은 주제
   // 버킷이라 경제/정치 키워드로 거르면 정상 기술 뉴스까지 잘려나간다 — 둘 다 필터 없이 그대로.
-  return items.slice(0, limit);
+  // world-economy("비즈니스" 토픽)만 gl=KR 편집판 특성상 국내 기업/증시 뉴스가 섞여 나와 제외한다.
+  const filtered = key === "world-economy" ? items.filter((h) => !isKoreaRelated(h.title)) : items;
+  return filtered.slice(0, limit);
 }
