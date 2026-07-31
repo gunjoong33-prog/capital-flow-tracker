@@ -50,10 +50,19 @@ async function fetchRss(url: string, source: string, category: NewsCategory, lim
   return parseRssItems(xml, source, category, limit);
 }
 
+// 기존 3개는 전부 "... stock market/risk"처럼 시장 영향 표현이 검색어에 포함돼야만 잡혔다 —
+// 그래서 "이란 공습" 같은 속보 자체(원 기사가 아직 "주식시장" 프레이밍을 안 달았을 때)가 통째로
+// 빠지는 사각지대가 있었다. 지역/사건 자체를 겨냥한 검색어를 추가해 시장 프레이밍 유무와 무관하게
+// 원 사건을 잡는다 — 리스크 여부·심각도 판정은 어차피 이후 Gemini가 하므로, 여기서는 폭넓게 모으고
+// 거르는 건 뒤에서 하는 게 맞다.
 const GEOPOLITICAL_QUERIES = [
   "war OR conflict stock market",
   "trade war tariff market",
   "election market risk",
+  "military strike OR airstrike",
+  "Iran OR Middle East conflict",
+  "sanctions OR embargo",
+  "central bank emergency OR bank failure OR sovereign default",
 ];
 
 // 사용자가 예시로 준 기사(Peter Thiel 'Dialog' 비밀결사 유출 보도 등) 같은 "권력 네트워크·엘리트 집단
@@ -72,7 +81,7 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
 
   const results = await Promise.allSettled([
     ...GEOPOLITICAL_QUERIES.map((q) =>
-      fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news", "general", 5)
+      fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news", "general", 10)
     ),
     ...POWER_NETWORK_QUERIES.map((q) =>
       fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`, "google-news-power", "power-network", 5)
@@ -80,6 +89,11 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
     fetchRss("https://www.federalreserve.gov/feeds/press_all.xml", "fed-press", "official", 10),
     fetchRss("https://www.federalreserve.gov/feeds/speeches_and_testimony.xml", "fed-speeches", "official", 10),
     fetchRss("https://www.whitehouse.gov/news/feed/", "whitehouse", "official", 10),
+    // 구글 뉴스 검색어 매칭에 의존하지 않는 wire 서비스 직접 피드 — 검색어 사각지대를 보완한다.
+    // 전부 무료·키 불필요·공개 RSS(비공식 API 아님, 각 언론사가 직접 제공하는 표준 RSS).
+    fetchRss("https://feeds.bbci.co.uk/news/world/rss.xml", "bbc-world", "general", 15),
+    fetchRss("https://www.aljazeera.com/xml/rss/all.xml", "aljazeera", "general", 15),
+    fetchRss("https://feeds.a.dj.com/rss/RSSWorldNews.xml", "wsj-world", "general", 15),
   ]);
 
   for (const r of results) {

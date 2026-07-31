@@ -97,7 +97,9 @@ ${list}`;
         contents: [{ parts: [{ text: prompt }] }],
         // gemini-flash-latest가 내부적으로 thinking 모델로 풀려서 추론에 토큰을 많이 쓴다 —
         // 헤드라인 10여 개를 판정하기엔 1024로 부족해서 MAX_TOKENS로 잘렸었다(narrative.ts와 같은 문제).
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+        // wire RSS 3개 추가 + 검색어 확장으로 후보 헤드라인이 최대 150개 안팎까지 늘어나
+        // 4096으로도 잘릴 여지가 있어 여유를 더 둔다.
+        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
       }),
     }
   );
