@@ -36,6 +36,12 @@ const SEVERITY_STYLE: Record<
   },
 };
 
+/** "YYYY-MM-DD" → "YYYY/M/D"(선행 0 없이). run.ts의 slashDate와 같은 표기 규칙(1단계 표시용). */
+function slashDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${y}/${m}/${d}`;
+}
+
 export interface ReportViewData {
   step1: Step1Result;
   step2: Step2Result;
@@ -124,14 +130,19 @@ export function ReportView({
           <div className="mt-3 space-y-2">
             {step1.recentEventOutcomes.filter((o) => o.risky).map((o, i) => (
               <div key={i} className="[word-break:keep-all] rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                {o.name}({o.date}) 결과가 예상 밖입니다 — {o.detail}
+                {o.name}({slashDate(o.date)}) 결과가 예상 밖입니다 — {o.detail}
+                {o.url && (
+                  <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-1 block underline text-rose-400 hover:text-rose-300">
+                    자세히 보기 →
+                  </a>
+                )}
               </div>
             ))}
           </div>
         )}
         {step1.upcomingEvents && step1.upcomingEvents.length > 0 && (
           <p className="mt-2 text-xs text-zinc-500">
-            14일 내 예정된 이벤트: {step1.upcomingEvents.map((e) => `${e.name}(${e.date})`).join(", ")}
+            14일 내 예정된 이벤트: {step1.upcomingEvents.map((e) => `${e.name}(${slashDate(e.date)})`).join(", ")}
           </p>
         )}
       </StepCard>

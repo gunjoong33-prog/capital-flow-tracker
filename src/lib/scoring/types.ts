@@ -29,6 +29,7 @@ export interface EventOutcomeItem {
   date: string;
   risky: boolean;
   detail: string;
+  url?: string;
 }
 export interface Step1Result {
   vetoTriggered: boolean; // 거부권 발동 여부

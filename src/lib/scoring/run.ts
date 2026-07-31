@@ -56,6 +56,12 @@ function nbsp(s: string): string {
   return s.replace(/ /g, " ");
 }
 
+/** "YYYY-MM-DD" → "YYYY/M/D"(선행 0 없이). 1단계 분석 지표 표의 날짜 표기를 "/" 구분으로 통일. */
+function slashDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${y}/${m}/${d}`;
+}
+
 function fmt(v: number | null, decimals = 2, unit = ""): string {
   if (v === null || Number.isNaN(v)) return "확인 못함";
   // 돈 단위 큰 숫자는 천단위 콤마를 넣어야 자릿수를 한눈에 읽는다(6747378 -> 6,747,378).
@@ -632,16 +638,17 @@ export async function runDailyAnalysis(manualInputs: {
       met: !hasSevereNews,
     },
     ...recentOutcomes.map((o) => ({
-      label: `${o.name}(${o.date}) 실제 결과`,
+      label: `${o.name}(${slashDate(o.date)}) 실제 결과`,
       criterion: "예상 범위 내(서프라이즈 아님)",
       value: o.detail,
       met: !o.risky,
+      url: o.url,
     })),
     {
       label: "14일 내 예정된 이벤트",
       criterion: "-",
       value: upcomingEvents.length > 0
-        ? upcomingEvents.map((e) => `${e.name}(${e.date.toISOString().slice(0, 10)})`).join("\n")
+        ? upcomingEvents.map((e) => `${e.name}(${slashDate(e.date.toISOString().slice(0, 10))})`).join("\n")
         : "없음",
       met: null,
     },

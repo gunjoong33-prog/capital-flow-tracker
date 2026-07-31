@@ -18,6 +18,7 @@ const FRED_SERIES: Record<string, string> = {
   [METRICS.US_NFP]: "PAYEMS",
   [METRICS.US_PPI]: "PPIFIS",
   [METRICS.US_PCE]: "PCEPI",
+  [METRICS.US_PCE_CORE]: "PCEPILFE",
   [METRICS.FED_FUNDS_RATE]: "DFEDTARU",
   // 아래 4개는 평소엔 Yahoo(yahoo.ts)가 당일 종가를 담당하고, 이건 Yahoo가 실패한 날에만
   // 쓰이는 폴백 공식 소스다(연준 H.10·EIA 원자료, 2~3영업일 지연). pipeline.ts에서 Yahoo 포인트를
