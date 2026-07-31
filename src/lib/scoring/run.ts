@@ -1,4 +1,4 @@
-import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculateCumulativeReturn } from "@/lib/metrics";
+import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculatePercentileByCount, calculateCumulativeReturn } from "@/lib/metrics";
 import { getRecentRiskyNews, newsItemWeight } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
@@ -647,38 +647,80 @@ export async function runDailyAnalysis(manualInputs: {
     },
   ];
 
-  // 2단계
+  // 2단계 — 원래는 7개 전부 "최근 N기간 연속 상승/하락" 트렌드만 봤다. 문제는 RRP·크레딧
+  // 스프레드처럼 이미 구조적 바닥(또는 극단적으로 우호적인 수준)에 도달한 지표는 "더 나아짐"이
+  // 물리적으로 불가능해 영구 미충족에 갇힌다는 점 — 연준 자체 금융여건지수(NFCI)나 월가가 하이일드
+  // 스프레드를 percentile로 읽는 방식과도 다르다(트렌드가 아니라 수준을 본다). 그래서 WRESBAL·RRP·
+  // 크레딧 스프레드 3개에는 "이미 충분히 우호적인 수준이면 트렌드와 무관하게 충족"이라는 예외를
+  // 추가한다. 단, RRP는 다르다 — 실제 리서치(Apollo Academy 등)는 RRP 고갈을 "방파제가 사라져
+  // 이후 QT가 지준을 직접 흡수하는 위험 국면"으로 읽지 "계속 우호적"으로 읽지 않는다. 그래서 RRP는
+  // 자동 충족이 아니라 판정 자체를 무효화(N/A, 분모에서 제외)한다.
   const walcl = await risingCheck(METRICS.WALCL, 2);
   const m2 = await m2YoyAcceleration();
   const reserves = await risingCheck(METRICS.TOTRESNS, 4);
+  const reservesPercentile = reserves.latestValue !== null
+    ? await calculatePercentile(METRICS.TOTRESNS, reserves.latestValue)
+    : null;
+  // 2025-12 FOMC가 지준을 "ample(충분)" 수준으로 판단해 RMP(지준관리매입)로 일정 범위 내 유지를
+  // 시작했다 — 즉 연준 스스로 "계속 늘어야 좋다"가 아니라 "목표 범위서 안정"을 목표로 삼는다.
+  // 정확한 ample 달러 임계값은 명목 GDP 성장에 따라 계속 바뀌어 하드코딩하기 부적절하므로,
+  // 자체 최근 1년 분포의 상위 25%(75%ile 이상)를 "이미 충분한 수준"의 근사치로 쓴다.
+  const reservesAmple = reservesPercentile !== null && reservesPercentile >= 75;
   const rrp = await fallingCheck(METRICS.RRP, 3);
+  const rrpStatus = rrp.latestValue !== null ? rrpBufferStatus(rrp.latestValue) : null;
   const tga = await fallingCheck(METRICS.TGA, 3);
   const realRate2 = await fallingCheck(METRICS.REAL_RATE, 3);
+  // REAL_RATE는 FRED 월간 지표라 calculatePercentile의 "최근 365일" 날짜창에는 12~13개월치밖에
+  // 안 잡혀 표본 30개 기준을 영원히 못 채운다 — risingCheck/fallingCheck가 월간 지표 때문에 날짜창
+  // 대신 개수 기준으로 바꾼 것과 같은 문제라 calculatePercentileByCount(개수 기준)를 쓴다.
+  const realRatePercentile = realRate2.latestValue !== null
+    ? await calculatePercentileByCount(METRICS.REAL_RATE, realRate2.latestValue, 60)
+    : null;
+  const realRateAlreadyLow = realRatePercentile !== null && realRatePercentile <= 25;
   const creditSpread = await fallingCheck(METRICS.CREDIT_SPREAD, 3);
+  const creditSpreadBp = creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null;
+  // 300bp 미만 = creditSpreadZone()이 이미 "과도한 낙관"으로 분류하는 구간과 동일한 기준을 재사용 —
+  // 화면에 표시되는 구간 라벨과 점수 판정이 서로 다른 기준을 쓰던 불일치를 없앤다.
+  const creditSpreadAlreadyTight = creditSpreadBp !== null && creditSpreadBp < 300;
 
   const step2 = scoreStep2({
     walclIncreasing: walcl.met,
     m2GrowthRising2Months: m2.met,
-    reservesRising4Weeks: reserves.met,
-    rrpDeclining: rrp.met,
+    reservesRising4Weeks: reservesAmple ? true : reserves.met,
+    rrpDeclining: rrpStatus?.depleted ? null : rrp.met,
     tgaDeclining: tga.met,
-    realRateFallingOrLowFlat: realRate2.met,
-    creditSpreadNarrowing: creditSpread.met,
+    realRateFallingOrLowFlat: realRateAlreadyLow ? true : realRate2.met,
+    creditSpreadNarrowing: creditSpreadAlreadyTight ? true : creditSpread.met,
   });
   details.step2 = [
     { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
     { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향(가속)", value: m2.detail, met: m2.met },
-    { label: "기준잔액(WRESBAL)", criterion: "최근 4주 연속 증가", value: fmt(reserves.latestValue, 0, "백만달러"), met: reserves.met },
-    { label: "RRP(역레포 잔액)", criterion: "최근 3기간 연속 감소", value: fmt(rrp.latestValue, 2, "십억달러"), met: rrp.met },
+    {
+      label: "기준잔액(WRESBAL)",
+      criterion: "최근 4주 연속 증가 (또는 자체 1년 분포 상위 25%=이미 ample)",
+      value: `${fmt(reserves.latestValue, 0, "백만달러")}${reservesPercentile !== null ? ` — ${reservesPercentile}%ile` : ""}`,
+      met: reservesAmple ? true : reserves.met,
+    },
+    {
+      label: "RRP(역레포 잔액)",
+      criterion: rrpStatus?.depleted ? "판정 무효(N/A) — 방파제 고갈, 분모 제외" : "최근 3기간 연속 감소",
+      value: fmt(rrp.latestValue, 2, "십억달러"),
+      met: rrpStatus?.depleted ? null : rrp.met,
+    },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
-    { label: "실질금리(10년)", criterion: "최근 3기간 연속 하락\n(또는 낮은 데서 횡보)", value: fmt(realRate2.latestValue, 2, "%"), met: realRate2.met },
+    {
+      label: "실질금리(10년)",
+      criterion: "최근 3기간 연속 하락 (또는 자체 이력 하위 25%=이미 낮은 수준)",
+      value: `${fmt(realRate2.latestValue, 2, "%")}${realRatePercentile !== null ? ` — ${realRatePercentile}%ile` : " — 이력 부족(percentile 계산 불가)"}`,
+      met: realRateAlreadyLow ? true : realRate2.met,
+    },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
-      criterion: "최근 3기간 연속 축소",
+      criterion: "최근 3기간 연속 축소 (또는 300bp 미만=이미 과도한 낙관 구간)",
       value: creditSpread.latestValue !== null
         ? `${(creditSpread.latestValue * 100).toFixed(0)}bp — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
-      met: creditSpread.met,
+      met: creditSpreadAlreadyTight ? true : creditSpread.met,
     },
   ];
 

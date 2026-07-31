@@ -73,6 +73,24 @@ export async function calculatePercentile(
   return Math.round((belowCount / values.length) * 100);
 }
 
+/**
+ * calculatePercentile과 같지만 "최근 365일" 날짜창 대신 "최근 N개 데이터포인트"를 쓴다.
+ * REAL_RATE 같은 월간 지표는 365일 창에 12~13개월치밖에 안 잡혀 표본 30개 기준을 영원히
+ * 못 채운다(risingCheck/fallingCheck가 월간 지표 때문에 날짜창 대신 개수 기준으로 바꾼 것과
+ * 같은 이유 — getMetricHistoryByCount 참고).
+ */
+export async function calculatePercentileByCount(
+  metric: string,
+  currentValue: number,
+  count: number
+): Promise<number | null> {
+  const history = await getMetricHistoryByCount(metric, count);
+  if (history.length < 30) return null;
+  const values = history.map((h) => h.value).sort((a, b) => a - b);
+  const belowCount = values.filter((v) => v <= currentValue).length;
+  return Math.round((belowCount / values.length) * 100);
+}
+
 /** N거래일 누적 수익률(%) — 5단계 나스닥/러셀/BTC 등. */
 export async function calculateCumulativeReturn(
   metric: string,
