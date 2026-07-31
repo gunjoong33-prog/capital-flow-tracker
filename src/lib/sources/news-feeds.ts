@@ -225,21 +225,28 @@ function parseGoogleNewsItems(xml: string): CategoryHeadline[] {
   }).filter((h) => h.title && h.url);
 }
 
-// "국내 정치"/"국내 경제" 검색어가 너무 넓어서(구글 뉴스가 "정치"·"경제" 단어만 봐도 매칭시킴)
-// 박람회·강좌·기념식·연구 발표처럼 자본흐름과 무관한 지역/행정 뉴스가 다수 섞였다. 제외 목록은
-// 무한히 늘어나는 예외를 다 못 잡으니, 대신 "이 사이트가 실제로 다루는 주제와 관련 있는가"를
-// 포함 키워드로 판정한다 — 아래 키워드가 하나도 없으면 노출하지 않는다(세계 정치/경제·기술
-// 카테고리는 검색어 자체가 이미 좁아서 이 필터를 안 쓴다).
-const DOMESTIC_RELEVANCE_KEYWORDS = [
+// "국내 정치"/"국제 정치" 같은 검색어가 너무 넓어서(구글 뉴스가 "정치"·"경제" 단어만 봐도
+// 매칭시킴) 박람회·강좌·기념식·연구 발표처럼 자본흐름과 무관한 지역/행정 뉴스가 다수 섞였다 —
+// 국내 카테고리만 필터링했더니 "세계 정치" 탭에서도 똑같이 무관한 지역 뉴스(예: "봉화군 국제
+// 수면치유박람회")가 나와서 세계 카테고리에도 같은 필터를 적용한다. 제외 목록은 무한히 늘어나는
+// 예외를 다 못 잡으니, 대신 "이 사이트가 실제로 다루는 주제와 관련 있는가"를 포함 키워드로
+// 판정한다 — 아래 키워드가 하나도 없으면 노출하지 않는다. "기술" 카테고리는 제외한다 — 그
+// 자체가 이미 좁은 주제 버킷이라 경제·정치 키워드로 거르면 정상적인 기술 뉴스까지 잘려나간다.
+// 짧고 흔한 낱말은 무관한 복합어 안에 우연히 포함돼 오탐을 낸다 — 예: "산업"은 "치유산업"(수면치유
+// 박람회 기사)에도 걸리고, "재정"은 "재정비"(도시 재정비 기사)에도 걸린다. 부분 문자열 매칭이라
+// 이런 키워드는 목록에서 뺐다 — 대신 "기업"·"실적"·"매출" 등 산업 관련 실제 뉴스는 다른 키워드로도
+// 대부분 걸린다.
+const NEWS_RELEVANCE_KEYWORDS = [
   "금리", "환율", "증시", "주가", "코스피", "코스닥", "국채", "채권", "수출", "수입", "무역", "관세",
   "GDP", "성장률", "물가", "인플레", "실업", "고용", "부동산", "규제", "정책", "투자", "외국인",
-  "연기금", "국민연금", "세금", "과세", "예산", "재정", "통화", "한은", "기준금리", "대통령", "국회",
-  "법안", "총리", "개각", "여당", "야당", "선거", "경제", "기업", "산업", "반도체", "수급", "자산",
-  "펀드", "은행", "증권", "상장", "IPO", "인수", "합병", "실적", "매출", "영업이익", "적자", "흑자",
+  "연기금", "국민연금", "세금", "과세", "예산", "통화", "한은", "기준금리", "대통령", "국회",
+  "법안", "총리", "개각", "여당", "야당", "선거", "경제", "기업", "반도체", "자산",
+  "펀드", "은행", "증권", "상장", "IPO", "인수합병", "실적", "매출", "영업이익", "적자", "흑자",
+  "전쟁", "분쟁", "충돌", "공습", "제재", "정상회담", "외교", "협정", "동맹", "무력", "군사",
 ];
 
-function isDomesticRelevant(title: string): boolean {
-  return DOMESTIC_RELEVANCE_KEYWORDS.some((kw) => title.includes(kw));
+function isRelevant(title: string): boolean {
+  return NEWS_RELEVANCE_KEYWORDS.some((kw) => title.includes(kw));
 }
 
 export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
@@ -250,8 +257,6 @@ export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20
   if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
   const xml = await res.text();
   const items = parseGoogleNewsItems(xml);
-  const filtered = key === "domestic-politics" || key === "domestic-economy"
-    ? items.filter((h) => isDomesticRelevant(h.title))
-    : items;
+  const filtered = key === "tech" ? items : items.filter((h) => isRelevant(h.title));
   return filtered.slice(0, limit);
 }
