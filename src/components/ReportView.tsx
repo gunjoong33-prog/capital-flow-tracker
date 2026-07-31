@@ -225,7 +225,7 @@ export function ReportView({
         summary={details?.step7Summary}
       >
         <Field label="양쪽 과열" value={step7.bothOverheated ? "예 — 매수 크기 30% 축소" : "아니오"} />
-        <Field label="공포 구간" value={step7.fearZone ? "예 — 역발상 기회 고려" : "아니오"} />
+        <Field label="극단적 공포/VIX 급등" value={step7.fearZone ? "예 — 역발상 기회 고려" : "아니오"} />
       </StepCard>
 
       {details?.step8 && details.step8.length > 0 && (
