@@ -131,9 +131,13 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
 
   // 주의: 장중에 호출하면 당일 거래량이 아직 다 안 찍혀서 volumeRatio가 낮게 나온다.
   // 매일 09시(KST) 파이프라인은 미국 장 마감 후라 이 문제가 없다 — 디버그용으로 장중에 호출할 때만 주의.
+  //
+  // 당일(recentVolume) 자신을 20일 평균의 분모에 포함시키면 안 된다 — "오늘 거래량이 최근 평균보다
+  // 몇 배인가"를 재는 지표인데 오늘 값이 자기 자신을 재는 기준에 섞여 들어가면 배수가 구조적으로
+  // 항상 낮게(자기 자신 쪽으로 쏠리며) 나온다. 당일 이전 20봉만으로 평균을 낸다.
   const recentVolume = volumes[volumes.length - 1];
-  const avgVolume20d =
-    volumes.slice(-20).reduce((sum, v) => sum + v, 0) / Math.min(20, volumes.length);
+  const priorVolumes = volumes.slice(0, -1).slice(-20);
+  const avgVolume20d = priorVolumes.reduce((sum, v) => sum + v, 0) / priorVolumes.length;
   const volumeRatio = recentVolume / avgVolume20d;
 
   return { name: `${SECTOR_LABELS[sectorKey]}(${ticker})`, ticker, return5d, changePct1d, volumeRatio };

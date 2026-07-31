@@ -144,7 +144,7 @@ function splitSentences(text: string): string[] {
  */
 function summarizeStep4(
   step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean },
-  fxOilDirection: { dollarDir: Direction; oilDir: Direction },
+  fxOilDirection: { dollarDir: Direction; oilDir: Direction; oilChangePct: number | null },
   context: {
     vetoTriggered: boolean;
     overseasQualifyingCount: number;
@@ -162,14 +162,25 @@ function summarizeStep4(
       : "달러는 실질금리와 다른 방향으로 움직이고 있어 디커플링(신호 약화) 경계가 필요합니다."
   );
 
-  const riskStance = fxOilDirection.dollarDir === "up" && fxOilDirection.oilDir === "up"
-    ? "Risk-Off(자본이 미국에 갇힘)"
-    : fxOilDirection.dollarDir === "down"
-      ? "Risk-On(신흥국으로 자금 확산)"
-      : "혼조";
+  // 유가 급등 오버라이드: 원래 로직은 달러(USD/KRW) 하락 하나만 보고 Risk-On을 판정해서, 지정학
+  // 리스크로 유가가 급등한 날에도 "신흥국으로 자금 확산"이라고 잘못 읽는 경우가 있었다(예:
+  // 2026-07-29 브렌트유 +7.9%·코스피 서킷브레이커가 겹쳤는데 원화 약세만 보고 Risk-On 판정).
+  // 일간 유가 상승률이 +3%를 넘으면 지정학적 공급 충격일 가능성이 커서, 환율 방향과 무관하게
+  // Risk-Off로 강제한다.
+  const oilSpike = fxOilDirection.oilChangePct !== null && fxOilDirection.oilChangePct > 3;
+
+  const riskStance = oilSpike
+    ? "Risk-Off(유가 급등 — 지정학 리스크 우선 반영)"
+    : fxOilDirection.dollarDir === "up" && fxOilDirection.oilDir === "up"
+      ? "Risk-Off(자본이 미국에 갇힘)"
+      : fxOilDirection.dollarDir === "down"
+        ? "Risk-On(신흥국으로 자금 확산)"
+        : "혼조";
 
   let reason: string;
-  if (context.vetoTriggered) {
+  if (oilSpike) {
+    reason = `유가가 하루 만에 ${fxOilDirection.oilChangePct!.toFixed(1)}% 급등해 공급 충격 우려가 원화 약세 신호보다 우선 반영된 것으로 보입니다.`;
+  } else if (context.vetoTriggered) {
     reason = "1단계에서 지정학적·정책 리스크로 거부권이 발동된 만큼 안전자산 선호가 영향을 준 것으로 보입니다.";
   } else if (context.jpySpike || context.carryZone === "위험") {
     reason = "3단계 엔 캐리 트레이드 청산 압박(스프레드 위험 구간 또는 엔화 변동성 급등)이 환시 변동성을 키운 것으로 보입니다.";
@@ -744,9 +755,21 @@ export async function runDailyAnalysis(manualInputs: {
   details.step3 = [
     { label: "미국 10년물(US10Y)", criterion: "참고용", value: fmt(us10y?.value ?? null, 2, "%"), met: null },
     { label: "일본 10년물(JP10Y)", criterion: "참고용", value: fmt(jp10y?.value ?? null, 2, "%"), met: null },
-    { label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: step3.zone === "안정" },
+    {
+      // 절대구간(안정/주의/위험)은 실제 3단계 점수(scoreStep3)에는 안 쓰이고 아래 백분위 행 하나로만
+      // 채점된다 — 그런데도 여기 met을 true/false로 보여주면 같은 스프레드 값을 두 행에서 두 번
+      // 채점하는 것처럼 보인다. 절대구간은 "참고용 미검증 구간표"라고 criterion에도 이미 적어뒀으니
+      // met은 null로 두고 설명용 라벨로만 남긴다.
+      label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간, 점수 미반영)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: null,
+    },
     { label: "스프레드 최근 1년 백분위", criterion: "50%ile 이상(중앙값보다 넓음) 시 충족", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: spreadPercentile !== null ? spreadPercentile >= 50 : null },
-    { label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 미만(숏 우위, 캐리 활발) 시 충족", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile < 50 : null },
+    {
+      // 이전엔 "50%ile 미만(캐리 활발)"을 충족(met=true)으로 표시했는데, 정작 scoreStep3의 실제 점수는
+      // 낮은 백분위(숏 쏠림)일수록 낮은 점수를 준다 — 캐리가 활발할수록(숏이 깊을수록) 청산 시 되돌림
+      // 폭탄이 커진다는 8단계 서술과도 같은 방향이다. met을 점수·서술과 같은 방향으로 맞춘다:
+      // 포지션이 정상화(50%ile 이상)돼 청산 압박이 낮을 때만 충족으로 본다.
+      label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 이상(숏 쏠림 완화, 청산 압박 낮음) 시 충족", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile >= 50 : null,
+    },
     {
       label: "엔화 변동성 급등(USD/JPY)",
       criterion: "일간 변동률이 최근 20일 평균 대비 2표준편차 초과 또는 1.5%p 초과",
@@ -779,7 +802,13 @@ export async function runDailyAnalysis(manualInputs: {
       value: goldStale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(goldFresh.daysOld, goldStale)}`,
       met: goldStale ? null : goldDir === "down",
     },
-    { label: "실질금리 방향", criterion: "상승 시 충족(사분면 최고점 조합의 방향)", value: dirLabel(realRateDir), met: realRateDir === "up" },
+    {
+      // 이전엔 여기서도 "상승 시 충족"으로 met을 매겼는데, 2단계에 이미 "실질금리 3기간 연속 하락(또는
+      // 낮은 데서 횡보) 시 충족"이라는 반대 부호의 단독 판정이 있다 — 같은 실질금리 방향이 리포트
+      // 안에서 두 번, 서로 반대로 채점되는 셈이다(하락=2단계 충족, 상승=4단계 충족). 실질금리 단독
+      // 평가는 2단계에만 남기고, 여기서는 사분면(quadrant) 조합을 구성하는 참고 정보로만 보여준다.
+      label: "실질금리 방향", criterion: "참고용(사분면 조합의 한 축 — 단독 충족/미충족 판정은 2단계에서)", value: dirLabel(realRateDir), met: null,
+    },
     {
       label: "달러 방향(USD/KRW)",
       criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함",
@@ -805,7 +834,7 @@ export async function runDailyAnalysis(manualInputs: {
 
   details.step4Summary = summarizeStep4(
     step4,
-    { dollarDir, oilDir: wtiDir },
+    { dollarDir, oilDir: wtiDir, oilChangePct: wtiChange.changePct },
     {
       vetoTriggered: step1.vetoTriggered,
       overseasQualifyingCount: step2.overseasQualifyingCount,

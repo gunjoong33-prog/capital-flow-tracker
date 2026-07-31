@@ -133,8 +133,14 @@ export function scoreStep5(input: Step5Input): Step5Result {
   if (input.djiReturn20d > input.spxReturn20d) riskAppetite = "안전선호";
   else if (input.spxReturn20d > input.djiReturn20d) riskAppetite = "위험선호";
 
-  // 격차가 작을수록 높은 점수(= 100 - 백분위)
-  const score = input.gapPercentile !== null ? (100 - input.gapPercentile) / 10 : 5;
+  // 격차가 작을수록 높은 점수(= 100 - 백분위). 단, 이 격차 백분위는 "나스닥100이 러셀2000보다
+  // 상대적으로 얼마나 부진한가"만 볼 뿐 절대 방향은 모른다 — 나스닥100 -10%·러셀2000 -4%처럼 둘 다
+  // 폭락한 날도 "격차가 크다"는 이유로 만점에 가까운 점수가 나와 위험선호 신호로 오독되는 문제가 있었다
+  // (예: 2026-07-30 리포트에서 9.8/10). 두 지수 모두 하락 중이면 "자금이 중소형주로 확산"이 아니라
+  // "대형주가 더 크게 팔렸다"는 뜻이므로 위험선호 판정 자체를 절반으로 감쇠한다.
+  const rawScore = input.gapPercentile !== null ? (100 - input.gapPercentile) / 10 : 5;
+  const bothNegative = input.ndxReturn20d < 0 && input.rutReturn20d < 0;
+  const score = bothNegative ? rawScore * 0.5 : rawScore;
 
   let cryptoAlignsWithRisk: boolean | null = null;
   if (input.btcReturn20d !== null) {

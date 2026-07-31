@@ -153,13 +153,39 @@ export async function syncNewsEvents(): Promise<{ found: number; errors: string[
   return { found: judged.length, errors };
 }
 
-/** 사용자 지정 우선순위(백악관·연준 → 권력 네트워크 유출 → 일반) 순으로, 같은 순위 안에서는 최신순. */
+/** 쿼리스트링·트레일링 슬래시를 제거해 같은 기사를 가리키는 URL 변형을 하나로 합친다. */
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`.replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * 사용자 지정 우선순위(백악관·연준 → 권력 네트워크 유출 → 일반) 순으로, 같은 순위 안에서는 최신순.
+ * date+url이 DB 유니크 제약이라 "같은 날 같은 URL" 중복은 이미 막히지만, 구글 뉴스 RSS가 같은
+ * 기사를 다음날 이후에도 계속 후보로 올려 매일 재수집·재판정되는 경우 날짜가 다르므로 별도 행으로
+ * 쌓인다 — 7일 누적 가중점수에 같은 사건이 여러 번 더해지는 원인. URL 정규화 기준으로 한 번 더
+ * dedup해 사건 단위로 한 번만 집계되게 한다(가장 우선순위 높고 최신인 대표 1건만 남김).
+ */
 export async function getRecentRiskyNews(days: number) {
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - days);
   since.setUTCHours(0, 0, 0, 0);
-  return db.newsEvent.findMany({
+  const rows = await db.newsEvent.findMany({
     where: { date: { gte: since } },
     orderBy: [{ priority: "asc" }, { date: "desc" }],
   });
+
+  const seen = new Set<string>();
+  const deduped = [];
+  for (const row of rows) {
+    const key = normalizeUrl(row.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
 }
