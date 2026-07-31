@@ -706,29 +706,29 @@ export async function runDailyAnalysis(manualInputs: {
   });
   details.step2 = [
     { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
-    { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향(가속)", value: m2.detail, met: m2.met },
+    { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향\n(가속)", value: m2.detail, met: m2.met },
     {
       label: "기준잔액(WRESBAL)",
-      criterion: "최근 4주 연속 증가 (또는 자체 1년 분포 상위 25%=이미 ample)",
+      criterion: "최근 4주 연속 증가\n(또는 자체 1년 분포 상위 25%=이미 ample)",
       value: `${fmt(reserves.latestValue, 0, "백만달러")}${reservesPercentile !== null ? ` — ${reservesPercentile}%ile` : ""}`,
       met: reservesAmple ? true : reserves.met,
     },
     {
       label: "RRP(역레포 잔액)",
-      criterion: rrpStatus?.depleted ? "판정 무효(N/A) — 방파제 고갈, 분모 제외" : "최근 3기간 연속 감소",
+      criterion: rrpStatus?.depleted ? "판정 무효(N/A)\n(방파제 고갈, 분모 제외)" : "최근 3기간 연속 감소",
       value: fmt(rrp.latestValue, 2, "십억달러"),
       met: rrpStatus?.depleted ? null : rrp.met,
     },
     { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
     {
       label: "실질금리(10년)",
-      criterion: "최근 3기간 연속 하락 (또는 자체 이력 하위 25%=이미 낮은 수준)",
+      criterion: "최근 3기간 연속 하락\n(또는 자체 이력 하위 25%=이미 낮은 수준)",
       value: `${fmt(realRate2.latestValue, 2, "%")}${realRatePercentile !== null ? ` — ${realRatePercentile}%ile` : " — 이력 부족(percentile 계산 불가)"}`,
       met: realRateAlreadyLow ? true : realRate2.met,
     },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
-      criterion: "최근 3기간 연속 축소 (또는 300bp 미만=이미 과도한 낙관 구간)",
+      criterion: "최근 3기간 연속 축소\n(또는 300bp 미만=이미 과도한 낙관 구간)",
       value: creditSpread.latestValue !== null
         ? `${(creditSpread.latestValue * 100).toFixed(0)}bp — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
@@ -811,23 +811,27 @@ export async function runDailyAnalysis(manualInputs: {
   // 있다는 뜻이다(외부 교차검증에서 실제로 확인된 사례: 주가는 T일 종가인데 US10Y는 T-1일 값). 날짜를
   // 맞출 방법은 없으니(FRED가 그 시점에 아직 발표 전) 대신 실제 기준일을 그대로 보여줘 혼동을 막는다.
   const dateLabel = (d: Date | undefined) => (d ? d.toISOString().slice(5, 10).replace("-", "/") : null);
+  // US10Y·JP10Y 둘 다 "값 옆에 실제 기준일을 표시"하므로 criterion도 같은 문구로 통일한다 — US10Y는
+  // FRED 발표 지연으로 자주 하루 늦고, JP10Y(MOF)는 대체로 당일이지만 소스가 다른 이상 언제든 어긋날
+  // 수 있어 똑같이 "다른 지표와 날짜가 다를 수 있다"는 일반적 주의 문구를 쓴다.
+  const asOfCriterion = "참고용\n(다른 지표와 발표 기준일이 다를 수 있어 실제 기준일 표시)";
   details.step3 = [
-    { label: "미국 10년물(US10Y)", criterion: "참고용 — FRED 발표가 주가보다 1영업일 늦을 수 있음", value: `${fmt(us10y?.value ?? null, 2, "%")}${dateLabel(us10y?.date) ? ` (${dateLabel(us10y?.date)} 기준)` : ""}`, met: null },
-    { label: "일본 10년물(JP10Y)", criterion: "참고용", value: `${fmt(jp10y?.value ?? null, 2, "%")}${dateLabel(jp10y?.date) ? ` (${dateLabel(jp10y?.date)} 기준)` : ""}`, met: null },
+    { label: "미국 10년물(US10Y)", criterion: asOfCriterion, value: `${fmt(us10y?.value ?? null, 2, "%")}${dateLabel(us10y?.date) ? ` (${dateLabel(us10y?.date)} 기준)` : ""}`, met: null },
+    { label: "일본 10년물(JP10Y)", criterion: asOfCriterion, value: `${fmt(jp10y?.value ?? null, 2, "%")}${dateLabel(jp10y?.date) ? ` (${dateLabel(jp10y?.date)} 기준)` : ""}`, met: null },
     {
       // 절대구간(안정/주의/위험)은 실제 3단계 점수(scoreStep3)에는 안 쓰이고 아래 백분위 행 하나로만
       // 채점된다 — 그런데도 여기 met을 true/false로 보여주면 같은 스프레드 값을 두 행에서 두 번
       // 채점하는 것처럼 보인다. 절대구간은 "참고용 미검증 구간표"라고 criterion에도 이미 적어뒀으니
       // met은 null로 두고 설명용 라벨로만 남긴다.
-      label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험(미검증 참고 구간, 점수 미반영)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: null,
+      label: "US10Y-JP10Y 스프레드", criterion: "≥350bp 안정 / 250~349bp 주의 / <250bp 위험\n(미검증 참고 구간, 점수 미반영)", value: `${step3.spreadBp}bp — ${step3.zone}`, met: null,
     },
-    { label: "스프레드 최근 1년 백분위", criterion: "50%ile 이상(중앙값보다 넓음) 시 충족", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: spreadPercentile !== null ? spreadPercentile >= 50 : null },
+    { label: "스프레드 최근 1년 백분위", criterion: "50%ile 이상 시 충족\n(중앙값보다 넓음)", value: spreadPercentile !== null ? `${spreadPercentile}%ile` : "데이터 부족(1년 미만)", met: spreadPercentile !== null ? spreadPercentile >= 50 : null },
     {
       // 이전엔 "50%ile 미만(캐리 활발)"을 충족(met=true)으로 표시했는데, 정작 scoreStep3의 실제 점수는
       // 낮은 백분위(숏 쏠림)일수록 낮은 점수를 준다 — 캐리가 활발할수록(숏이 깊을수록) 청산 시 되돌림
       // 폭탄이 커진다는 8단계 서술과도 같은 방향이다. met을 점수·서술과 같은 방향으로 맞춘다:
       // 포지션이 정상화(50%ile 이상)돼 청산 압박이 낮을 때만 충족으로 본다.
-      label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 이상(숏 쏠림 완화, 청산 압박 낮음) 시 충족", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile >= 50 : null,
+      label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 이상 시 충족\n(숏 쏠림 완화, 청산 압박 낮음)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile >= 50 : null,
     },
     {
       label: "엔화 변동성 급등(USD/JPY)",
