@@ -42,6 +42,18 @@ console.assert(
 );
 console.log("✅ 해외 7/7 충족 → 10점\n");
 
+console.log("=== 5단계 감쇠 엣지케이스 (나스닥만 급락, 러셀은 소폭 플러스) ===");
+const step5EdgeCase = scoreStep5({
+  ndxReturn20d: -10, rutReturn20d: 0.5, gapPercentile: 2, djiReturn20d: 0, spxReturn20d: 0,
+  btcReturn20d: null, ethReturn20d: null,
+});
+console.log(step5EdgeCase);
+console.assert(
+  step5EdgeCase.score <= 5,
+  `❌ 나스닥100 -10%(급락)면 러셀2000이 플러스여도 위험선호 오독 방지를 위해 감쇠(원점수의 절반 이하)돼야 함: ${step5EdgeCase.score}`
+);
+console.log("✅ 나스닥100 -10%/러셀2000 +0.5% → bothNegative 조건을 안 타도 감쇠됨(만점 오독 방지)\n");
+
 console.log("=== 4단계 진짜 2x2 ===");
 const step4 = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up" });
 console.assert(step4.score === 10, "❌ 금↓실질금리↑는 10점(성장주 매수)이어야 함");

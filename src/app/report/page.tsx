@@ -74,8 +74,11 @@ async function getReport() {
 export default async function ReportPage() {
   const [report, freshness] = await Promise.all([getReport(), checkReportFreshness()]);
 
+  // timeZone을 명시하지 않으면 서버 기본 시간대(Vercel은 UTC)를 타서, KST 00~09시 접속자에게는
+  // 화면에 표시되는 날짜가 실제 한국 날짜보다 하루 전으로 보이는 문제가 있었다(외부 교차검증 지적,
+  // 코드 확인 결과 실제로 존재). 이 사이트는 한국 사용자 대상이라 항상 KST 기준으로 표시한다.
   const today = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric", weekday: "long",
+    year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "Asia/Seoul",
   });
 
   return (

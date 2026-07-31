@@ -105,6 +105,7 @@ interface YahooChartWithVolume {
       {
         timestamp: number[];
         indicators: { quote: [{ close: (number | null)[]; volume: (number | null)[] }] };
+        meta: { currentTradingPeriod: { regular: { start: number; end: number } } };
       },
     ] | null;
     error: { code: string; description: string } | null;
@@ -121,7 +122,7 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
   if (!result) throw new Error(`Yahoo ${ticker}: 데이터 없음`);
 
   const closes = result.indicators.quote[0].close.filter((v): v is number => v !== null);
-  const volumes = result.indicators.quote[0].volume.filter((v): v is number => v !== null);
+  let volumes = result.indicators.quote[0].volume.filter((v): v is number => v !== null);
 
   const last = closes.length;
   const close5dAgo = closes[Math.max(0, last - 6)];
@@ -129,6 +130,17 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
   const closePrevDay = closes[Math.max(0, last - 2)];
   const return5d = ((closeLatest - close5dAgo) / close5dAgo) * 100;
   const changePct1d = ((closeLatest - closePrevDay) / closePrevDay) * 100;
+
+  // /report 페이지는 방문할 때마다 이 함수를 실시간 호출한다(09시 파이프라인 전용이 아니다) — 그래서
+  // 미국 장중(KST 22:30~05:00경)에 방문하면 마지막 봉이 아직 장이 안 끝난 "당일 진행 중" 봉이라
+  // 거래량이 다 안 찍힌 채로 20일 평균과 비교돼 volumeRatio가 구조적으로 낮게 나온다. "지금이
+  // 마감 전인가"만 보면 장 시작 전(프리마켓)에도 참으로 나와 이미 완결된 어제 봉까지 잘못 잘라내니,
+  // 마지막 봉의 타임스탬프가 실제로 "오늘 정규장 시작 이후"인지도 함께 확인해야 한다 — 오늘 봉이
+  // 아직 없으면(장 시작 전) 그대로 두고, 오늘 봉이 이미 있는데 마감 전이면(장중) 그 봉만 제외한다.
+  const { start: sessionStart, end: sessionEnd } = result.meta.currentTradingPeriod.regular;
+  const lastTimestampMs = result.timestamp[result.timestamp.length - 1] * 1000;
+  const lastCandleIsTodayInProgress = lastTimestampMs >= sessionStart * 1000 && Date.now() < sessionEnd * 1000;
+  if (lastCandleIsTodayInProgress) volumes = volumes.slice(0, -1);
 
   // 주의: 장중에 호출하면 당일 거래량이 아직 다 안 찍혀서 volumeRatio가 낮게 나온다.
   // 매일 09시(KST) 파이프라인은 미국 장 마감 후라 이 문제가 없다 — 디버그용으로 장중에 호출할 때만 주의.

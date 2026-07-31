@@ -138,9 +138,13 @@ export function scoreStep5(input: Step5Input): Step5Result {
   // 폭락한 날도 "격차가 크다"는 이유로 만점에 가까운 점수가 나와 위험선호 신호로 오독되는 문제가 있었다
   // (예: 2026-07-30 리포트에서 9.8/10). 두 지수 모두 하락 중이면 "자금이 중소형주로 확산"이 아니라
   // "대형주가 더 크게 팔렸다"는 뜻이므로 위험선호 판정 자체를 절반으로 감쇠한다.
+  // 처음엔 "둘 다 음수일 때만" 감쇠했는데, 나스닥100 -10%·러셀2000 +0.5%처럼 나스닥만 급락하고
+  // 러셀은 소폭이라도 플러스인 경우엔 여전히 감쇠가 안 걸려 똑같은 만점 오독이 재현됐다(외부
+  // 교차검증 지적) — 문제의 본질은 "대형 기술주가 빠지고 있는가"이지 "둘 다 마이너스인가"가
+  // 아니므로, 나스닥100 자체가 마이너스면 감쇠하도록 조건을 넓힌다.
   const rawScore = input.gapPercentile !== null ? (100 - input.gapPercentile) / 10 : 5;
-  const bothNegative = input.ndxReturn20d < 0 && input.rutReturn20d < 0;
-  const score = bothNegative ? rawScore * 0.5 : rawScore;
+  const ndxDeclining = input.ndxReturn20d < 0;
+  const score = ndxDeclining ? rawScore * 0.5 : rawScore;
 
   let cryptoAlignsWithRisk: boolean | null = null;
   if (input.btcReturn20d !== null) {
