@@ -390,10 +390,10 @@ interface DailyChange {
  * USD/KRW·USD/JPY·WTI·브렌트는 평소 Yahoo(당일 종가)가 채우고, Yahoo가 실패한 날에만
  * FRED(연준·EIA 공식 소스, 2~3영업일 지연)로 자동 대체된다 — source로 어느 쪽인지 구분한다.
  */
-async function dailyChange(metric: string): Promise<DailyChange> {
-  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+async function dailyChange(metric: string, asOf: Date = new Date()): Promise<DailyChange> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
   if (!curr) return { latest: null, changeAmount: null, changePct: null, source: null, daysOld: null };
-  const daysOld = Math.round((Date.now() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  const daysOld = Math.round((asOf.getTime() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
   if (!prev) return { latest: curr.value, changeAmount: null, changePct: null, source: curr.source, daysOld };
   const changeAmount = curr.value - prev.value;
   const changePct = prev.value !== 0 ? (changeAmount / prev.value) * 100 : null;
@@ -428,8 +428,8 @@ interface TrendCheck {
  * 날짜창이 아니라 "최근 N개 데이터포인트"로 가져온다 — 월간 지표(TOTRESNS, REAL_RATE 등)는
  * 발표가 몇 달씩 밀리기도 해서 날짜창 방식으론 필요한 개수를 못 채우는 경우가 있었다.
  */
-async function risingCheck(metric: string, periods: number): Promise<TrendCheck> {
-  const history = await getMetricHistoryByCount(metric, periods + 1);
+async function risingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
+  const history = await getMetricHistoryByCount(metric, periods + 1, asOf);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   if (history.length < periods + 1) return { met: null, latestValue };
   let met = true;
@@ -439,8 +439,8 @@ async function risingCheck(metric: string, periods: number): Promise<TrendCheck>
   return { met, latestValue };
 }
 
-async function fallingCheck(metric: string, periods: number): Promise<TrendCheck> {
-  const history = await getMetricHistoryByCount(metric, periods + 1);
+async function fallingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
+  const history = await getMetricHistoryByCount(metric, periods + 1, asOf);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   if (history.length < periods + 1) return { met: null, latestValue };
   let met = true;
@@ -455,8 +455,8 @@ async function fallingCheck(metric: string, periods: number): Promise<TrendCheck
  * 즉 성장 자체가 아니라 성장 속도가 가속되는지를 본다(노션 v2 프롬프트 원문 그대로).
  * YoY(이번달) > YoY(지난달) > YoY(지지난달)이면 충족.
  */
-async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
-  const history = await getMetricHistoryByCount(METRICS.M2, 20); // 3개월치 YoY 계산에 최소 15개월 필요, 여유 있게 20개
+async function m2YoyAcceleration(asOf: Date = new Date()): Promise<TrendCheck & { detail: string }> {
+  const history = await getMetricHistoryByCount(METRICS.M2, 20, asOf); // 3개월치 YoY 계산에 최소 15개월 필요, 여유 있게 20개
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   const n = history.length;
   if (n < 15) return { met: null, latestValue, detail: "데이터 부족" };
@@ -481,11 +481,11 @@ async function m2YoyAcceleration(): Promise<TrendCheck & { detail: string }> {
  * 해외 지표 7개 집계엔 넣지 않고 참고용 보조 지표로만 보여준다 — 방향성(상승/하락) 확인용.
  * 세 시리즈 모두 이미 수집돼있는 데이터라 별도 백필 없이 계산만 하면 된다.
  */
-async function netLiquidityTrend(): Promise<{ detail: string; risingTrend: boolean | null }> {
+async function netLiquidityTrend(asOf: Date = new Date()): Promise<{ detail: string; risingTrend: boolean | null }> {
   const [walcl, tga, rrp] = await Promise.all([
-    getMetricHistoryByCount(METRICS.WALCL, 5),
-    getMetricHistoryByCount(METRICS.TGA, 5),
-    getMetricHistoryByCount(METRICS.RRP, 5),
+    getMetricHistoryByCount(METRICS.WALCL, 5, asOf),
+    getMetricHistoryByCount(METRICS.TGA, 5, asOf),
+    getMetricHistoryByCount(METRICS.RRP, 5, asOf),
   ]);
   if (walcl.length === 0 || tga.length === 0 || rrp.length === 0) {
     return { detail: "데이터 부족", risingTrend: null };
@@ -515,8 +515,8 @@ function rrpBufferStatus(rrpBillions: number): { depleted: boolean; label: strin
  * 재무부의 실제 QRA 목표잔액은 분기별 발표문에만 있어 구조화된 데이터로 가져올 수 없다 —
  * 대신 최근 8기간 평균을 "최근 정상 범위"로 삼아 이탈도를 본다(공식 목표치의 근사치).
  */
-async function tgaDeviationFromRecentAverage(): Promise<{ detail: string; withinNormalRange: boolean | null }> {
-  const history = await getMetricHistoryByCount(METRICS.TGA, 9);
+async function tgaDeviationFromRecentAverage(asOf: Date = new Date()): Promise<{ detail: string; withinNormalRange: boolean | null }> {
+  const history = await getMetricHistoryByCount(METRICS.TGA, 9, asOf);
   if (history.length < 9) return { detail: "데이터 부족", withinNormalRange: null };
   const current = history[history.length - 1].value;
   const baseline = history.slice(0, 8).reduce((a, b) => a + b.value, 0) / 8;
@@ -527,10 +527,10 @@ async function tgaDeviationFromRecentAverage(): Promise<{ detail: string; within
   };
 }
 
-async function directionOf(metric: string): Promise<Direction | null> {
+async function directionOf(metric: string, asOf: Date = new Date()): Promise<Direction | null> {
   // 날짜창(예: 최근 10일) 방식은 월간 지표(REAL_RATE 등)가 발표 지연 시 데이터 0~1개만 잡혀
   // 늘 null->"flat"로 새는 버그가 있었다 — "최근 2개 데이터포인트"로 바꿔 발표 주기와 무관하게 동작.
-  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
   if (!prev || !curr) return null;
   if (curr.value > prev.value) return "up";
   if (curr.value < prev.value) return "down";
@@ -546,10 +546,13 @@ const STALE_WARN_DAYS = 4;
 const STALE_UNKNOWN_DAYS = 10;
 
 /** directionOf와 같지만, 최신 데이터포인트가 며칠 전 것인지(daysOld)도 함께 돌려준다(Yahoo 일별 지표 전용). */
-async function directionOfWithFreshness(metric: string): Promise<{ direction: Direction | null; daysOld: number | null }> {
-  const [prev, curr] = await getMetricHistoryByCount(metric, 2);
+async function directionOfWithFreshness(
+  metric: string,
+  asOf: Date = new Date()
+): Promise<{ direction: Direction | null; daysOld: number | null }> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
   if (!prev || !curr) return { direction: null, daysOld: null };
-  const daysOld = Math.round((Date.now() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  const daysOld = Math.round((asOf.getTime() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
   if (curr.value > prev.value) return { direction: "up", daysOld };
   if (curr.value < prev.value) return { direction: "down", daysOld };
   return { direction: "flat", daysOld };
@@ -560,8 +563,10 @@ async function directionOfWithFreshness(metric: string): Promise<{ direction: Di
  * |z| > 2 이거나 하루 변동률이 1.5%를 넘으면 "급등"으로 본다 — 표준편차가 아주 작을 때도
  * 절대 임계값으로 걸러지도록 두 조건을 OR로 묶었다. 데이터가 21개 미만이면 판정 보류(급등 아님).
  */
-async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | null; latestReturnPct: number | null }> {
-  const history = await getMetricHistory(METRICS.USDJPY, 60);
+async function detectJpyVolSpike(
+  asOf: Date = new Date()
+): Promise<{ spike: boolean; zScore: number | null; latestReturnPct: number | null }> {
+  const history = await getMetricHistory(METRICS.USDJPY, 60, asOf);
   if (history.length < 21) return { spike: false, zScore: null, latestReturnPct: null };
   const recent = history.slice(-21);
   const returns: number[] = [];
@@ -593,12 +598,18 @@ async function detectJpyVolSpike(): Promise<{ spike: boolean; zScore: number | n
  * details: 각 단계 판정에 쓰인 실제 기준·수치를 UI 표로 보여주기 위한 행 데이터.
  * 점수 계산과 별개 경로로 채워서, 표시용 가공이 점수 로직에 영향을 주지 않게 분리했다.
  */
-export async function runDailyAnalysis(manualInputs: {
-  sectors: SectorInput[];
-  missingSectorLabels?: string[]; // fetchAllSectors에서 개별적으로 실패한 섹터 이름("라벨(티커)") — 확인 못함으로 명시
-  bigTechReasons?: Record<string, string>;
-  institutionalSignals?: InstitutionalSignals;
-}) {
+export async function runDailyAnalysis(
+  manualInputs: {
+    sectors: SectorInput[];
+    missingSectorLabels?: string[]; // fetchAllSectors에서 개별적으로 실패한 섹터 이름("라벨(티커)") — 확인 못함으로 명시
+    bigTechReasons?: Record<string, string>;
+    institutionalSignals?: InstitutionalSignals;
+  },
+  // 과거 특정 날짜(예: 지난주 어느 날) 기준으로 2~8단계를 정확히 재구성할 때 쓴다 — 생략하면
+  // 기존과 동일하게 "지금 이 순간"을 기준으로 계산한다(일일 배치의 정상 동작은 무수정).
+  // 뉴스·이벤트·지표 시계열 전부 이 날짜를 "오늘"로 취급해 그 시점 이후 데이터는 안 본다.
+  asOf: Date = new Date()
+) {
   const details = {} as StepDetails;
 
   // 1단계 — 거부권은 "리스크 뉴스 가중점수가 기준 이상" 또는 "최근 발표된 FOMC/CPI/고용지표 결과가
@@ -606,13 +617,12 @@ export async function runDailyAnalysis(manualInputs: {
   // (월가 GPR·BGRI 방식 — newsItemWeight() 참고). (예정된 이벤트가 있다는 것만으로 발동하면
   // FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 — 그래서 "예정" 여부가 아니라
   // "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
-  const riskyNews = await getRecentRiskyNews(7);
+  const riskyNews = await getRecentRiskyNews(7, asOf);
   const upcomingEvents = await getUpcomingMajorEvents(14);
-  const recentOutcomes = await evaluateRecentEventOutcomes(5);
+  const recentOutcomes = await evaluateRecentEventOutcomes(5, asOf);
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
   const hasSevereNews = riskyNews.some((n) => n.severity === "high");
-  const now = new Date();
-  const newsRiskScore = riskyNews.reduce((sum, n) => sum + newsItemWeight(n, now), 0);
+  const newsRiskScore = riskyNews.reduce((sum, n) => sum + newsItemWeight(n, asOf), 0);
   const step1 = {
     ...scoreStep1({
       newsRiskScore,
@@ -667,29 +677,29 @@ export async function runDailyAnalysis(manualInputs: {
   // 추가한다. 단, RRP는 다르다 — 실제 리서치(Apollo Academy 등)는 RRP 고갈을 "방파제가 사라져
   // 이후 QT가 지준을 직접 흡수하는 위험 국면"으로 읽지 "계속 우호적"으로 읽지 않는다. 그래서 RRP는
   // 자동 충족이 아니라 판정 자체를 무효화(N/A, 분모에서 제외)한다.
-  const walcl = await risingCheck(METRICS.WALCL, 2);
-  const m2 = await m2YoyAcceleration();
-  const reserves = await risingCheck(METRICS.TOTRESNS, 4);
+  const walcl = await risingCheck(METRICS.WALCL, 2, asOf);
+  const m2 = await m2YoyAcceleration(asOf);
+  const reserves = await risingCheck(METRICS.TOTRESNS, 4, asOf);
   const reservesPercentile = reserves.latestValue !== null
-    ? await calculatePercentile(METRICS.TOTRESNS, reserves.latestValue)
+    ? await calculatePercentile(METRICS.TOTRESNS, reserves.latestValue, asOf)
     : null;
   // 2025-12 FOMC가 지준을 "ample(충분)" 수준으로 판단해 RMP(지준관리매입)로 일정 범위 내 유지를
   // 시작했다 — 즉 연준 스스로 "계속 늘어야 좋다"가 아니라 "목표 범위서 안정"을 목표로 삼는다.
   // 정확한 ample 달러 임계값은 명목 GDP 성장에 따라 계속 바뀌어 하드코딩하기 부적절하므로,
   // 자체 최근 1년 분포의 상위 25%(75%ile 이상)를 "이미 충분한 수준"의 근사치로 쓴다.
   const reservesAmple = reservesPercentile !== null && reservesPercentile >= 75;
-  const rrp = await fallingCheck(METRICS.RRP, 3);
+  const rrp = await fallingCheck(METRICS.RRP, 3, asOf);
   const rrpStatus = rrp.latestValue !== null ? rrpBufferStatus(rrp.latestValue) : null;
-  const tga = await fallingCheck(METRICS.TGA, 3);
-  const realRate2 = await fallingCheck(METRICS.REAL_RATE, 3);
+  const tga = await fallingCheck(METRICS.TGA, 3, asOf);
+  const realRate2 = await fallingCheck(METRICS.REAL_RATE, 3, asOf);
   // REAL_RATE는 FRED 월간 지표라 calculatePercentile의 "최근 365일" 날짜창에는 12~13개월치밖에
   // 안 잡혀 표본 30개 기준을 영원히 못 채운다 — risingCheck/fallingCheck가 월간 지표 때문에 날짜창
   // 대신 개수 기준으로 바꾼 것과 같은 문제라 calculatePercentileByCount(개수 기준)를 쓴다.
   const realRatePercentile = realRate2.latestValue !== null
-    ? await calculatePercentileByCount(METRICS.REAL_RATE, realRate2.latestValue, 60)
+    ? await calculatePercentileByCount(METRICS.REAL_RATE, realRate2.latestValue, 60, asOf)
     : null;
   const realRateAlreadyLow = realRatePercentile !== null && realRatePercentile <= 25;
-  const creditSpread = await fallingCheck(METRICS.CREDIT_SPREAD, 3);
+  const creditSpread = await fallingCheck(METRICS.CREDIT_SPREAD, 3, asOf);
   const creditSpreadBp = creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null;
   // 300bp 미만 = creditSpreadZone()이 이미 "과도한 낙관"으로 분류하는 구간과 동일한 기준을 재사용 —
   // 화면에 표시되는 구간 라벨과 점수 판정이 서로 다른 기준을 쓰던 불일치를 없앤다.
@@ -741,7 +751,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step2Aux = [];
 
   // BBB 등급 스프레드: 200bp 넘으면 우량 기업조차 차환에 어려움을 겪는다는 신호.
-  const bbb = await getLatestMetric(METRICS.CREDIT_SPREAD_BBB);
+  const bbb = await getLatestMetric(METRICS.CREDIT_SPREAD_BBB, asOf);
   const bbbBp = bbb ? bbb.value * 100 : null;
   details.step2Aux.push({
     label: "BBB 등급 스프레드",
@@ -751,7 +761,7 @@ export async function runDailyAnalysis(manualInputs: {
   });
 
   // 월가 순유동성 프레임워크(WALCL-TGA-RRP) 기반 보조 지표 3개.
-  const netLiq = await netLiquidityTrend();
+  const netLiq = await netLiquidityTrend(asOf);
   details.step2Aux.push({
     label: "순유동성 Net Liquidity",
     criterion: "연준 총자산-TGA-RRP. 상승하면 증시에 우호적(월가 프레임워크)",
@@ -771,7 +781,7 @@ export async function runDailyAnalysis(manualInputs: {
     });
   }
 
-  const tgaDeviation = await tgaDeviationFromRecentAverage();
+  const tgaDeviation = await tgaDeviationFromRecentAverage(asOf);
   details.step2Aux.push({
     label: "TGA 최근 평균 대비 이탈도",
     criterion: "최근 8기간 평균 대비 ±10%p 이탈 시 경계(공식 QRA 목표치 근사)",
@@ -788,17 +798,17 @@ export async function runDailyAnalysis(manualInputs: {
   );
 
   // 3단계
-  const us10y = await getLatestMetric(METRICS.US10Y);
-  const jp10y = await getLatestMetric(METRICS.JP10Y);
+  const us10y = await getLatestMetric(METRICS.US10Y, asOf);
+  const jp10y = await getLatestMetric(METRICS.JP10Y, asOf);
   // "US10Y_JP10Y_SPREAD_BP" 전용 버킷 사용 — METRICS.US10Y_2Y10Y_SPREAD는 실제 FRED T10Y2Y(미국
   // 2Y-10Y 곡선, -1~3%p 스케일) 원자료가 매일 그대로 쌓이는 버킷이라, 스케일이 전혀 다른 US10Y-JP10Y
   // bp값(150~250 스케일)을 그 안에서 순위 매기면 사실상 항상 100%ile로 나오는 버그가 있었다.
   const spreadPercentile = us10y && jp10y
-    ? await calculatePercentile("US10Y_JP10Y_SPREAD_BP", (us10y.value - jp10y.value) * 100)
+    ? await calculatePercentile("US10Y_JP10Y_SPREAD_BP", (us10y.value - jp10y.value) * 100, asOf)
     : null;
-  const cftcLatest = await getLatestMetric(METRICS.CFTC_JPY_NET);
-  const cftcPercentile = cftcLatest ? await calculatePercentile(METRICS.CFTC_JPY_NET, cftcLatest.value) : null;
-  const jpySpike = await detectJpyVolSpike();
+  const cftcLatest = await getLatestMetric(METRICS.CFTC_JPY_NET, asOf);
+  const cftcPercentile = cftcLatest ? await calculatePercentile(METRICS.CFTC_JPY_NET, cftcLatest.value, asOf) : null;
+  const jpySpike = await detectJpyVolSpike(asOf);
   const step3 = scoreStep3({
     us10y: us10y?.value ?? 0,
     jp10y: jp10y?.value ?? 0,
@@ -847,13 +857,13 @@ export async function runDailyAnalysis(manualInputs: {
 
   // 4단계 — 금·달러(USD/KRW)는 Yahoo 일별 지표라 며칠째 안 갱신되면 방향 판정 자체가 낡은 값 비교가
   // 될 수 있다. 실질금리(REAL_RATE)는 FRED 월간 지표라 이 신선도 검사 대상이 아니다.
-  const goldFresh = await directionOfWithFreshness(METRICS.GOLD);
+  const goldFresh = await directionOfWithFreshness(METRICS.GOLD, asOf);
   const goldStale = goldFresh.daysOld !== null && goldFresh.daysOld >= STALE_UNKNOWN_DAYS;
   const goldDir = goldStale ? "flat" : goldFresh.direction ?? "flat";
-  const realRateDir = (await directionOf(METRICS.REAL_RATE)) ?? "flat";
+  const realRateDir = (await directionOf(METRICS.REAL_RATE, asOf)) ?? "flat";
   // 달러 방향은 USD/KRW가 아니라 DXY(달러 인덱스) 기준 — 원화는 한국 고유 수급 노이즈가 커서
   // 글로벌 달러 강약의 대리변수로 부적합하다(위 METRICS.DXY 주석 참고).
-  const dollarFresh = await directionOfWithFreshness(METRICS.DXY);
+  const dollarFresh = await directionOfWithFreshness(METRICS.DXY, asOf);
   const dollarStale = dollarFresh.daysOld !== null && dollarFresh.daysOld >= STALE_UNKNOWN_DAYS;
   const dollarDir = dollarStale ? "flat" : dollarFresh.direction ?? "flat";
   const step4 = scoreStep4({ goldDirection: goldDir, realRateDirection: realRateDir, dollarDirection: dollarDir });
@@ -885,11 +895,11 @@ export async function runDailyAnalysis(manualInputs: {
 
   // 보조 지표 — 환율(USD/KRW, USD/JPY)·유가(WTI, 브렌트)의 전일 대비 변동. 원본 프롬프트의 4개 핵심 지표
   // 구조를 그대로 유지하려고 집계엔 안 넣고, 2단계와 같은 방식으로 별도 토글("보조 지표 보기")로 뺀다.
-  const usdKrwChange = await dailyChange(METRICS.USDKRW);
-  const usdJpyChange = await dailyChange(METRICS.USDJPY);
-  const wtiChange = await dailyChange(METRICS.WTI);
-  const brentChange = await dailyChange(METRICS.BRENT);
-  const wtiDir = (await directionOf(METRICS.WTI)) ?? "flat";
+  const usdKrwChange = await dailyChange(METRICS.USDKRW, asOf);
+  const usdJpyChange = await dailyChange(METRICS.USDJPY, asOf);
+  const wtiChange = await dailyChange(METRICS.WTI, asOf);
+  const brentChange = await dailyChange(METRICS.BRENT, asOf);
+  const wtiDir = (await directionOf(METRICS.WTI, asOf)) ?? "flat";
   details.step4Aux = [
     { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표\n(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
     { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
@@ -909,24 +919,24 @@ export async function runDailyAnalysis(manualInputs: {
   );
 
   // 5단계
-  const ndxReturn20d = (await calculateCumulativeReturn(METRICS.NDX, 20)) ?? 0;
-  const rutReturn20d = (await calculateCumulativeReturn(METRICS.RUT, 20)) ?? 0;
-  const djiReturn20d = (await calculateCumulativeReturn(METRICS.DJI, 20)) ?? 0;
-  const spxReturn20d = (await calculateCumulativeReturn(METRICS.SPX, 20)) ?? 0;
-  const btcReturn20d = await calculateCumulativeReturn(METRICS.BTC, 20);
-  const ethReturn20d = await calculateCumulativeReturn(METRICS.ETH, 20);
-  const gapPercentile = await calculatePercentile("NDX_RUT_GAP", ndxReturn20d - rutReturn20d);
+  const ndxReturn20d = (await calculateCumulativeReturn(METRICS.NDX, 20, asOf)) ?? 0;
+  const rutReturn20d = (await calculateCumulativeReturn(METRICS.RUT, 20, asOf)) ?? 0;
+  const djiReturn20d = (await calculateCumulativeReturn(METRICS.DJI, 20, asOf)) ?? 0;
+  const spxReturn20d = (await calculateCumulativeReturn(METRICS.SPX, 20, asOf)) ?? 0;
+  const btcReturn20d = await calculateCumulativeReturn(METRICS.BTC, 20, asOf);
+  const ethReturn20d = await calculateCumulativeReturn(METRICS.ETH, 20, asOf);
+  const gapPercentile = await calculatePercentile("NDX_RUT_GAP", ndxReturn20d - rutReturn20d, asOf);
   const step5 = scoreStep5({
     ndxReturn20d, rutReturn20d, gapPercentile, djiReturn20d, spxReturn20d, btcReturn20d, ethReturn20d,
   });
 
   // 마감가·전일 대비 변동폭·등락률 — 나스닥 카페 "매크로 환경 및 주요 지수 마감 동향" 형식 참고.
-  const ndxChange = await dailyChange(METRICS.NDX);
-  const rutChange = await dailyChange(METRICS.RUT);
-  const djiChange = await dailyChange(METRICS.DJI);
-  const spxChange = await dailyChange(METRICS.SPX);
-  const btcChange = await dailyChange(METRICS.BTC);
-  const ethChange = await dailyChange(METRICS.ETH);
+  const ndxChange = await dailyChange(METRICS.NDX, asOf);
+  const rutChange = await dailyChange(METRICS.RUT, asOf);
+  const djiChange = await dailyChange(METRICS.DJI, asOf);
+  const spxChange = await dailyChange(METRICS.SPX, asOf);
+  const btcChange = await dailyChange(METRICS.BTC, asOf);
+  const ethChange = await dailyChange(METRICS.ETH, asOf);
 
   const concentrationResult = step5.concentrationWarning
     ? step5.gapPp > 0
@@ -979,7 +989,7 @@ export async function runDailyAnalysis(manualInputs: {
   // 빅테크 7(Magnificent 7) 개별 종목 마감가·전일 대비 변동·등락 원인 — 나스닥100 쏠림 신호를
   // 실제로 이끄는 종목이 뭔지 드릴다운하는 참고용이라 충족열은 없다. 종합판단에서 가장 크게 움직인
   // 종목을 짚어줄 수 있도록 summarizeStep5보다 먼저 계산해둔다.
-  const bigTechChanges = await Promise.all(BIG_TECH_TICKERS.map((ticker) => dailyChange(ticker)));
+  const bigTechChanges = await Promise.all(BIG_TECH_TICKERS.map((ticker) => dailyChange(ticker, asOf)));
   const bigTechReasons = manualInputs.bigTechReasons ?? {};
   const reasonFor = (ticker: string) => bigTechReasons[ticker] ?? "원인 확인 못함(Gemini 미판정)";
   const bigTechMovers = BIG_TECH_TICKERS.map((ticker, i) => ({
@@ -1031,12 +1041,12 @@ export async function runDailyAnalysis(manualInputs: {
   details.step6Summary = summarizeStep6(step6, manualInputs.sectors);
 
   // 7단계
-  const vixRow = await getLatestMetric(METRICS.VIX);
-  const vixDaysOld = vixRow ? Math.round((Date.now() - vixRow.date.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const vixRow = await getLatestMetric(METRICS.VIX, asOf);
+  const vixDaysOld = vixRow ? Math.round((asOf.getTime() - vixRow.date.getTime()) / (1000 * 60 * 60 * 24)) : null;
   const vixStale = vixDaysOld !== null && vixDaysOld >= STALE_UNKNOWN_DAYS;
   const vix = vixStale ? null : (vixRow?.value ?? null);
   const vixStaleNote = !vixStale && vixDaysOld !== null && vixDaysOld >= STALE_WARN_DAYS ? ` (${vixDaysOld}일 전 데이터)` : "";
-  const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED);
+  const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED, asOf);
   const fearGreed = fearGreedMetric?.value ?? null;
   const step7 = scoreStep7({ vix, fearGreed });
 

@@ -182,12 +182,12 @@ function normalizeUrl(url: string): string {
  * 쌓인다 — 7일 누적 가중점수에 같은 사건이 여러 번 더해지는 원인. URL 정규화 기준으로 한 번 더
  * dedup해 사건 단위로 한 번만 집계되게 한다(가장 우선순위 높고 최신인 대표 1건만 남김).
  */
-export async function getRecentRiskyNews(days: number) {
-  const since = new Date();
+export async function getRecentRiskyNews(days: number, asOf: Date = new Date()) {
+  const since = new Date(asOf);
   since.setUTCDate(since.getUTCDate() - days);
   since.setUTCHours(0, 0, 0, 0);
   const rows = await db.newsEvent.findMany({
-    where: { date: { gte: since } },
+    where: { date: { gte: since, lte: asOf } },
     orderBy: [{ priority: "asc" }, { date: "desc" }],
   });
 
