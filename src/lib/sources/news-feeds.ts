@@ -202,6 +202,15 @@ export const NEWS_PAGE_CATEGORIES: { key: NewsPageCategoryKey; label: string; qu
   { key: "tech", label: "기술", query: "IT 기술" },
 ];
 
+// 구글 뉴스 자체 "토픽" 피드(뉴스 홈 상단 탭 — 세계·비즈니스 등) ID. 검색어 기반(q=...)이 아니라
+// 구글이 자체 편집 알고리즘으로 큐레이션한 섹션이라, "정치"·"경제" 같은 흔한 단어만 봐도 매칭되는
+// 검색 방식보다 훨씬 정확하다 — 봉화군 박람회 같은 무관한 지역 뉴스가 애초에 안 섞인다. 토픽 ID는
+// news.google.com 페이지 상단 탭의 실제 href에서 그대로 가져온 값(언어와 무관하게 안정적).
+const GOOGLE_NEWS_TOPIC_IDS: Partial<Record<NewsPageCategoryKey, string>> = {
+  "world-politics": "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtdHZHZ0pMVWlnQVAB", // 세계(World)
+  "world-economy": "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB", // 비즈니스(Business)
+};
+
 export interface CategoryHeadline {
   title: string;
   url: string;
@@ -252,11 +261,16 @@ function isRelevant(title: string): boolean {
 export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
   const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
   if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+  const topicId = GOOGLE_NEWS_TOPIC_IDS[key];
+  const url = topicId
+    ? `https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko`
+    : `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
   if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
   const xml = await res.text();
   const items = parseGoogleNewsItems(xml);
-  const filtered = key === "tech" ? items : items.filter((h) => isRelevant(h.title));
+  // 토픽 피드는 이미 구글 자체 편집 큐레이션이라 키워드 필터가 불필요(오히려 정상 기사를 잘라낼
+  // 위험) — 검색어 기반(topicId 없는 카테고리)일 때만 관련성 필터를 적용한다.
+  const filtered = topicId || key === "tech" ? items : items.filter((h) => isRelevant(h.title));
   return filtered.slice(0, limit);
 }
