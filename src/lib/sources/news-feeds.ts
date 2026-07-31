@@ -211,6 +211,12 @@ const GOOGLE_NEWS_TOPIC_IDS: Partial<Record<NewsPageCategoryKey, string>> = {
   "world-economy": "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB", // 비즈니스(Business)
 };
 
+// "대한민국"(Korea) 토픽 — 세계/비즈니스와 달리 정치·경제로 나뉘어 있지 않고 "한국 전체 주요
+// 뉴스"라 폭염·범죄·지역 뉴스 비중이 크다(실측: 70건 중 46건이 정치·경제 키워드 어디에도 안 걸림).
+// 그래서 이 토픽만 단독으로 쓰면 세계 카테고리와 달리 오히려 품질이 떨어진다 — 대신 기존 검색어
+// 기반 결과와 합쳐 후보 풀을 넓히고, 카테고리별 키워드 필터로 정치/경제를 가른다.
+const DOMESTIC_TOPIC_ID = "CAAqIQgKIhtDQkFTRGdvSUwyMHZNRFp4WkRNU0FtdHZLQUFQAQ";
+
 export interface CategoryHeadline {
   title: string;
   url: string;
@@ -245,32 +251,53 @@ function parseGoogleNewsItems(xml: string): CategoryHeadline[] {
 // 박람회 기사)에도 걸리고, "재정"은 "재정비"(도시 재정비 기사)에도 걸린다. 부분 문자열 매칭이라
 // 이런 키워드는 목록에서 뺐다 — 대신 "기업"·"실적"·"매출" 등 산업 관련 실제 뉴스는 다른 키워드로도
 // 대부분 걸린다.
-const NEWS_RELEVANCE_KEYWORDS = [
-  "금리", "환율", "증시", "주가", "코스피", "코스닥", "국채", "채권", "수출", "수입", "무역", "관세",
-  "GDP", "성장률", "물가", "인플레", "실업", "고용", "부동산", "규제", "정책", "투자", "외국인",
-  "연기금", "국민연금", "세금", "과세", "예산", "통화", "한은", "기준금리", "대통령", "국회",
-  "법안", "총리", "개각", "여당", "야당", "선거", "경제", "기업", "반도체", "자산",
-  "펀드", "은행", "증권", "상장", "IPO", "인수합병", "실적", "매출", "영업이익", "적자", "흑자",
-  "전쟁", "분쟁", "충돌", "공습", "제재", "정상회담", "외교", "협정", "동맹", "무력", "군사",
-];
+// 대한민국 토픽은 정치/경제로 안 나뉘어 있어 카테고리별로 직접 걸러야 한다 — 두 목록에 겹치는
+// 키워드(경제·정책 등)가 있어도 무방하다(어느 한쪽에라도 걸리면 해당 탭 후보로 채택).
+const DOMESTIC_RELEVANCE_KEYWORDS: Partial<Record<NewsPageCategoryKey, string[]>> = {
+  "domestic-politics": [
+    "대통령", "국회", "법안", "총리", "개각", "여당", "야당", "선거", "정치", "탄핵", "청문회",
+    "전쟁", "분쟁", "충돌", "공습", "제재", "정상회담", "외교", "협정", "동맹", "무력", "군사",
+  ],
+  "domestic-economy": [
+    "금리", "환율", "증시", "주가", "코스피", "코스닥", "국채", "채권", "수출", "수입", "무역", "관세",
+    "GDP", "성장률", "물가", "인플레", "실업", "고용", "부동산", "규제", "정책", "투자", "외국인",
+    "연기금", "국민연금", "세금", "과세", "예산", "통화", "한은", "기준금리", "경제", "기업",
+    "반도체", "자산", "펀드", "은행", "증권", "상장", "IPO", "인수합병", "실적", "매출", "영업이익", "적자", "흑자",
+  ],
+};
 
-function isRelevant(title: string): boolean {
-  return NEWS_RELEVANCE_KEYWORDS.some((kw) => title.includes(kw));
+async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
+  if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
+  const xml = await res.text();
+  return parseGoogleNewsItems(xml);
 }
 
 export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
   const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
   if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
+  const searchUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+
+  const domesticKeywords = DOMESTIC_RELEVANCE_KEYWORDS[key];
+  if (domesticKeywords) {
+    const topicUrl = `https://news.google.com/rss/topics/${DOMESTIC_TOPIC_ID}?hl=ko&gl=KR&ceid=KR:ko`;
+    const [topicItems, searchItems] = await Promise.all([
+      fetchGoogleNewsRss(topicUrl),
+      fetchGoogleNewsRss(searchUrl),
+    ]);
+    const seen = new Set<string>();
+    const merged = [...topicItems, ...searchItems].filter((h) => {
+      if (seen.has(h.url)) return false;
+      seen.add(h.url);
+      return true;
+    });
+    const filtered = merged.filter((h) => domesticKeywords.some((kw) => h.title.includes(kw)));
+    return filtered.slice(0, limit);
+  }
+
   const topicId = GOOGLE_NEWS_TOPIC_IDS[key];
-  const url = topicId
-    ? `https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko`
-    : `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
-  if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
-  const xml = await res.text();
-  const items = parseGoogleNewsItems(xml);
-  // 토픽 피드는 이미 구글 자체 편집 큐레이션이라 키워드 필터가 불필요(오히려 정상 기사를 잘라낼
-  // 위험) — 검색어 기반(topicId 없는 카테고리)일 때만 관련성 필터를 적용한다.
-  const filtered = topicId || key === "tech" ? items : items.filter((h) => isRelevant(h.title));
-  return filtered.slice(0, limit);
+  const items = await fetchGoogleNewsRss(topicId ? `https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko` : searchUrl);
+  // world 카테고리는 이미 구글 자체 편집 큐레이션(토픽)이라 필터가 불필요하고, tech는 좁은 주제
+  // 버킷이라 경제/정치 키워드로 거르면 정상 기술 뉴스까지 잘려나간다 — 둘 다 필터 없이 그대로.
+  return items.slice(0, limit);
 }
