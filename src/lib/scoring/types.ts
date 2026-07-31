@@ -36,7 +36,7 @@ export interface Step1Result {
   reason: string;
   // run.ts가 DB 조회 후 덧붙이는 필드라 pure.ts의 scoreStep1은 채우지 않는다 — 선택 필드로 둠.
   // (기존에 저장된 DailyReport에도 이 필드가 없을 수 있어 옵셔널이 하위호환에도 맞다)
-  riskyNews?: RiskyNewsItem[]; // Gemini가 리스크로 판정한 뉴스(있으면 UI에 요약+링크로 표시)
+  riskyNews?: RiskyNewsItem[]; // LLM이 리스크로 판정한 뉴스(있으면 UI에 요약+링크로 표시)
   upcomingEvents?: UpcomingEventItem[]; // 14일 내 예정된 FOMC·CPI·고용지표 등(정보용, 거부권과 무관)
   recentEventOutcomes?: EventOutcomeItem[]; // 최근 발표된 이벤트의 실제 결과 서프라이즈 판정(거부권 근거)
 }

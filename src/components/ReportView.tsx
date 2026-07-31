@@ -1,40 +1,12 @@
 import { StepCard, Field } from "@/components/StepCard";
 import { ScoreBadge, DecisionBadge } from "@/components/ScoreBadge";
+import { RiskyNewsList } from "@/components/RiskyNewsList";
 import { STEP_TIPS } from "@/lib/scoring/tips";
 import type {
   Step1Result, Step2Result, Step3Result, Step4Result,
   Step5Result, Step6Result, Step7Result, Step8Result,
   StepDetails,
 } from "@/lib/scoring/types";
-
-// 1단계 리스크 뉴스 심각도별 표시 스타일. high=단독으로도 즉시 거부권 발동, medium=명확한 리스크지만
-// 실제 조치·확전 신호 수준, low=경고·우려 표명 수준(누적돼야 리스크로 봄) — pure.ts newsItemWeight 참고.
-const SEVERITY_STYLE: Record<
-  "high" | "medium" | "low",
-  { box: string; text: string; badge: string; link: string; label: string }
-> = {
-  high: {
-    box: "bg-rose-500/10",
-    text: "text-rose-300",
-    badge: "bg-rose-500/30 text-rose-200",
-    link: "text-rose-400 hover:text-rose-300",
-    label: "심각 · 단독 즉시발동",
-  },
-  medium: {
-    box: "bg-amber-500/10",
-    text: "text-amber-300",
-    badge: "bg-amber-500/30 text-amber-200",
-    link: "text-amber-400 hover:text-amber-300",
-    label: "중간",
-  },
-  low: {
-    box: "bg-zinc-500/10",
-    text: "text-zinc-400",
-    badge: "bg-zinc-500/30 text-zinc-300",
-    link: "text-zinc-400 hover:text-zinc-300",
-    label: "경미 · 누적형",
-  },
-};
 
 /** "YYYY-MM-DD" → "YYYY/M/D"(선행 0 없이). run.ts의 slashDate와 같은 표기 규칙(1단계 표시용). */
 function slashDate(iso: string): string {
@@ -106,26 +78,7 @@ export function ReportView({
       <StepCard step={1} title="글로벌 환경" details={details?.step1} tip={STEP_TIPS[1]}>
         <Field label="거부권 발동" value={step1.vetoTriggered ? "예" : "아니오"} />
         <Field label="사유" value={step1.reason} />
-        {step1.riskyNews && step1.riskyNews.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {step1.riskyNews.map((n, i) => {
-              const style = SEVERITY_STYLE[n.severity];
-              return (
-                <div key={i} className={`rounded-md px-3 py-2 text-xs ${style.box}`}>
-                  <p className={`[word-break:keep-all] ${style.text}`}>
-                    <span className={`mr-1 rounded px-1 py-0.5 text-[10px] font-medium ${style.badge}`}>
-                      {style.label}
-                    </span>
-                    {n.summary}
-                  </p>
-                  <a href={n.url} target="_blank" rel="noopener noreferrer" className={`mt-1 inline-block underline ${style.link}`}>
-                    기사 보기 →
-                  </a>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {step1.riskyNews && step1.riskyNews.length > 0 && <RiskyNewsList riskyNews={step1.riskyNews} />}
         {step1.recentEventOutcomes && step1.recentEventOutcomes.filter((o) => o.risky).length > 0 && (
           <div className="mt-3 space-y-2">
             {step1.recentEventOutcomes.filter((o) => o.risky).map((o, i) => (
