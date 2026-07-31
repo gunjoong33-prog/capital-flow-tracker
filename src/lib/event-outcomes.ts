@@ -11,12 +11,23 @@ export interface EventOutcome {
 }
 
 /**
- * 최근 N개 관측치 대비 최신 변화량의 z-score. |z| > threshold면 "서프라이즈"로 본다.
+ * 최근 N개 관측치 대비 최신 변화량의 z-score.
  * CPI·NFP·PPI·PCE는 전부 월간 지표라 "최근 400일" 같은 날짜창으로 가져오면 달마다 일수가 달라
  * periods+2(=14)개를 못 채우는 달이 생긴다(risingCheck/fallingCheck·calculatePercentile과 같은
  * 문제) — 날짜창 대신 "최근 N개 데이터포인트"로 가져와야 발표 지연과 무관하게 안정적으로 계산된다.
+ *
+ * onlyHotSurprise: true면 z > threshold(예상보다 더 뜨거워짐)일 때만 risky, false면 |z| > threshold
+ * (방향 무관)로 risky를 판정한다. 물가 지표(CPI·PPI)는 "예상보다 덜 오름(디스인플레이션)"이 통상
+ * 주식시장에 우호적 서프라이즈라 그것까지 리스크로 잡으면 방향이 반대로 잡힌다 — true를 쓴다.
+ * 고용지표(NFP)는 "예상보다 잘 나옴"이 국면에 따라 호재·악재가 뒤집혀서(굿뉴스가 배드뉴스인 시기가
+ * 있음) 한쪽 방향으로 고정하는 게 더 위험하다고 판단해 false(방향 무관)를 유지한다.
  */
-async function zScoreSurprise(metric: string, periods: number, thresholdZ: number): Promise<{ risky: boolean; detail: string }> {
+async function zScoreSurprise(
+  metric: string,
+  periods: number,
+  thresholdZ: number,
+  onlyHotSurprise: boolean
+): Promise<{ risky: boolean; detail: string }> {
   const recent = await getMetricHistoryByCount(metric, periods + 1);
   if (recent.length < periods + 1) return { risky: false, detail: "데이터 부족(발표 반영 전이거나 이력 부족)" };
   const changes: number[] = [];
@@ -27,7 +38,7 @@ async function zScoreSurprise(metric: string, periods: number, thresholdZ: numbe
   const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length;
   const std = Math.sqrt(variance);
   const z = std > 0 ? (latestChange - mean) / std : 0;
-  const risky = Math.abs(z) > thresholdZ;
+  const risky = onlyHotSurprise ? z > thresholdZ : Math.abs(z) > thresholdZ;
   return { risky, detail: `변화량 ${latestChange.toFixed(1)} (최근 ${periods}개월 대비 z=${z.toFixed(2)})` };
 }
 
@@ -35,6 +46,8 @@ async function zScoreSurprise(metric: string, periods: number, thresholdZ: numbe
  * 근원(Core) PCE의 실제 YoY/전월대비 값을 표기한다. 헤드라인 PCE(식품·에너지 포함)는 화면에 안 보여주고
  * BEA 원본 링크로 안내한다 — 연준이 실제로 목표(YoY 2%)로 삼는 건 근원 PCE라 서프라이즈 판정·표시 둘 다
  * 근원 기준으로 통일한다. z-score 계산도 같은 이력에서 한 번에 처리해 이중 조회를 피한다.
+ * CPI·PPI와 같은 이유로 "예상보다 덜 오름(z가 음수)"은 리스크로 잡지 않는다 — z > threshold(예상보다
+ * 더 뜨거워짐)일 때만 risky로 본다.
  */
 async function corePceDetail(periods: number, thresholdZ: number): Promise<{ risky: boolean; detail: string; url: string }> {
   const url = "https://www.bea.gov/data/personal-consumption-expenditures-price-index";
@@ -50,7 +63,7 @@ async function corePceDetail(periods: number, thresholdZ: number): Promise<{ ris
   const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length;
   const std = Math.sqrt(variance);
   const z = std > 0 ? (latestChange - mean) / std : 0;
-  const risky = Math.abs(z) > thresholdZ;
+  const risky = z > thresholdZ;
 
   const latest = history[history.length - 1];
   const prevMonth = history[history.length - 2];
@@ -90,9 +103,9 @@ export async function evaluateRecentEventOutcomes(daysBack: number): Promise<Eve
   const outcomes: EventOutcome[] = [];
   for (const e of events) {
     let result: { risky: boolean; detail: string; url?: string };
-    if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5);
-    else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5);
-    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5);
+    if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true);
+    else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false);
+    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true);
     else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5);
     else if (e.name.includes("FOMC")) result = await fedRateChanged();
     else continue;
