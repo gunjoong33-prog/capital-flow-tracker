@@ -863,7 +863,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step4 = [
     {
       label: "금 가격 방향",
-      criterion: "하락 시 충족(사분면 최고점 조합의 방향)",
+      criterion: "하락 시 충족\n(사분면 최고점 조합의 방향)",
       value: goldStale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(goldFresh.daysOld, goldStale)}`,
       met: goldStale ? null : goldDir === "down",
     },
@@ -872,15 +872,15 @@ export async function runDailyAnalysis(manualInputs: {
       // 낮은 데서 횡보) 시 충족"이라는 반대 부호의 단독 판정이 있다 — 같은 실질금리 방향이 리포트
       // 안에서 두 번, 서로 반대로 채점되는 셈이다(하락=2단계 충족, 상승=4단계 충족). 실질금리 단독
       // 평가는 2단계에만 남기고, 여기서는 사분면(quadrant) 조합을 구성하는 참고 정보로만 보여준다.
-      label: "실질금리 방향", criterion: "참고용(사분면 조합의 한 축 — 단독 충족/미충족 판정은 2단계에서)", value: dirLabel(realRateDir), met: null,
+      label: "실질금리 방향", criterion: "참고용\n(사분면 조합의 한 축 — 단독 충족/미충족 판정은 2단계에서)", value: dirLabel(realRateDir), met: null,
     },
     {
       label: "달러 방향(DXY)",
-      criterion: "보조 확인 — 실질금리와 같은 방향이면 신호 강함",
+      criterion: "보조 확인\n(실질금리와 같은 방향이면 신호 강함)",
       value: dollarStale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollarFresh.daysOld, dollarStale)}`,
       met: dollarStale ? null : step4.dollarConfirms,
     },
-    { label: "사분면 판정", criterion: "위험선호 우호적 조합(금↓+실질금리↑ 또는 금↑+실질금리↓/보합) 시 충족", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
+    { label: "사분면 판정", criterion: "위험선호 우호적 조합 시 충족\n(금↓+실질금리↑ 또는 금↑+실질금리↓/보합)", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
 
   // 보조 지표 — 환율(USD/KRW, USD/JPY)·유가(WTI, 브렌트)의 전일 대비 변동. 원본 프롬프트의 4개 핵심 지표
@@ -891,7 +891,7 @@ export async function runDailyAnalysis(manualInputs: {
   const brentChange = await dailyChange(METRICS.BRENT);
   const wtiDir = (await directionOf(METRICS.WTI)) ?? "flat";
   details.step4Aux = [
-    { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표\n(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
     { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
     { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
     { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
@@ -951,14 +951,14 @@ export async function runDailyAnalysis(manualInputs: {
     },
     {
       label: "다우존스 vs S&P500 (위험선호)",
-      criterion: "SPX 우세=위험선호, DJI 우세=안전선호, 동률=중립",
+      criterion: "SPX 우세=위험선호\nDJI 우세=안전선호\n동률=중립",
       value: `다우존스 ${fmt(djiReturn20d, 2, "%")} / S&P500 ${fmt(spxReturn20d, 2, "%")} — (20거래일)`,
       met: null,
       result: step5.riskAppetite,
     },
     {
       label: "암호화폐 동조 분석",
-      criterion: "나스닥과 같은 방향이면 위험선호 동조, 다르면 코인 고유 이슈 가능",
+      criterion: "나스닥과 같은 방향이면 위험선호 동조\n다르면 코인 고유 이슈 가능",
       value: `비트코인 ${fmt(btcReturn20d, 2, "%")} / 이더리움 ${fmt(ethReturn20d, 2, "%")} — (20거래일)`,
       met: null,
       result: cryptoResult,
@@ -1016,14 +1016,14 @@ export async function runDailyAnalysis(manualInputs: {
             const dailyPart = s.changePct1d !== undefined ? ` · 1일 ${fmt(s.changePct1d, 2, "%")}` : "";
             return {
               label: s.name,
-              criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
+              criterion: "5일 수익률 상위 3위 이내\n+ 거래량 20일 평균 대비 130%+",
               value: `5일 ${fmt(s.return5d, 2, "%")}${dailyPart} · 거래량 ${s.volumeRatio.toFixed(2)}배 — ${sectorRationale(qualifying, s.return5d, s.volumeRatio)}`,
               met: qualifying,
             };
           }),
           ...missingSectorLabels.map((label) => ({
             label,
-            criterion: "5일 수익률 상위 3위 이내 + 거래량 20일 평균 대비 130%+",
+            criterion: "5일 수익률 상위 3위 이내\n+ 거래량 20일 평균 대비 130%+",
             value: "확인 못함",
             met: null,
           })),
@@ -1081,7 +1081,7 @@ export async function runDailyAnalysis(manualInputs: {
   details.step7 = [
     {
       label: "VIX",
-      criterion: [nbsp("15 미만 과열"), nbsp("25 초과 공포")].join(" · "),
+      criterion: [nbsp("15 미만 과열"), nbsp("25 초과 공포")].join("\n"),
       value: vix === null ? "확인 못함" : `${fmt(vix, 2)}${vixStaleNote}`,
       met: vix === null ? null : vix >= 15 && vix <= 25,
     },
@@ -1093,7 +1093,7 @@ export async function runDailyAnalysis(manualInputs: {
         nbsp("45~55 중립"),
         nbsp("56~75 탐욕"),
         nbsp("76~100 극단적탐욕"),
-      ].join(" · "),
+      ].join("\n"),
       value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
       met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
     },
@@ -1117,7 +1117,7 @@ export async function runDailyAnalysis(manualInputs: {
     { label: `6단계 섹터 (가중치 ${WEIGHTS.step6})`, criterion: "가중 반영", value: `${step6.score.toFixed(2)} × ${WEIGHTS.step6} = ${(step6.score * WEIGHTS.step6).toFixed(2)}`, met: null },
     { label: "투자 적합도 점수", criterion: `가중합 / ${TOTAL_WEIGHT}`, value: step8.macroTrendScore.toFixed(3), met: null },
     { label: "1단계 거부권 적용", criterion: "발동 시 한 단계 하향", value: step8.vetoApplied ? "적용됨" : "미적용", met: !step8.vetoApplied },
-    { label: "최종 결론", criterion: "≥7.0 매수 / ≥5.0 지켜보기 / 미만 현금비중늘리기", value: step8.finalDecision, met: null },
+    { label: "최종 결론", criterion: "≥7.0 매수\n≥5.0 지켜보기\n미만 현금비중늘리기", value: step8.finalDecision, met: null },
   ];
 
   return { step1, step2, step3, step4, step5, step6, step7, step8, details };
