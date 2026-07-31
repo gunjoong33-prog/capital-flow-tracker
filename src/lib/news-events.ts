@@ -125,8 +125,24 @@ ${list}`;
       summary: p.summary,
       risky: true,
       category: headlines[p.index - 1].category,
-      severity: p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium",
+      severity: capScheduledPolicyMeetingSeverity(
+        headlines[p.index - 1].title,
+        p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium"
+      ),
     }));
+}
+
+// FOMC·BOJ 통화정책 회의는 날짜가 미리 공개된 정기 일정(major-events.ts FOMC_DATES_2026·
+// BOJ_DATES_2026 참고)이라, 사이트의 "high" 정의("예상 밖 긴급" 사건)에 구조적으로 해당하지
+// 않는다 — 실제 서프라이즈 여부(반대표 수 등)는 event-outcomes.ts의 fedRateChanged()가 성명서
+// 원문을 직접 읽어 별도로(EventOutcome.risky) 정확히 판단한다. Gemini의 severity 판정은
+// temperature>0라 완전히 결정론적이지 않아 같은 "FOMC statement 발표" 헤드라인이 실행마다
+// medium/high를 오갈 수 있어, 여기서 상한을 강제한다.
+const SCHEDULED_POLICY_MEETING_PATTERN = /FOMC|Federal Open Market Committee|Bank of Japan.{0,20}(monetary policy|rate decision)/i;
+
+function capScheduledPolicyMeetingSeverity(title: string, severity: NewsSeverity): NewsSeverity {
+  if (severity === "high" && SCHEDULED_POLICY_MEETING_PATTERN.test(title)) return "medium";
+  return severity;
 }
 
 /**
