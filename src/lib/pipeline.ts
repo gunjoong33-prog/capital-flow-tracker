@@ -15,6 +15,7 @@ import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput 
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
+import { syncNewsPageHeadlines } from "@/lib/news-page";
 import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, type FetchedPoint } from "@/lib/sources/types";
@@ -49,7 +50,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행 (뉴스 판정·주요 이벤트 동기화도 여기 포함)
   const [
     fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
-    kr10yResult, fearGreedResult, majorEventsResult, newsEventsResult,
+    kr10yResult, fearGreedResult, majorEventsResult, newsEventsResult, newsPageResult,
   ] = await Promise.allSettled([
       process.env.FRED_API_KEY
         ? fetchAllFredMetrics(process.env.FRED_API_KEY, sevenDaysAgoStr)
@@ -63,6 +64,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       fetchCnnFearGreedLatest(),
       syncMajorEvents(),
       syncNewsEvents(),
+      syncNewsPageHeadlines(),
     ]);
 
   if (majorEventsResult.status === "fulfilled") {
@@ -72,6 +74,10 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   if (newsEventsResult.status === "fulfilled") {
     for (const e of newsEventsResult.value.errors) sourceErrors.push({ source: "뉴스판정", error: e });
   } else sourceErrors.push({ source: "뉴스판정", error: String(newsEventsResult.reason) });
+
+  if (newsPageResult.status === "fulfilled") {
+    for (const e of newsPageResult.value.errors) sourceErrors.push({ source: "뉴스페이지", error: e });
+  } else sourceErrors.push({ source: "뉴스페이지", error: String(newsPageResult.reason) });
 
   if (fredResult.status === "fulfilled") {
     allPoints.push(...fredResult.value.points);

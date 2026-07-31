@@ -88,6 +88,25 @@ model NewsEvent {
   @@index([date])
 }
 
+// /news 페이지(주제별 뉴스) 표시용 — 매일 배치 때 딱 한 번만 계산해서 저장한다. 국내/해외 분류에
+// Gemini 호출이 필요한데, 무료 티어 일일 할당량(20건)을 리포트 파이프라인의 judgeHeadlines()와
+// 공유하기 때문에 방문할 때마다 실시간 분류하면 할당량을 순식간에 소진해 메인 리포트 생성까지
+// 막을 위험이 있다 — 그래서 /news 페이지는 이 표를 읽기만 하고, 새로 고침은 하루 1회 배치가 담당.
+model NewsPageHeadline {
+  id          String    @id @default(cuid())
+  date        DateTime  @db.Date
+  category    String // world-politics | world-economy | domestic-politics | domestic-economy | tech
+  rank        Int // 표시 순서
+  title       String
+  url         String
+  source      String
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([date, category, url])
+  @@index([date, category])
+}
+
 // FOMC·CPI·고용지표 등 예정된 발표일. 1단계 "14일 내 큰 이벤트" 판정 + 사이트 캘린더 표시용.
 // FOMC는 연준이 공개하는 고정 일정이라 하드코딩 목록, CPI/고용지표는 FRED release/dates API로 매일 동기화.
 model MajorEvent {

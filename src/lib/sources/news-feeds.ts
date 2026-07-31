@@ -291,45 +291,125 @@ async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
   return parseGoogleNewsItems(xml);
 }
 
-export async function fetchNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
+/**
+ * 키워드 목록은 회사명·지명 등 명시적 마커가 있는 국내 뉴스만 잡는다 — 정치인 실명, 세수 통계처럼
+ * 한국 특유 맥락이지만 고유명사가 없는 헤드라인은 못 걸러낸다("코스피 6500선 돌파"처럼 세계 정치
+ * 토픽에도 새어든 사례 확인). 이런 잔여 케이스는 끝없이 키워드를 추가해도 다 못 잡으므로, 키워드
+ * 필터를 통과한 나머지만 Gemini에 넘겨 한 번 더 국내/해외를 판정한다(비용 절감을 위해 전체가 아닌
+ * 잔여분만 판정).
+ */
+async function classifyKoreaRelated(headlines: CategoryHeadline[]): Promise<Set<number>> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || headlines.length === 0) return new Set();
+
+  const list = headlines.map((h, i) => `${i + 1}. ${h.title}`).join("\n");
+  const prompt = `아래는 구글 뉴스 헤드라인 목록이다. 이 중 "대한민국(한국) 국내 이슈"에 해당하는
+항목의 번호만 골라라 — 한국 기업의 실적·주가·경영, 한국 증시(코스피·코스닥 등), 한국 정부·정치·
+정책·선거·법안, 한국 특정 지역 뉴스는 전부 국내 이슈다(회사명·정치인 실명이 직접 언급되지 않고
+"세수"·"증권거래세"처럼 문맥과 용어만으로 한국 얘기임을 알 수 있는 경우도 포함해라). 미국·일본·
+중국·유럽 등 해외 기업/시장/정부 관련 뉴스는 국내 이슈가 아니다.
+
+번호만 담은 JSON 배열로만 답해라. 다른 텍스트는 쓰지 마라. 예: [1, 4, 7]
+해당하는 게 없으면 빈 배열 []만 답해라.
+
+헤드라인 목록:
+${list}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        // gemini-flash-latest는 내부적으로 thinking 모델로 풀려 추론에 토큰을 많이 쓴다 —
+        // news-events.ts judgeHeadlines()와 같은 문제(2048로는 thinking에 다 먹혀 JSON 답변이
+        // 잘림/깨짐)라 동일하게 여유 있는 한도를 둔다.
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+      }),
+    }
+  );
+  if (!res.ok) return new Set(); // fail-open: 키워드 필터 결과는 이미 반영됐으니 LLM은 보강일 뿐이다.
+
+  const data = (await res.json()) as { candidates?: { content: { parts: { text: string }[] } }[] };
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return new Set();
+  try {
+    const indices: unknown = JSON.parse(jsonMatch[0]);
+    return Array.isArray(indices) ? new Set(indices.filter((n): n is number => typeof n === "number")) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+/** 세계 정치/경제 토픽 피드를 국내/해외로 가른다 — 키워드로 1차, 통과한 잔여분만 Gemini로 2차 판정. */
+async function splitTopicByKorea(topicId: string): Promise<{ korea: CategoryHeadline[]; world: CategoryHeadline[] }> {
+  const items = await fetchGoogleNewsRss(`https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko`);
+  const keywordKorea = items.filter((h) => isKoreaRelated(h.title));
+  const remainder = items.filter((h) => !isKoreaRelated(h.title));
+
+  const koreaIndices = await classifyKoreaRelated(remainder);
+  const llmKorea = remainder.filter((_, i) => koreaIndices.has(i + 1));
+  const world = remainder.filter((_, i) => !koreaIndices.has(i + 1));
+
+  return { korea: [...keywordKorea, ...llmKorea], world };
+}
+
+function searchUrlFor(key: NewsPageCategoryKey): string {
   const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
   if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
-  const searchUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+}
 
-  const domesticKeywords = DOMESTIC_RELEVANCE_KEYWORDS[key];
-  if (domesticKeywords) {
-    const topicUrl = `https://news.google.com/rss/topics/${DOMESTIC_TOPIC_ID}?hl=ko&gl=KR&ceid=KR:ko`;
-    const [topicItems, searchItems] = await Promise.all([
-      fetchGoogleNewsRss(topicUrl),
-      fetchGoogleNewsRss(searchUrl),
-    ]);
-    const seen = new Set<string>();
-    const merged = [...topicItems, ...searchItems].filter((h) => {
-      if (seen.has(h.url)) return false;
+function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
+  const seen = new Set<string>();
+  const out: CategoryHeadline[] = [];
+  for (const list of lists) {
+    for (const h of list) {
+      if (seen.has(h.url)) continue;
       seen.add(h.url);
-      return true;
-    });
-    let filtered = merged.filter((h) => domesticKeywords.some((kw) => h.title.includes(kw)));
-
-    if (key === "domestic-economy") {
-      // 세계 경제 탭에서 걸러낸 국내 기업/증시 뉴스를 그대로 받는다 — 이미 "비즈니스" 토픽
-      // 큐레이션을 통과한 뉴스라 경제 키워드 재필터 없이 바로 채택(회사명만 있고 "실적"·"증시" 같은
-      // 일반 경제 키워드가 없는 기사가 재필터에서 빠지는 걸 막는다).
-      const businessUrl = `https://news.google.com/rss/topics/${GOOGLE_NEWS_TOPIC_IDS["world-economy"]}?hl=ko&gl=KR&ceid=KR:ko`;
-      const businessItems = await fetchGoogleNewsRss(businessUrl);
-      const koreaBusinessItems = businessItems.filter((h) => isKoreaRelated(h.title) && !seen.has(h.url));
-      koreaBusinessItems.forEach((h) => seen.add(h.url));
-      filtered = [...filtered, ...koreaBusinessItems];
+      out.push(h);
     }
-
-    return filtered.slice(0, limit);
   }
+  return out;
+}
 
-  const topicId = GOOGLE_NEWS_TOPIC_IDS[key];
-  const items = await fetchGoogleNewsRss(topicId ? `https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko` : searchUrl);
-  // world-politics는 이미 구글 자체 편집 큐레이션(토픽)이라 필터가 불필요하고, tech는 좁은 주제
-  // 버킷이라 경제/정치 키워드로 거르면 정상 기술 뉴스까지 잘려나간다 — 둘 다 필터 없이 그대로.
-  // world-economy("비즈니스" 토픽)만 gl=KR 편집판 특성상 국내 기업/증시 뉴스가 섞여 나와 제외한다.
-  const filtered = key === "world-economy" ? items.filter((h) => !isKoreaRelated(h.title)) : items;
-  return filtered.slice(0, limit);
+/**
+ * /news 페이지 5개 카테고리를 전부 계산한다. Gemini 무료 티어 일일 할당량(20건)을 메인 리포트
+ * 파이프라인(judgeHeadlines)과 공유하기 때문에 페이지 방문마다 실시간 호출하면 안 되고, 이 함수를
+ * 하루 배치에서 딱 한 번만 호출해 결과를 DB(NewsPageHeadline)에 저장한다 — 세계 정치/경제 토픽도
+ * (국내/해외 분리에) 한 번씩만 조회해 두 국내 탭에 재사용한다.
+ */
+export async function computeAllNewsPageCategories(limit = 20): Promise<Record<NewsPageCategoryKey, CategoryHeadline[]>> {
+  const [worldPoliticsSplit, worldEconomySplit, domesticTopicItems, politicsSearchItems, economySearchItems, techItems] =
+    await Promise.all([
+      splitTopicByKorea(GOOGLE_NEWS_TOPIC_IDS["world-politics"]!),
+      splitTopicByKorea(GOOGLE_NEWS_TOPIC_IDS["world-economy"]!),
+      fetchGoogleNewsRss(`https://news.google.com/rss/topics/${DOMESTIC_TOPIC_ID}?hl=ko&gl=KR&ceid=KR:ko`),
+      fetchGoogleNewsRss(searchUrlFor("domestic-politics")),
+      fetchGoogleNewsRss(searchUrlFor("domestic-economy")),
+      fetchGoogleNewsRss(searchUrlFor("tech")),
+    ]);
+
+  const domesticPolitics = dedupByUrl(
+    dedupByUrl(domesticTopicItems, politicsSearchItems).filter((h) =>
+      DOMESTIC_RELEVANCE_KEYWORDS["domestic-politics"]!.some((kw) => h.title.includes(kw))
+    ),
+    worldPoliticsSplit.korea
+  );
+  const domesticEconomy = dedupByUrl(
+    dedupByUrl(domesticTopicItems, economySearchItems).filter((h) =>
+      DOMESTIC_RELEVANCE_KEYWORDS["domestic-economy"]!.some((kw) => h.title.includes(kw))
+    ),
+    worldEconomySplit.korea
+  );
+
+  return {
+    "world-politics": worldPoliticsSplit.world.slice(0, limit),
+    "world-economy": worldEconomySplit.world.slice(0, limit),
+    "domestic-politics": domesticPolitics.slice(0, limit),
+    "domestic-economy": domesticEconomy.slice(0, limit),
+    tech: techItems.slice(0, limit),
+  };
 }

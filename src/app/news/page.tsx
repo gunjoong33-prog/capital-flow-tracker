@@ -2,9 +2,9 @@ import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
 import {
   NEWS_PAGE_CATEGORIES,
-  fetchNewsPageCategory,
   type NewsPageCategoryKey,
 } from "@/lib/sources/news-feeds";
+import { getNewsPageCategory } from "@/lib/news-page";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +24,10 @@ export default async function NewsPage({
   const active =
     NEWS_PAGE_CATEGORIES.find((c) => c.key === (category as NewsPageCategoryKey)) ?? NEWS_PAGE_CATEGORIES[0];
 
-  let headlines: Awaited<ReturnType<typeof fetchNewsPageCategory>> = [];
+  let headlines: Awaited<ReturnType<typeof getNewsPageCategory>> = [];
   let error: string | null = null;
   try {
-    headlines = await fetchNewsPageCategory(active.key);
+    headlines = await getNewsPageCategory(active.key);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
