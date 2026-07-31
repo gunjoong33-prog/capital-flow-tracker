@@ -1,51 +1,17 @@
 // 정성적 해설(왜 이런 흐름인지 서술) 생성 — 계산은 전부 scoring/pure.ts가 결정론적으로 하고,
 // 여기서는 그 결과를 자연스러운 한국어 문장으로 풀어쓰는 것만 담당한다.
 //
-// Google Gemini API 무료 티어 사용 — 카드 등록 없이 무료, 만료 없음(Gemini 2.5/3 Flash 기준
-// 하루 250~1500회, 이 프로젝트는 하루 1회+주기별 리포트 몇 번이면 충분해서 유료 전환 필요 없음).
-// 발급: https://aistudio.google.com/apikey (구글 계정만 있으면 무료, 카드 불필요)
-//
-// 나중에 품질이 아쉬우면 다른 공급자로 바꿀 수 있게 이 함수 하나만 바꾸면 되도록 분리해뒀다.
-
-// "-latest" 별칭을 쓰면 구글이 무료 티어 추천 모델을 바꿔도(2.5→3.x 등) 코드 수정 없이 따라간다.
-const GEMINI_MODEL = "gemini-flash-latest";
-
-interface GeminiResponse {
-  candidates?: {
-    content: { parts: { text: string }[] };
-  }[];
-  error?: { message: string };
-}
+// 원래 Gemini 무료 티어를 썼으나 하루 20건 요청 한도가 메인 리포트 파이프라인과 공유돼 자주
+// 소진됐다 — Mistral(mistral-large-latest, 무료 Experiment 플랜)로 교체. 실측 비교에서 Groq의
+// Llama 3.3 70B는 한국어 응답에 한자·일본어 문자가 섞여 나와 제외했고, Mistral이 이 사이트가
+// 쓰는 분석적 한국어 문체를 가장 자연스럽게 생성했다(llm-clients.ts 주석 참고).
+import { callMistral } from "@/lib/llm-clients";
 
 export async function generateNarrative(prompt: string, maxOutputTokens = 2048): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return "[해설 생성 안 됨 — GEMINI_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
+  if (!process.env.MISTRAL_API_KEY) {
+    return "[해설 생성 안 됨 — MISTRAL_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
   }
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens },
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini 요청 실패: ${res.status} ${errText}`);
-  }
-
-  const data = (await res.json()) as GeminiResponse;
-  if (data.error) throw new Error(`Gemini 오류: ${data.error.message}`);
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini 응답에 텍스트가 없다");
-  return text.trim();
+  return callMistral(prompt, maxOutputTokens, 0.4);
 }
 
 /**

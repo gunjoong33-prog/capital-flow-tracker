@@ -1,3 +1,6 @@
+import { dedupBySimilarTitle } from "@/lib/text-similarity";
+import { callGroq, extractJsonArray } from "@/lib/llm-clients";
+
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
 // Google News RSS: 검색어 기반 공개 RSS(비공식이지만 안정적으로 유지돼온 포맷).
 // 연준 보도자료·연설/증언, 백악관 뉴스: 각 기관 공식 RSS 피드
@@ -112,42 +115,18 @@ export async function fetchCandidateHeadlines(): Promise<{ headlines: Headline[]
   return { headlines: dedupOfficialHeadlines(deduped), errors };
 }
 
-const STOPWORDS = new Set([
-  "the", "a", "an", "of", "on", "in", "to", "for", "with", "and", "or", "as", "is", "are", "that",
-  "this", "by", "from", "at", "be", "was", "were", "has", "have", "had", "will", "would", "our",
-  "their", "its", "president", "donald", "trump",
-]);
-
-function significantTokens(title: string): Set<string> {
-  return new Set(
-    title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w))
-  );
-}
-
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  const intersection = [...a].filter((x) => b.has(x)).length;
-  const union = new Set([...a, ...b]).size;
-  return union === 0 ? 0 : intersection / union;
-}
-
 /**
  * 백악관·연준 공식 발표는 같은 정책 액션에 대해 "Fact Sheet"·"Presidential Determination"·
  * "Executive Order"처럼 문서 종류만 다른 여러 건이 같이 올라오는 경우가 흔하다(예: DPA critical
- * minerals 관련 문서 2건). Gemini judgeHeadlines()에 근접중복 병합 지침을 넣어뒀지만, 후보가
+ * minerals 관련 문서 2건). LLM judgeHeadlines()에 근접중복 병합 지침을 넣어뒀지만, 후보가
  * 144건까지 늘어난 상태에서는 이런 미묘한 중복을 가끔 놓친다 — official 카테고리는 건수가 적어서
- * (10~30건) 결정론적 제목 유사도 비교 비용이 낮다. 이 단계에서 먼저 걸러 Gemini에는 대표 1건만
+ * (10~30건) 결정론적 제목 유사도 비교 비용이 낮다. 이 단계에서 먼저 걸러 LLM에는 대표 1건만
  * 넘긴다.
  */
 function dedupOfficialHeadlines(headlines: Headline[]): Headline[] {
   const official = headlines.filter((h) => h.category === "official");
   const rest = headlines.filter((h) => h.category !== "official");
-  const kept: Headline[] = [];
-  for (const h of official) {
-    const tokens = significantTokens(h.title);
-    const isDup = kept.some((k) => jaccardSimilarity(tokens, significantTokens(k.title)) >= 0.25);
-    if (!isDup) kept.push(h);
-  }
-  return [...rest, ...kept];
+  return [...rest, ...dedupBySimilarTitle(official, (h) => h.title)];
 }
 
 // 빅테크 7 종목별 등락 원인 판정용 헤드라인 — 종목마다 별도 검색어로 조회해 티커별로 묶어서 반환한다
@@ -299,8 +278,7 @@ async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
  * 잔여분만 판정).
  */
 async function classifyKoreaRelated(headlines: CategoryHeadline[]): Promise<Set<number>> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || headlines.length === 0) return new Set();
+  if (!process.env.GROQ_API_KEY || headlines.length === 0) return new Set();
 
   const list = headlines.map((h, i) => `${i + 1}. ${h.title}`).join("\n");
   const prompt = `아래는 구글 뉴스 헤드라인 목록이다. 이 중 "대한민국(한국) 국내 이슈"에 해당하는
@@ -315,32 +293,16 @@ async function classifyKoreaRelated(headlines: CategoryHeadline[]): Promise<Set<
 헤드라인 목록:
 ${list}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        // gemini-flash-latest는 내부적으로 thinking 모델로 풀려 추론에 토큰을 많이 쓴다 —
-        // news-events.ts judgeHeadlines()와 같은 문제(2048로는 thinking에 다 먹혀 JSON 답변이
-        // 잘림/깨짐)라 동일하게 여유 있는 한도를 둔다.
-        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
-      }),
-    }
-  );
-  if (!res.ok) return new Set(); // fail-open: 키워드 필터 결과는 이미 반영됐으니 LLM은 보강일 뿐이다.
-
-  const data = (await res.json()) as { candidates?: { content: { parts: { text: string }[] } }[] };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return new Set();
+  // fail-open: 키워드 필터 결과는 이미 반영됐으니 이 LLM 판정은 보강일 뿐이다 — 실패해도 그냥 빈
+  // Set을 돌려줘 키워드 필터만 적용된 상태로 계속 진행한다.
+  let text: string;
   try {
-    const indices: unknown = JSON.parse(jsonMatch[0]);
-    return Array.isArray(indices) ? new Set(indices.filter((n): n is number => typeof n === "number")) : new Set();
+    text = await callGroq(prompt, { maxTokens: 2048, reasoningEffort: "low" });
   } catch {
     return new Set();
   }
+  const indices = extractJsonArray<number>(text);
+  return indices ? new Set(indices.filter((n) => typeof n === "number")) : new Set();
 }
 
 /** 세계 정치/경제 토픽 피드를 국내/해외로 가른다 — 키워드로 1차, 통과한 잔여분만 Gemini로 2차 판정. */

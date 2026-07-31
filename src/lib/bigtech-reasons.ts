@@ -1,11 +1,10 @@
-// 빅테크 7(Magnificent 7) 개별 종목의 오늘 등락 원인 판정 — news-events.ts의 1단계 리스크 판정과
-// 같은 Gemini 인프라(모델·호출 방식)를 재사용하되, 프롬프트와 뉴스 수집 대상은 종목 단위로 새로 만들었다.
-// 종목 7개를 한 프롬프트에 묶어 하루 1회만 호출한다(무료 티어 여유를 그대로 유지하기 위함).
+// 빅테크 7(Magnificent 7) 개별 종목의 오늘 등락 원인 판정 — 가볍고 빈도 낮은 판정이라 속도가
+// 빠른 Groq를 쓴다(llm-clients.ts 주석 참고 — Mistral은 품질이 더 중요한 news-events.ts·
+// narrative.ts에 우선 배정). 종목 7개를 한 프롬프트에 묶어 하루 1회만 호출한다.
 import { getMetricHistoryByCount } from "@/lib/metrics";
 import { fetchBigTechHeadlines, type Headline } from "@/lib/sources/news-feeds";
 import { BIG_TECH_LABELS } from "@/lib/sources/types";
-
-const GEMINI_MODEL = "gemini-flash-latest";
+import { callGroq, extractJsonArray } from "@/lib/llm-clients";
 
 async function change1dFor(ticker: string): Promise<number | null> {
   const history = await getMetricHistoryByCount(ticker, 2);
@@ -18,8 +17,7 @@ async function judgeBigTechReasons(
   changes: { ticker: string; changePct1d: number | null }[],
   headlinesByTicker: Record<string, Headline[]>
 ): Promise<Record<string, string>> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return {};
+  if (!process.env.GROQ_API_KEY) return {};
 
   const sections = changes
     .map(({ ticker, changePct1d }) => {
@@ -42,36 +40,12 @@ async function judgeBigTechReasons(
 종목 목록:
 ${sections}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        // gemini-flash-latest가 내부적으로 thinking 모델로 풀려서 추론에 토큰을 얼마나 쓸지가
-        // 매 호출마다 들쭉날쭉하다 — maxOutputTokens를 아무리 올려도 thinking이 그 예산을
-        // 통째로 먹어버리면 여전히 MAX_TOKENS로 잘린다(news-events.ts에서 겪은 것보다 근본적인
-        // 문제). thinkingBudget을 0으로 끄는 건 이 모델이 거부해서(400), 512로 캡을 씌워
-        // thinking이 답변 예산을 침범하지 못하게 막는다 — 이 작업은 헤드라인·등락률을 보고
-        // 1문장 요약하는 단순 판단이라 깊은 추론이 필요 없다.
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 512 } },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini 빅테크 원인 판정 실패: ${res.status} ${await res.text()}`);
-
-  const data = (await res.json()) as { candidates?: { content: { parts: { text: string }[] } }[] };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return {};
-
-  let parsed: { ticker: string; reason: string }[];
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    return {};
-  }
+  // gpt-oss-120b는 내부적으로 thinking 모델이라 reasoning_effort를 낮춰(low) 답변 예산을
+  // 추론에 뺏기지 않게 한다 — 헤드라인·등락률을 보고 1문장 요약하는 단순 판단이라 깊은 추론이
+  // 필요 없다("none"은 이 모델이 거부해서 최소값인 "low"를 쓴다).
+  const text = await callGroq(prompt, { maxTokens: 4096, reasoningEffort: "low" });
+  const parsed = extractJsonArray<{ ticker: string; reason: string }>(text);
+  if (!parsed) return {};
 
   const result: Record<string, string> = {};
   for (const p of parsed) result[p.ticker] = p.reason;

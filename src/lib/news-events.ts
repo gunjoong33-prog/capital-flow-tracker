@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { fetchCandidateHeadlines, type Headline, type NewsCategory } from "@/lib/sources/news-feeds";
-
-const GEMINI_MODEL = "gemini-flash-latest";
+import { callMistral, extractJsonArray } from "@/lib/llm-clients";
+import { dedupBySimilarTitle } from "@/lib/text-similarity";
 
 // 사용자 지정 최종 우선순위: 0=백악관·연준 공식 발표, 1=권력 네트워크·엘리트 그룹 유출/폭로, 2=일반 지정학.
 const CATEGORY_PRIORITY: Record<NewsCategory, number> = {
@@ -49,9 +49,16 @@ interface JudgedItem {
   severity: NewsSeverity;
 }
 
+/**
+ * 원래 Gemini(무료 티어 하루 20건)를 썼으나 메인 리포트 파이프라인과 할당량을 공유해 자주
+ * 소진됐다 — Mistral(mistral-large-latest)로 교체. Groq는 분당 토큰 한도(8K~12K TPM)가 낮아
+ * 헤드라인 138건(약 4만 자)을 한 번에 못 담아 여러 청크로 쪼개야 했는데, Mistral은 반대로
+ * 요청 횟수 제한(분당 2회)이라 토큰 수와 무관하게 138건 전부를 프롬프트 하나에 담아 한 번에
+ * 판정할 수 있다(실측: 42,000자 프롬프트가 43초 만에 정상 처리됨) — 청크 분할·대기 로직이
+ * 필요 없다.
+ */
 async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || headlines.length === 0) return [];
+  if (!process.env.MISTRAL_API_KEY || headlines.length === 0) return [];
 
   const list = headlines
     .map((h, i) => `${i + 1}. [${h.source}] ${h.title} (${h.url})`)
@@ -88,48 +95,28 @@ risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게
 헤드라인 목록:
 ${list}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        // gemini-flash-latest가 내부적으로 thinking 모델로 풀려서 추론에 토큰을 많이 쓴다 —
-        // 헤드라인 10여 개를 판정하기엔 1024로 부족해서 MAX_TOKENS로 잘렸었다(narrative.ts와 같은 문제).
-        // wire RSS 3개 추가 + 검색어 확장으로 후보 헤드라인이 최대 150개 안팎까지 늘어나
-        // 4096으로도 잘릴 여지가 있어 여유를 더 둔다.
-        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini 뉴스 판정 실패: ${res.status} ${await res.text()}`);
+  const text = await callMistral(prompt, 8192);
+  const parsed = extractJsonArray<{ index: number; summary: string; risky: boolean; severity?: string }>(text);
+  if (!parsed) return [];
 
-  const data = (await res.json()) as { candidates?: { content: { parts: { text: string }[] } }[] };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return [];
-
-  let parsed: { index: number; summary: string; risky: boolean; severity?: string }[];
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    return [];
-  }
-
-  return parsed
+  const judged = parsed
     .filter((p) => p.risky && headlines[p.index - 1])
     .map((p) => ({
       title: headlines[p.index - 1].title,
       url: headlines[p.index - 1].url,
       summary: p.summary,
-      risky: true,
+      risky: true as const,
       category: headlines[p.index - 1].category,
       severity: capScheduledPolicyMeetingSeverity(
         headlines[p.index - 1].title,
         p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium"
       ),
     }));
+
+  // LLM의 근접중복 병합 지침(위 프롬프트)이 대부분 걸러내지만 temperature>0라 완전히 결정론적이진
+  // 않다 — 제목 유사도 기반으로 한 번 더 걸러 대표 1건만 남긴다(news-feeds.ts dedupOfficialHeadlines와
+  // 같은 안전망 원리).
+  return dedupBySimilarTitle(judged, (j) => j.title);
 }
 
 // FOMC·BOJ 통화정책 회의는 날짜가 미리 공개된 정기 일정(major-events.ts FOMC_DATES_2026·
