@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { revalidatePath } from "next/cache";
 import { kstToday } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 import { saveMetricPoints } from "@/lib/metrics";
@@ -123,6 +124,18 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     for (const e of sectorsResult.value.errors) sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
   } else sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
 
+  // 섹터 원자료(return5d·volumeRatio·전일 대비)는 지금까지 라이브 조회 전용이라 시계열로 안 남았다
+  // — 6단계는 백테스트가 원천 불가능했다(외부 감사 지적). MetricValue에 티커별로 저장해두면
+  // 나중에 scoreStep6 로직 변경(예: P0-3 분모 수정)의 과거 영향도 재계산해볼 수 있다.
+  if (sectorsResult.status === "fulfilled") {
+    const sectorPoints: FetchedPoint[] = sectorsResult.value.sectors.flatMap((s) => [
+      { metric: `SECTOR_${s.ticker}_RET5D`, date: today, value: s.return5d, source: "yahoo" as const },
+      { metric: `SECTOR_${s.ticker}_VOLRATIO`, date: today, value: s.volumeRatio, source: "yahoo" as const },
+      { metric: `SECTOR_${s.ticker}_CHG1D`, date: today, value: s.changePct1d, source: "yahoo" as const },
+    ]);
+    await saveMetricPoints(sectorPoints);
+  }
+
   // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
   if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
@@ -182,6 +195,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       dataCompleteness: asJson({ sourceErrors }),
     },
   });
+
+  // /report·홈은 이제 이 DB 스냅샷을 읽기 전용으로 쓴다(force-dynamic 제거) — 시간 기반 캐시
+  // 대신 저장 직후 바로 무효화해서 스테일 0초로 최신 반영한다.
+  revalidatePath("/report");
+  revalidatePath("/");
 
   // 5) 노션 기록 — 11개 하위 DB(상세) + Calender DB(시장 체크리스트 페이지에 실제로 보이는 항목)
   let notionWriteCount = 0;
