@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { fetchCandidateHeadlines, type Headline, type NewsCategory } from "@/lib/sources/news-feeds";
 import { callMistral, extractJsonArray } from "@/lib/llm-clients";
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
+import { kstToday } from "@/lib/date";
 
 // 사용자 지정 최종 우선순위: 0=백악관·연준 공식 발표, 1=권력 네트워크·엘리트 그룹 유출/폭로, 2=일반 지정학.
 const CATEGORY_PRIORITY: Record<NewsCategory, number> = {
@@ -148,7 +149,7 @@ export async function syncNewsEvents(): Promise<{ found: number; errors: string[
     errors.push(err instanceof Error ? err.message : String(err));
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   for (const item of judged) {
     await db.newsEvent.upsert({
       where: { date_url: { date: new Date(today), url: item.url } },

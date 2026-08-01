@@ -5,11 +5,12 @@ import {
   type CategoryHeadline,
   type NewsPageCategoryKey,
 } from "@/lib/sources/news-feeds";
+import { kstToday } from "@/lib/date";
 
 /** 하루 배치가 호출 — /news 페이지 5개 카테고리를 계산해 오늘 날짜로 저장한다. */
 export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: string[] }> {
   const errors: string[] = [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   let saved = 0;
 
   try {

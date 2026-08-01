@@ -1,4 +1,5 @@
 import { METRICS, type FetchedPoint } from "./types";
+import { kstToday } from "@/lib/date";
 
 // CoinGecko 무료 API. 인증 불필요(공개 엔드포인트, 레이트리밋 있음).
 const COIN_IDS: Record<string, string> = {
@@ -65,7 +66,7 @@ export async function fetchCoinGeckoLatest(): Promise<FetchedPoint[]> {
     throw new Error(`CoinGecko 시세 요청 실패: ${res.status} ${res.statusText}`);
   }
   const data = (await res.json()) as Record<string, { usd: number }>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   return [
     { metric: METRICS.BTC, date: today, value: data.bitcoin.usd, source: "coingecko" as const },

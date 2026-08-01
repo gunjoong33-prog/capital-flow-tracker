@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { kstToday } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 import { saveMetricPoints } from "@/lib/metrics";
 import { fetchAllFredMetrics } from "@/lib/sources/fred";
@@ -41,7 +42,7 @@ export interface DailyPipelineResult {
  * 지난 감사에서 정한 원칙대로, 없는 데이터는 지어내지 않고 "미확인"으로 남겨둔다.
  */
 export async function runDailyPipeline(): Promise<DailyPipelineResult> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const sourceErrors: { source: string; error: string }[] = [];
   const allPoints: FetchedPoint[] = [];
 
@@ -133,6 +134,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     bigTechReasons,
     institutionalSignals,
   });
+
+  // 뉴스 리스크 가중점수 시계열 저장 시작 — 지금 당장은 표본이 30개 미만이라 백분위 전환에
+  // 못 쓰지만(calculatePercentile 최소 표본 요건), 쌓아두지 않으면 나중에도 영영 못 쓴다.
+  if (report.step1.newsRiskScore !== undefined) {
+    await saveMetricPoints([
+      { metric: METRICS.NEWS_RISK_SCORE_7D, date: today, value: report.step1.newsRiskScore, source: "manual" },
+    ]);
+  }
 
   // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
   // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서

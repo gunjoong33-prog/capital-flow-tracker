@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { kstToday } from "@/lib/date";
 
 /**
  * 오늘자 자동 파이프라인(크론)이 실행됐는지 확인한다. /report·홈은 항상 최신 DB 값으로 실시간
@@ -14,7 +15,7 @@ export interface ReportFreshness {
 }
 
 export async function checkReportFreshness(): Promise<ReportFreshness> {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = kstToday();
   const [today, latest] = await Promise.all([
     db.dailyReport.findUnique({ where: { date: new Date(todayStr) }, select: { createdAt: true } }),
     db.dailyReport.findFirst({ orderBy: { date: "desc" }, select: { date: true, createdAt: true } }),

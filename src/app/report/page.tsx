@@ -6,6 +6,7 @@ import { ReportView } from "@/components/ReportView";
 import { SiteNav } from "@/components/SiteNav";
 import { FreshnessBanner } from "@/components/FreshnessBanner";
 import { checkReportFreshness } from "@/lib/report-freshness";
+import { kstToday } from "@/lib/date";
 
 export const dynamic = "force-dynamic"; // 매번 최신 DB 값으로 계산 — 캐시하면 안 됨
 
@@ -47,7 +48,7 @@ async function getReport() {
     // 섹터 조회 전체 실패해도 나머지 분석은 계속 — 6단계만 빈 값으로(details.step6가 확인 못함 처리)
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const persistedDetails = await getPersistedDetails(today);
 
   const report = await runDailyAnalysis({
