@@ -74,11 +74,21 @@ export function scoreStep3(input: Step3Input): Step3Result {
   else if (spreadBp >= 250) zone = "주의";
   else zone = "위험";
 
-  const spreadScore = input.spreadBpPercentile ?? 50;
-  // 순포지션 백분위: 값이 음수(숏)일수록 캐리 활발 → 부호를 뒤집어 "숏이 깊을수록 높은 점수"로 계산.
-  // (엔화 순포지션이 줄어들기 시작 = 청산 신호라는 프롬프트 설명에 따른 해석 — 3단계 "실제 트레이더는 이렇게 본다" 참고)
-  const positionScore = input.cftcNetPositionPercentile ?? 50;
-  const score = (spreadScore + positionScore) / 2 / 10;
+  // 스프레드·포지션 백분위 중 하나가 데이터 부족(null)이면 예전엔 그 자리를 50(중립)으로 채워
+  // 평균에 섞었다 — 실제 가용한 값이 90%ile처럼 뚜렷해도 중립값과 섞여 흐려지는 문제가 있었다
+  // (2단계가 이미 쓰는 "결측은 분모에서 제외" 패턴과 불일치, 외부 감사 지적). 가용한 값만 평균한다.
+  // 순포지션 백분위는 낮을수록(숏 쏠림) 캐리가 활발하다는 뜻이라 낮은 점수를 준다 — 반전 없이
+  // 백분위값을 그대로 쓴다. run.ts의 met 판정(50%ile 이상일 때만 충족)과 방향이 같다.
+  const knownScores = [input.spreadBpPercentile, input.cftcNetPositionPercentile].filter(
+    (v): v is number => v !== null
+  );
+  const rawScore = knownScores.length > 0
+    ? knownScores.reduce((a, b) => a + b, 0) / knownScores.length / 10
+    : 5;
+  // jpyVolSpike는 원래 warning 문자열에만 쓰이고 실제 score·8단계 가중합에는 전혀 반영되지 않았다
+  // (외부 감사 지적, 코드 확인 결과 실제로 그랬다) — "가장 신뢰하는 실제 신호"라고 주석에 써놓고
+  // 정작 점수 회로엔 연결 안 된 상태였다. 스파이크 감지 시 백분위 기반 점수를 무시하고 하드캡을 건다.
+  const score = input.jpyVolSpike ? Math.min(rawScore, 2) : rawScore;
 
   return {
     spreadBp: Math.round(spreadBp),
@@ -165,8 +175,11 @@ export function scoreStep6(input: Step6Input): Step6Result {
     .filter((s) => top3Names.has(s.name) && s.volumeRatio >= 1.3)
     .map((s) => s.name);
 
-  const score =
-    input.sectors.length > 0 ? (qualifying.length / input.sectors.length) * 10 : 0;
+  // 분자(qualifying)는 top3 제한 때문에 최대 3인데, 분모를 전체 섹터 개수로 나누면 만점(10점)에
+  // 구조적으로 도달할 수 없다(섹터 10개 기준 최대 3.0/10) — 외부 감사 지적, 계산 확인 결과 실제
+  // 발생. 분모도 min(3, 섹터개수)로 맞춰 "top3 전부가 거래량까지 충족"할 때 10점이 나오게 한다.
+  const denom = Math.min(3, input.sectors.length);
+  const score = denom > 0 ? (qualifying.length / denom) * 10 : 0;
 
   return { qualifying, score };
 }

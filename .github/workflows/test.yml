@@ -1,0 +1,21 @@
+name: Test
+
+# pure.ts(순수 채점 함수)에 회귀가 생기면(예: P0-3 6단계 분모 버그처럼 산수 실수) 배포 전에 잡는다.
+# DB·외부 API 접근이 전혀 없는 순수 함수 테스트라 시크릿 없이 돌아간다.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
