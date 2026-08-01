@@ -5,7 +5,7 @@
 export type Direction = "up" | "down" | "flat";
 
 // 1단계 거부권 가중점수 기준. 뉴스 가중치 계산은 news-events.ts의 newsItemWeight()가 담당하지만,
-// pure.ts는 DB 접근 없이 순수해야 해서(verify-scoring.ts가 DB 없이 이 파일만 테스트) 상수만 여기 둔다.
+// pure.ts는 DB 접근 없이 순수해야 해서(pure.test.ts가 DB 없이 이 파일만 테스트) 상수만 여기 둔다.
 // 2026-08-01 5→20으로 상향. 1년치 백테스트 없이 근거 있는 숫자를 낼 수는 없지만(과거 감사에서
 // 이 이유로 보류했었다), 실측 7일 표본만 봐도 조용한 날 2점, 약간 시끄러운 날 5.6~6.4점,
 // 전쟁급 뉴스는 93.6~107점으로 그 사이가 완전히 비어 있어 옛 기준(5)은 "약간 시끄러운 날"조차
@@ -43,6 +43,10 @@ export interface Step1Result {
   riskyNews?: RiskyNewsItem[]; // LLM이 리스크로 판정한 뉴스(있으면 UI에 요약+링크로 표시)
   upcomingEvents?: UpcomingEventItem[]; // 14일 내 예정된 FOMC·CPI·고용지표 등(정보용, 거부권과 무관)
   recentEventOutcomes?: EventOutcomeItem[]; // 최근 발표된 이벤트의 실제 결과 서프라이즈 판정(거부권 근거)
+  newsRiskScore?: number; // 최근 7일 리스크 뉴스 가중점수 원값(파이프라인이 MetricValue로 저장해
+  // 시계열을 쌓는다 — 표본이 쌓이면 절대 임계값(NEWS_RISK_SCORE_THRESHOLD) 대신 백분위 기반
+  // 거부권으로 전환 가능해진다. calculatePercentile은 30개 미만 표본이면 null을 반환하므로
+  // 그 전까지는 절대 임계값이 그대로 기준이다)
 }
 
 export interface Step2Input {

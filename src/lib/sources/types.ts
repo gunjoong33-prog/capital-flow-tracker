@@ -23,9 +23,18 @@ export const METRICS = {
   // 3단계
   US10Y: "US10Y",
   JP10Y: "JP10Y",
+  // 1단계 뉴스 리스크 가중점수를 매일 저장(pipeline.ts) — 절대 임계값(NEWS_RISK_SCORE_THRESHOLD)
+  // 대신 백분위 기반 거부권으로 전환하려면 이 시계열이 calculatePercentile 최소 표본(30개)만큼
+  // 쌓여야 한다. 지금은 저장만 시작한다(외부 감사 지적: "저장만 하면 바로 됨"은 과장이지만,
+  // 시작 자체는 지금 해둬야 나중에 전환 가능).
+  NEWS_RISK_SCORE_7D: "NEWS_RISK_SCORE_7D",
   KR10Y: "KR10Y",
   CFTC_JPY_NET: "CFTC_JPY_NET", // CFTC 엔화 순포지션(레버리지드펀드 기준)
-  JPY_VOL: "JPY_VOL", // 엔화 변동성(USD/JPY 일중 변동폭 대용)
+  // USD/JPY 인트라데이 스냅샷 전용(4시간 간격 크론이 하루 여러 번 덮어씀). 확정 종가 시계열(USDJPY)과
+  // 분리해둔다 — 예전엔 크론이 USDJPY 행을 직접 덮어써서 "전일 종가"라는 기준점 자체가 지워지고
+  // detectJpyVolSpike의 z-score 계산도 같은 시계열을 써서 무력화됐다(외부 감사 지적, 실제 확인).
+  // 이 지표는 상단 경보 배너 전용이며 3단계 점수·detectJpyVolSpike의 기준 시계열에는 안 쓴다.
+  USDJPY_INTRADAY: "USDJPY_INTRADAY",
 
   // 4단계
   GOLD: "GOLD",

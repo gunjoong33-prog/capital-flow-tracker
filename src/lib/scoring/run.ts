@@ -153,7 +153,7 @@ function splitSentences(text: string): string[] {
  */
 function summarizeStep4(
   step4Result: { quadrant: string; note: string; score: number; dollarConfirms: boolean },
-  fxOilDirection: { dollarDir: Direction; oilDir: Direction; oilChangePct: number | null },
+  fxOilDirection: { dollarDir: Direction; oilDir: Direction; oilChangePct: number | null; brentChangePct: number | null },
   context: {
     overseasQualifyingCount: number;
     overseasTotalCount: number;
@@ -174,8 +174,16 @@ function summarizeStep4(
   // 리스크로 유가가 급등한 날에도 "신흥국으로 자금 확산"이라고 잘못 읽는 경우가 있었다(예:
   // 2026-07-29 브렌트유 +7.9%·코스피 서킷브레이커가 겹쳤는데 원화 약세만 보고 Risk-On 판정).
   // 일간 유가 상승률이 +3%를 넘으면 지정학적 공급 충격일 가능성이 커서, 환율 방향과 무관하게
-  // Risk-Off로 강제한다.
-  const oilSpike = fxOilDirection.oilChangePct !== null && fxOilDirection.oilChangePct > 3;
+  // Risk-Off로 강제한다. 처음엔 WTI 하나만 봤는데, 브렌트를 이미 받아오면서도 판정엔 안 써서
+  // WTI만 데이터 이상으로 튀어도(소스 오류·정산가 불일치 등) 그대로 통과하는 문제가 있었다(외부
+  // 감사 지적, 실제 확인) — 두 유종이 같이 튀는지 확인하고, 둘이 크게 어긋나면 데이터 이상으로 본다.
+  const bothOilSpike =
+    fxOilDirection.oilChangePct !== null && fxOilDirection.oilChangePct > 3 &&
+    fxOilDirection.brentChangePct !== null && fxOilDirection.brentChangePct > 3;
+  const oilDataMismatch =
+    fxOilDirection.oilChangePct !== null && fxOilDirection.brentChangePct !== null &&
+    Math.abs(fxOilDirection.oilChangePct - fxOilDirection.brentChangePct) > 2;
+  const oilSpike = bothOilSpike;
 
   const riskStance = oilSpike
     ? "Risk-Off(유가 급등 — 지정학 리스크 우선 반영)"
@@ -200,6 +208,11 @@ function summarizeStep4(
   }
   lines.push(`환율·유가는 ${riskStance} 흐름입니다.`);
   lines.push(reason);
+  if (oilDataMismatch) {
+    lines.push(
+      `WTI ${fxOilDirection.oilChangePct!.toFixed(1)}% / 브렌트 ${fxOilDirection.brentChangePct!.toFixed(1)}%로 두 유종 변동률이 2%p 넘게 어긋나 있어 소스 데이터 이상 가능성이 있습니다.`
+    );
+  }
 
   return lines.join("\n");
 }
@@ -392,6 +405,9 @@ interface DailyChange {
   changePct: number | null;
   source: string | null; // "yahoo" | "fred" 등 — fred면 Yahoo가 실패해 폴백된 값이라는 뜻
   daysOld: number | null; // 최신값의 날짜가 오늘로부터 며칠 전인지
+  prevGapDays: number | null; // curr와 prev 사이 날짜 간격 — 파이프라인이 하루 실패하면 "전일 대비"가
+  // 실제로는 며칠치 누적 변동일 수 있다(외부 감사 지적, 실제 확인: 최근 2"행"만 볼 뿐 날짜가
+  // 붙어있는지 검사 안 함). 주말·연휴로 인한 정상적인 3~4일 간격과는 구분해서 표시한다.
 }
 
 /**
@@ -401,12 +417,13 @@ interface DailyChange {
  */
 async function dailyChange(metric: string, asOf: Date = new Date()): Promise<DailyChange> {
   const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
-  if (!curr) return { latest: null, changeAmount: null, changePct: null, source: null, daysOld: null };
+  if (!curr) return { latest: null, changeAmount: null, changePct: null, source: null, daysOld: null, prevGapDays: null };
   const daysOld = Math.round((asOf.getTime() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
-  if (!prev) return { latest: curr.value, changeAmount: null, changePct: null, source: curr.source, daysOld };
+  if (!prev) return { latest: curr.value, changeAmount: null, changePct: null, source: curr.source, daysOld, prevGapDays: null };
   const changeAmount = curr.value - prev.value;
   const changePct = prev.value !== 0 ? (changeAmount / prev.value) * 100 : null;
-  return { latest: curr.value, changeAmount, changePct, source: curr.source, daysOld };
+  const prevGapDays = Math.round((curr.date.getTime() - prev.date.getTime()) / (1000 * 60 * 60 * 24));
+  return { latest: curr.value, changeAmount, changePct, source: curr.source, daysOld, prevGapDays };
 }
 
 /** dailyChange 결과를 "값 (단위) — 전일 대비 ±값 (단위), ±값%" 형태의 표시 문자열로 만든다. */
@@ -424,7 +441,10 @@ function fmtDailyChange(c: DailyChange, unit: string, decimals = 2): string {
         : "";
   if (c.changeAmount === null || c.changePct === null) return `${latestStr}${staleNote}`;
   const sign = c.changeAmount >= 0 ? "+" : "";
-  return `${latestStr}${staleNote} — 전일 대비 ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
+  // 주말·연휴로 인한 3~4일 간격은 정상이라 "전일 대비"로 그대로 표시하지만, 그보다 크면(파이프라인이
+  // 하루 이상 실제로 실패한 경우) "전일"이라는 표현이 거짓이 되므로 실제 간격을 명시한다.
+  const label = c.prevGapDays !== null && c.prevGapDays > 4 ? `${c.prevGapDays}일 전 대비` : "전일 대비";
+  return `${latestStr}${staleNote} — ${label} ${sign}${comma(c.changeAmount, decimals)} (${unit}), ${sign}${c.changePct.toFixed(2)}%`;
 }
 
 interface TrendCheck {
@@ -607,28 +627,57 @@ async function directionOfWithFreshness(
 }
 
 /**
- * USD/JPY 일간 변동률을 최근 19개 변동률의 평균·표준편차와 비교(z-score).
- * |z| > 2 이거나 하루 변동률이 1.5%를 넘으면 "급등"으로 본다 — 표준편차가 아주 작을 때도
- * 절대 임계값으로 걸러지도록 두 조건을 OR로 묶었다. 데이터가 21개 미만이면 판정 보류(급등 아님).
+ * USD/JPY 확정 종가(METRICS.USDJPY, 09시 파이프라인이 하루 1회만 기록) 기준 일간 변동률을
+ * 최근 19개 변동률의 평균·표준편차와 비교(z-score). |z| > 2 이거나 하루 변동률이 1.5%를
+ * 넘으면 "급등"으로 본다 — 표준편차가 아주 작을 때도 절대 임계값으로 걸러지도록 두 조건을
+ * OR로 묶었다. 데이터가 21개 미만이면 판정 보류(급등 아님).
+ *
+ * 여기에 더해 인트라데이 경보(jpy-check 크론이 METRICS.USDJPY_INTRADAY에 하루 여러 번 기록)도
+ * 같이 본다 — 종가 대 종가 비교만으로는 "마지막 확정 종가 이후 장중에 이미 크게 움직였다"를
+ * 다음날 09시까지 못 잡는다. 확정 종가 시계열은 절대 건드리지 않고 별도 지표로만 비교한다
+ * (예전엔 이 크론이 USDJPY 행 자체를 덮어써서 종가 기준점이 사라지는 문제가 있었다 — 외부 감사
+ * 지적, 실제 확인. METRICS.USDJPY_INTRADAY 분리로 해결).
  */
 async function detectJpyVolSpike(
   asOf: Date = new Date()
-): Promise<{ spike: boolean; zScore: number | null; latestReturnPct: number | null }> {
+): Promise<{
+  spike: boolean;
+  zScore: number | null;
+  latestReturnPct: number | null;
+  intradayReturnPct: number | null;
+}> {
   const history = await getMetricHistory(METRICS.USDJPY, 60, asOf);
-  if (history.length < 21) return { spike: false, zScore: null, latestReturnPct: null };
-  const recent = history.slice(-21);
-  const returns: number[] = [];
-  for (let i = 1; i < recent.length; i++) {
-    returns.push((recent[i].value - recent[i - 1].value) / recent[i - 1].value);
+  const lastClose = history[history.length - 1] ?? null;
+
+  let closeSpike = false;
+  let zScore: number | null = null;
+  let latestReturnPct: number | null = null;
+  if (history.length >= 21) {
+    const recent = history.slice(-21);
+    const returns: number[] = [];
+    for (let i = 1; i < recent.length; i++) {
+      returns.push((recent[i].value - recent[i - 1].value) / recent[i - 1].value);
+    }
+    const latestReturn = returns[returns.length - 1];
+    const baseline = returns.slice(0, -1);
+    const mean = baseline.reduce((a, b) => a + b, 0) / baseline.length;
+    const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length;
+    const std = Math.sqrt(variance);
+    const z = std > 0 ? (latestReturn - mean) / std : 0;
+    closeSpike = Math.abs(z) > 2 || Math.abs(latestReturn) > 0.015;
+    zScore = Number(z.toFixed(2));
+    latestReturnPct = Number((latestReturn * 100).toFixed(2));
   }
-  const latestReturn = returns[returns.length - 1];
-  const baseline = returns.slice(0, -1);
-  const mean = baseline.reduce((a, b) => a + b, 0) / baseline.length;
-  const variance = baseline.reduce((a, b) => a + (b - mean) ** 2, 0) / baseline.length;
-  const std = Math.sqrt(variance);
-  const z = std > 0 ? (latestReturn - mean) / std : 0;
-  const spike = Math.abs(z) > 2 || Math.abs(latestReturn) > 0.015;
-  return { spike, zScore: Number(z.toFixed(2)), latestReturnPct: Number((latestReturn * 100).toFixed(2)) };
+
+  let intradaySpike = false;
+  let intradayReturnPct: number | null = null;
+  const intraday = await getLatestMetric(METRICS.USDJPY_INTRADAY, asOf);
+  if (lastClose && intraday && intraday.date > lastClose.date) {
+    intradayReturnPct = Number((((intraday.value - lastClose.value) / lastClose.value) * 100).toFixed(2));
+    intradaySpike = Math.abs(intradayReturnPct) > 1.5;
+  }
+
+  return { spike: closeSpike || intradaySpike, zScore, latestReturnPct, intradayReturnPct };
 }
 
 /**
@@ -684,6 +733,7 @@ export async function runDailyAnalysis(
     })),
     upcomingEvents: upcomingEvents.map((e) => ({ name: e.name, date: e.date.toISOString().slice(0, 10) })),
     recentEventOutcomes: recentOutcomes,
+    newsRiskScore,
   };
   details.step1 = [
     {
@@ -935,12 +985,21 @@ export async function runDailyAnalysis(
       label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 이상 시 충족\n(숏 쏠림 완화, 청산 압박 낮음)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile >= 50 : null,
     },
     {
-      label: "엔화 변동성 급등(USD/JPY)",
+      label: "엔화 변동성 급등(USD/JPY 종가)",
       criterion: "일간 변동률이 최근 20일 평균 대비 2표준편차 초과 또는 1.5%p 초과",
       value: jpySpike.zScore !== null
         ? `${jpySpike.latestReturnPct}% (z=${jpySpike.zScore})`
         : "데이터 부족(21거래일 미만)",
       met: jpySpike.zScore !== null ? !jpySpike.spike : null,
+    },
+    {
+      // 마지막 확정 종가 이후 장중 크론(USDJPY_INTRADAY)이 감지한 변동 — 다음날 09시 종가 확정을
+      // 기다리지 않고 당일 캐리 청산 압박을 미리 본다. 확정 종가 이후 인트라데이 갱신이 아직
+      // 없으면(장 시작 직후 등) "확인 못함"으로 둔다.
+      label: "엔화 인트라데이 변동(확정 종가 대비)",
+      criterion: "마지막 확정 종가 대비 ±1.5% 초과 시 경계",
+      value: jpySpike.intradayReturnPct !== null ? `${jpySpike.intradayReturnPct}%` : "확인 못함",
+      met: jpySpike.intradayReturnPct !== null ? Math.abs(jpySpike.intradayReturnPct) <= 1.5 : null,
     },
   ];
 
@@ -1019,7 +1078,7 @@ export async function runDailyAnalysis(
 
   details.step4Summary = summarizeStep4(
     step4,
-    { dollarDir, oilDir: wtiDir, oilChangePct: wtiChange.changePct },
+    { dollarDir, oilDir: wtiDir, oilChangePct: wtiChange.changePct, brentChangePct: brentChange.changePct },
     {
       overseasQualifyingCount: step2.overseasQualifyingCount,
       overseasTotalCount: step2.overseasTotalCount,

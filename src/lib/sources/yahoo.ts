@@ -9,6 +9,7 @@ const YAHOO_TICKERS: Record<string, string> = {
   [METRICS.BRENT]: "BZ=F",
   [METRICS.USDKRW]: "KRW=X",
   [METRICS.USDJPY]: "JPY=X",
+  [METRICS.USDJPY_INTRADAY]: "JPY=X", // jpy-check 크론 전용 — 확정 종가(USDJPY)와 같은 시세, 다른 저장 키
   [METRICS.DXY]: "DX-Y.NYB",
   [METRICS.NDX]: "^NDX",
   [METRICS.RUT]: "^RUT",
@@ -86,15 +87,17 @@ export async function fetchAllYahooLatest(): Promise<{
   points: FetchedPoint[];
   errors: { metric: string; message: string }[];
 }> {
+  // 지표별로 독립적인 Yahoo 요청이라 순차 for 루프로 돌면 지표 개수만큼 왕복 지연이 누적된다
+  // (파이프라인 55초 소요의 주요 원인 중 하나 — 외부 감사 지적, 실제 확인). 병렬로 바꾼다.
+  const metrics = Object.keys(YAHOO_TICKERS);
+  const results = await Promise.allSettled(metrics.map((metric) => fetchYahooLatest(metric)));
+
   const points: FetchedPoint[] = [];
   const errors: { metric: string; message: string }[] = [];
-  for (const metric of Object.keys(YAHOO_TICKERS)) {
-    try {
-      points.push(...(await fetchYahooLatest(metric)));
-    } catch (err) {
-      errors.push({ metric, message: err instanceof Error ? err.message : String(err) });
-    }
-  }
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") points.push(...r.value);
+    else errors.push({ metric: metrics[i], message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+  });
   return { points, errors };
 }
 
