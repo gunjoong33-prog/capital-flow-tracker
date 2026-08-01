@@ -1,8 +1,15 @@
+import { NextResponse } from "next/server";
 import { getNotionClient, NOTION_PAGE_IDS } from "@/lib/notion";
 
 // 통합 토큰이 두 페이지에 실제로 연결됐는지 확인하는 진단용 엔드포인트.
-// 읽기만 한다 — 아무것도 쓰거나 바꾸지 않음.
-export async function GET() {
+// 읽기만 한다 — 아무것도 쓰거나 바꾸지 않음. 무인증 배포 시 워크스페이스 구조가 노출될 수 있어
+// cron과 같은 가드를 건다.
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const notion = getNotionClient();
   const result: Record<string, unknown> = {};
 
