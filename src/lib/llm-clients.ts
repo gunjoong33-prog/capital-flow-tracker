@@ -12,34 +12,45 @@ interface ChatCompletionResponse {
   choices?: { message: { content: string } }[];
 }
 
-export async function callMistral(prompt: string, maxTokens = 2048, temperature = 0.2): Promise<string> {
-  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
-    body: JSON.stringify({
-      model: "mistral-large-latest",
-      messages: [{ role: "user", content: prompt }],
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
-  if (!res.ok) throw new Error(`Mistral 요청 실패: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as ChatCompletionResponse;
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Mistral 응답에 텍스트가 없다");
-  return text.trim();
-}
-
-/** Groq 429 응답에서 재시도 대기시간(초)을 뽑는다 — Retry-After 헤더 우선, 없으면 에러 메시지에
- * 박힌 "try again in 7.56s" 문구를 파싱한다. 둘 다 없으면 5초를 기본값으로 쓴다. */
-function parseGroqRetryAfterSeconds(res: Response, bodyText: string): number {
+/** 429 응답에서 재시도 대기시간(초)을 뽑는다 — Retry-After 헤더 우선, 없으면 에러 메시지에
+ * 박힌 "try again in 7.56s" 문구를 파싱한다. 둘 다 없으면 fallback초를 기본값으로 쓴다. */
+function parseRetryAfterSeconds(res: Response, bodyText: string, fallback: number): number {
   const header = res.headers.get("retry-after");
   if (header) {
     const n = Number(header);
     if (!Number.isNaN(n)) return n;
   }
   const m = bodyText.match(/try again in ([\d.]+)s/);
-  return m ? Number(m[1]) : 5;
+  return m ? Number(m[1]) : fallback;
+}
+
+export async function callMistral(prompt: string, maxTokens = 2048, temperature = 0.2): Promise<string> {
+  const request = () =>
+    fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
+      body: JSON.stringify({
+        model: "mistral-large-latest",
+        messages: [{ role: "user", content: prompt }],
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+
+  let res = await request();
+  // 무료 티어가 분당 2회로 빡빡해서 pipeline.ts가 호출 사이에 고정 대기(sleep)를 두지만, 그 여유폭
+  // 안에서도 실제로 429가 뜨는 경우가 있었다 — Groq처럼 서버가 알려준 정확한 대기시간만큼 기다렸다가
+  // 한 번 재시도한다(고정 대기만 믿고 재시도 로직이 없었던 것이 외부 감사 지적 사항).
+  if (res.status === 429) {
+    const waitSec = Math.min(parseRetryAfterSeconds(res, await res.text(), 20), 60);
+    await sleep(Math.ceil(waitSec * 1000) + 500);
+    res = await request();
+  }
+  if (!res.ok) throw new Error(`Mistral 요청 실패: ${res.status} ${await res.text()}`);
+  const data = (await res.json()) as ChatCompletionResponse;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Mistral 응답에 텍스트가 없다");
+  return text.trim();
 }
 
 export async function callGroq(
@@ -70,7 +81,7 @@ export async function callGroq(
   // 분당 토큰 한도(TPM)에 걸리면 Groq가 정확한 재시도 대기시간을 응답에 알려준다 — 그만큼만 기다렸다가
   // 한 번 재시도한다(무한 재시도는 안 하고, 그래도 실패하면 진짜 에러로 처리).
   if (res.status === 429) {
-    const waitSec = Math.min(parseGroqRetryAfterSeconds(res, await res.text()), 30);
+    const waitSec = Math.min(parseRetryAfterSeconds(res, await res.text(), 5), 30);
     await sleep(Math.ceil(waitSec * 1000) + 500);
     res = await request();
   }

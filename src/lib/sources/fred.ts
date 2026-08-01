@@ -90,20 +90,19 @@ export async function fetchAllFredMetrics(
   apiKey: string,
   startDate?: string
 ): Promise<{ points: FetchedPoint[]; errors: { metric: string; message: string }[] }> {
+  // 지표별로 서로 독립적인 API 호출이라 순차 for 루프로 돌면 지표 개수만큼 왕복 지연이 그대로
+  // 누적된다(파이프라인 55초 소요의 주요 원인 중 하나 — 외부 감사 지적, 실제 확인). 병렬로 바꾼다.
+  const results = await Promise.allSettled(
+    Object.keys(FRED_SERIES).map((metric) => fetchFredMetric(metric, apiKey, startDate))
+  );
+
   const points: FetchedPoint[] = [];
   const errors: { metric: string; message: string }[] = [];
-
-  for (const metric of Object.keys(FRED_SERIES)) {
-    try {
-      const metricPoints = await fetchFredMetric(metric, apiKey, startDate);
-      points.push(...metricPoints);
-    } catch (err) {
-      errors.push({
-        metric,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
+  const metrics = Object.keys(FRED_SERIES);
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") points.push(...r.value);
+    else errors.push({ metric: metrics[i], message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+  });
 
   return { points, errors };
 }

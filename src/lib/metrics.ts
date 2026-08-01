@@ -1,26 +1,39 @@
 import { db } from "@/lib/db";
 import type { FetchedPoint } from "@/lib/sources/types";
 
-/** 지표 시계열 포인트들을 DB에 upsert. 같은 (metric, date)는 덮어쓴다. */
+/**
+ * 지표 시계열 포인트들을 DB에 upsert. 같은 (metric, date)는 덮어쓴다.
+ * 포인트당 순차 왕복이면 하루 90여 회가 그대로 누적된다(외부 감사 지적, 실제 확인) — 청크 단위로
+ * 병렬화한다. 전체를 한 번에 Promise.all로 몰면 대량 백필(수천~수만 건) 시 Neon 커넥션 풀이
+ * 고갈돼 끊기는 걸 실제로 겪었으므로(이전 세션의 FRED 5년 백필 크래시), 청크 크기를 적당히
+ * 제한해 동시 커넥션 수를 억제한다.
+ */
+const UPSERT_CHUNK_SIZE = 10;
+
 export async function saveMetricPoints(points: FetchedPoint[]) {
   let saved = 0;
-  for (const p of points) {
-    await db.metricValue.upsert({
-      where: { metric_date: { metric: p.metric, date: new Date(p.date) } },
-      create: {
-        metric: p.metric,
-        date: new Date(p.date),
-        value: p.value,
-        source: p.source,
-        isManual: p.source === "manual",
-      },
-      update: {
-        value: p.value,
-        source: p.source,
-        isManual: p.source === "manual",
-      },
-    });
-    saved++;
+  for (let i = 0; i < points.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = points.slice(i, i + UPSERT_CHUNK_SIZE);
+    await Promise.all(
+      chunk.map((p) =>
+        db.metricValue.upsert({
+          where: { metric_date: { metric: p.metric, date: new Date(p.date) } },
+          create: {
+            metric: p.metric,
+            date: new Date(p.date),
+            value: p.value,
+            source: p.source,
+            isManual: p.source === "manual",
+          },
+          update: {
+            value: p.value,
+            source: p.source,
+            isManual: p.source === "manual",
+          },
+        })
+      )
+    );
+    saved += chunk.length;
   }
   return saved;
 }
