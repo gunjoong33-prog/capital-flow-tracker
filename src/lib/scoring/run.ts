@@ -850,6 +850,34 @@ export async function runDailyAnalysis(
     met: t10y2yBp !== null ? t10y2yBp >= 0 : null,
   });
 
+  // 美 30년물 국채금리(FRED DGS30): 장단기 스프레드(T10Y2Y)는 역전 여부만 보여줘서, 역전 없이
+  // 장기금리 자체가 급등하는 "베어 스티프닝"(채권시장에서 주식에 악재로 읽는 국면)은 못 잡는다.
+  // 절대 수준의 좋고 나쁨을 판정할 보편적 임계값이 없어 met은 null로 남기고, 자체 1년 분포
+  // 백분위만 참고용으로 보여준다 — 해석은 사용자 몫(데이터 정직성 원칙).
+  const us30y = await getLatestMetric(METRICS.US30Y, asOf);
+  const us30yPercentile = us30y ? await calculatePercentile(METRICS.US30Y, us30y.value, asOf) : null;
+  details.step2Aux.push({
+    label: "美 30년물 국채금리",
+    criterion: "절대 수준 참고용(임계값 없음) — 급등 시 베어 스티프닝(장기금리 주도 약세) 경계",
+    value: us30y !== null
+      ? `${us30y.value.toFixed(2)}%${us30yPercentile !== null ? ` — 최근 1년 ${us30yPercentile}%ile` : ""}`
+      : "확인 못함",
+    met: null,
+  });
+
+  // 美 2년물-기준금리 스프레드: 2년물은 향후 2년간 예상되는 정책금리 경로를 선반영하는 성격이 있어,
+  // 기준금리보다 낮으면 시장이 인하를, 높으면 인상을 가격에 반영 중이라고 널리 해석된다(CME FedWatch
+  // 같은 선물 내재확률의 무료 대체 근사치 — 정확한 확률값은 아니고 방향성 참고용).
+  const us2y = await getLatestMetric(METRICS.US2Y, asOf);
+  const fedFunds = await getLatestMetric(METRICS.FED_FUNDS_RATE, asOf);
+  const us2yFfrSpreadBp = us2y && fedFunds ? (us2y.value - fedFunds.value) * 100 : null;
+  details.step2Aux.push({
+    label: "美 2년물-기준금리 스프레드",
+    criterion: "음수면 시장이 향후 금리 인하를, 양수면 인상을 가격에 반영 중으로 해석(방향성 참고용)",
+    value: us2yFfrSpreadBp !== null ? `${us2yFfrSpreadBp >= 0 ? "+" : ""}${us2yFfrSpreadBp.toFixed(0)}bp` : "확인 못함",
+    met: null,
+  });
+
   const reserveFlow = await reserveFlowNote(asOf);
   details.step2Summary = summarizeStep2(
     step2,
@@ -960,6 +988,7 @@ export async function runDailyAnalysis(
   // 구조를 그대로 유지하려고 집계엔 안 넣고, 2단계와 같은 방식으로 별도 토글("보조 지표 보기")로 뺀다.
   const usdKrwChange = await dailyChange(METRICS.USDKRW, asOf);
   const usdJpyChange = await dailyChange(METRICS.USDJPY, asOf);
+  const kospiChange = await dailyChange(METRICS.KOSPI, asOf);
   const wtiChange = await dailyChange(METRICS.WTI, asOf);
   const brentChange = await dailyChange(METRICS.BRENT, asOf);
   const wtiDir = (await directionOf(METRICS.WTI, asOf)) ?? "flat";
@@ -983,6 +1012,7 @@ export async function runDailyAnalysis(
       met: null,
     },
     { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
+    { label: "코스피", criterion: "한국 투자자 관점 보조 지표(전일 대비 변동만 참고용)", value: fmtDailyChange(kospiChange, "포인트"), met: null },
     { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
     { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
   ];

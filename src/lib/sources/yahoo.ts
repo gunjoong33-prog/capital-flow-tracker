@@ -15,6 +15,7 @@ const YAHOO_TICKERS: Record<string, string> = {
   [METRICS.DJI]: "^DJI",
   [METRICS.SPX]: "^GSPC",
   [METRICS.VIX]: "^VIX",
+  [METRICS.KOSPI]: "^KS11",
   [METRICS.AAPL]: "AAPL",
   [METRICS.MSFT]: "MSFT",
   [METRICS.GOOGL]: "GOOGL",
