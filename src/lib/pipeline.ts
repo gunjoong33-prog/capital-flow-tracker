@@ -22,7 +22,9 @@ import { syncNewsEvents } from "@/lib/news-events";
 import { syncNewsPageHeadlines } from "@/lib/news-page";
 import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
-import { BIG_TECH_TICKERS, METRICS, type FetchedPoint } from "@/lib/sources/types";
+import { BIG_TECH_TICKERS, METRICS, SECTOR_ETFS, type FetchedPoint } from "@/lib/sources/types";
+import { getLatestMetric } from "@/lib/metrics";
+import { fetchIndexFallback, fetchSectorFallback, alphaVantagePace } from "@/lib/sources/alphavantage";
 
 export interface DailyPipelineResult {
   date: string;
@@ -113,28 +115,73 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   if (fearGreedResult.status === "fulfilled") allPoints.push(...fearGreedResult.value);
   else sourceErrors.push({ source: "CNN 공포탐욕지수", error: String(fearGreedResult.reason) });
 
+  // Yahoo는 무료 비공식 API라 막히면 4·5·6단계가 동시에 전멸한다(외부 감사 지적, 실제 확인) —
+  // 채점에 실제로 쓰이는 지수 4개(SPX·DJI·NDX·RUT)만 Alpha Vantage로 폴백한다(무료 25회/일이라
+  // 전체 커버는 못 하고, 검증 결과 GOLD·DXY·VIX는 ETF 프록시가 못 미더워 제외 — alphavantage.ts
+  // 주석 참고). Yahoo가 이미 실패한 날에만 호출되므로 평소엔 한도를 안 쓴다.
+  const avApiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  const yahooFailedMetrics = new Set(yahooResult.status === "fulfilled" ? yahooResult.value.errors.map((e) => e.metric) : []);
+  if (avApiKey) {
+    for (const metric of [METRICS.SPX, METRICS.DJI, METRICS.NDX, METRICS.RUT]) {
+      if (!yahooFailedMetrics.has(metric)) continue;
+      try {
+        const lastReal = await getLatestMetric(metric);
+        if (!lastReal) throw new Error("과거 실제값이 없어 등락률을 곱할 기준점이 없다");
+        const point = await fetchIndexFallback(metric, lastReal.value, avApiKey);
+        allPoints.push(point);
+      } catch (err) {
+        sourceErrors.push({ source: `AlphaVantage(지수 폴백):${metric}`, error: err instanceof Error ? err.message : String(err) });
+      }
+      await alphaVantagePace();
+    }
+  }
+
   const metricsSaved = await saveMetricPoints(allPoints);
 
-  const sectors =
+  // ticker를 계속 들고 다닌다 — 채점 입력(name/return5d/changePct1d/volumeRatio)과 시계열 저장
+  // (SECTOR_<티커>_*) 둘 다 Yahoo 성공분·Alpha Vantage 폴백분이 합쳐진 같은 목록을 써야
+  // 저장 누락 없이 일치한다.
+  const sectors: { name: string; ticker: string; return5d: number; changePct1d: number; volumeRatio: number; source: "yahoo" | "alphavantage" }[] =
     sectorsResult.status === "fulfilled"
-      ? sectorsResult.value.sectors.map((s) => ({ name: s.name, return5d: s.return5d, changePct1d: s.changePct1d, volumeRatio: s.volumeRatio }))
+      ? sectorsResult.value.sectors.map((s) => ({ ...s, source: "yahoo" as const }))
       : [];
-  const missingSectorLabels = sectorsResult.status === "fulfilled" ? sectorsResult.value.errors.map((e) => e.sector) : [];
+  const missingSectorLabels: string[] = [];
+  if (sectorsResult.status !== "fulfilled") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
+
+  // 섹터 폴백은 Yahoo와 같은 티커(XLK 등)를 그대로 쓰므로 지수 폴백과 달리 스케일 문제가 없다 —
+  // 실패한 섹터만 Alpha Vantage로 직접 계산해서 채운다.
   if (sectorsResult.status === "fulfilled") {
-    for (const e of sectorsResult.value.errors) sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
-  } else sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
+    const tickerToKey = new Map<string, keyof typeof SECTOR_ETFS>(
+      Object.entries(SECTOR_ETFS).map(([key, ticker]) => [ticker, key as keyof typeof SECTOR_ETFS])
+    );
+    for (const e of sectorsResult.value.errors) {
+      sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
+      const ticker = e.sector.match(/\(([^)]+)\)$/)?.[1];
+      const sectorKey = ticker ? tickerToKey.get(ticker) : undefined;
+      if (!avApiKey || !sectorKey) {
+        missingSectorLabels.push(e.sector);
+        continue;
+      }
+      try {
+        const fallback = await fetchSectorFallback(sectorKey, avApiKey);
+        sectors.push({ ...fallback, source: "alphavantage" as const });
+      } catch (err) {
+        sourceErrors.push({ source: `AlphaVantage(섹터 폴백):${e.sector}`, error: err instanceof Error ? err.message : String(err) });
+        missingSectorLabels.push(e.sector);
+      }
+      await alphaVantagePace();
+    }
+  }
 
   // 섹터 원자료(return5d·volumeRatio·전일 대비)는 지금까지 라이브 조회 전용이라 시계열로 안 남았다
   // — 6단계는 백테스트가 원천 불가능했다(외부 감사 지적). MetricValue에 티커별로 저장해두면
   // 나중에 scoreStep6 로직 변경(예: P0-3 분모 수정)의 과거 영향도 재계산해볼 수 있다.
-  if (sectorsResult.status === "fulfilled") {
-    const sectorPoints: FetchedPoint[] = sectorsResult.value.sectors.flatMap((s) => [
-      { metric: `SECTOR_${s.ticker}_RET5D`, date: today, value: s.return5d, source: "yahoo" as const },
-      { metric: `SECTOR_${s.ticker}_VOLRATIO`, date: today, value: s.volumeRatio, source: "yahoo" as const },
-      { metric: `SECTOR_${s.ticker}_CHG1D`, date: today, value: s.changePct1d, source: "yahoo" as const },
-    ]);
-    await saveMetricPoints(sectorPoints);
-  }
+  const sectorPoints: FetchedPoint[] = sectors.flatMap((s) => [
+    { metric: `SECTOR_${s.ticker}_RET5D`, date: today, value: s.return5d, source: s.source },
+    { metric: `SECTOR_${s.ticker}_VOLRATIO`, date: today, value: s.volumeRatio, source: s.source },
+    { metric: `SECTOR_${s.ticker}_CHG1D`, date: today, value: s.changePct1d, source: s.source },
+  ]);
+  await saveMetricPoints(sectorPoints);
 
   // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
