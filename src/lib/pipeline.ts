@@ -8,6 +8,7 @@ import { fetchJp10yLatest } from "@/lib/sources/mof-japan";
 import { fetchAllYahooLatest, fetchAllSectors } from "@/lib/sources/yahoo";
 import { fetchKr10y } from "@/lib/sources/ecos";
 import { fetchCnnFearGreedLatest } from "@/lib/sources/cnn-feargreed";
+import { fetchForeignNetBuyKospi } from "@/lib/sources/korea-investment";
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { generateComprehensiveReport } from "@/lib/comprehensive-report";
@@ -19,7 +20,7 @@ import { syncNewsEvents } from "@/lib/news-events";
 import { syncNewsPageHeadlines } from "@/lib/news-page";
 import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
-import { BIG_TECH_TICKERS, type FetchedPoint } from "@/lib/sources/types";
+import { BIG_TECH_TICKERS, METRICS, type FetchedPoint } from "@/lib/sources/types";
 
 export interface DailyPipelineResult {
   date: string;
@@ -51,7 +52,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행 (뉴스 판정·주요 이벤트 동기화도 여기 포함)
   const [
     fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
-    kr10yResult, fearGreedResult, majorEventsResult, newsEventsResult, newsPageResult,
+    kr10yResult, fearGreedResult, majorEventsResult, newsEventsResult, newsPageResult, foreignNetBuyResult,
   ] = await Promise.allSettled([
       process.env.FRED_API_KEY
         ? fetchAllFredMetrics(process.env.FRED_API_KEY, sevenDaysAgoStr)
@@ -66,6 +67,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       syncMajorEvents(),
       syncNewsEvents(),
       syncNewsPageHeadlines(),
+      fetchForeignNetBuyKospi(),
     ]);
 
   if (majorEventsResult.status === "fulfilled") {
@@ -79,6 +81,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   if (newsPageResult.status === "fulfilled") {
     for (const e of newsPageResult.value.errors) sourceErrors.push({ source: "뉴스페이지", error: e });
   } else sourceErrors.push({ source: "뉴스페이지", error: String(newsPageResult.reason) });
+
+  if (foreignNetBuyResult.status === "fulfilled") {
+    allPoints.push(...foreignNetBuyResult.value.points);
+    for (const e of foreignNetBuyResult.value.errors) sourceErrors.push({ source: "외국인 순매수(코스피, KIS)", error: e });
+  } else sourceErrors.push({ source: "외국인 순매수(코스피, KIS)", error: String(foreignNetBuyResult.reason) });
 
   if (fredResult.status === "fulfilled") {
     allPoints.push(...fredResult.value.points);
@@ -219,6 +226,15 @@ async function buildNotionInput(
     await Promise.all(
       ["WALCL", "M2", "TOTRESNS", "RRP", "TGA", "REAL_RATE", "CREDIT_SPREAD", "GOLD", "WTI", "BRENT", "USDKRW", "USDJPY", "NDX", "RUT", "DJI", "SPX", "VIX"].map(latest)
     );
+  const foreignNetBuyRecent = await db.metricValue.findMany({
+    where: { metric: METRICS.FOREIGN_NET_BUY_KOSPI },
+    orderBy: { date: "desc" },
+    take: 5,
+  });
+  const foreignNetBuy5dEok =
+    foreignNetBuyRecent.length === 5
+      ? foreignNetBuyRecent.reduce((sum, r) => sum + r.value, 0) / 100 // 백만원 -> 억원
+      : null;
 
   return {
     date,
@@ -232,7 +248,13 @@ async function buildNotionInput(
     domesticLiquidity: [
       { name: "한국은행 기준금리", condition: "인하 또는 동결 흐름", status: "자동 미판정" },
       { name: "국내 CPI", condition: "목표치(2%) 근접 추세", status: "자동 미판정" },
-      { name: "외국인 순매수(코스피)", condition: "5거래일 누적 순매수", status: "자동 미판정" },
+      {
+        name: "외국인 순매수(코스피)",
+        condition: "5거래일 누적 순매수",
+        status: foreignNetBuy5dEok !== null
+          ? `${foreignNetBuy5dEok >= 0 ? "+" : ""}${foreignNetBuy5dEok.toLocaleString()}억원`
+          : "확인 못함",
+      },
     ],
     fredIndicators: [
       { name: "WALCL", condition: "규모 증가", status: walcl ? `${walcl.value.toLocaleString()}` : "확인 못함", qualifies: !!report.step2.overseasQualifyingCount },

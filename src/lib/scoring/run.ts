@@ -913,8 +913,25 @@ export async function runDailyAnalysis(
   const wtiChange = await dailyChange(METRICS.WTI, asOf);
   const brentChange = await dailyChange(METRICS.BRENT, asOf);
   const wtiDir = (await directionOf(METRICS.WTI, asOf)) ?? "flat";
+
+  // 외국인 순매수(코스피): 한국투자증권 Open API. USD/KRW 변동의 원인 참고용이라 USD/KRW 바로
+  // 옆에 둔다 — 5거래일치가 다 쌓여야 "5거래일 누적"이 의미 있어 부족하면 확인 못함으로 남긴다.
+  const foreignNetBuyHistory = await getMetricHistoryByCount(METRICS.FOREIGN_NET_BUY_KOSPI, 5, asOf);
+  const foreignNetBuy5dEok =
+    foreignNetBuyHistory.length === 5
+      ? foreignNetBuyHistory.reduce((sum, h) => sum + h.value, 0) / 100 // 백만원 -> 억원
+      : null;
+
   details.step4Aux = [
     { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표\n(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    {
+      label: "외국인 순매수(코스피)",
+      criterion: "5거래일 누적 순매수 — USD/KRW 변동의 원인 참고용",
+      value: foreignNetBuy5dEok !== null
+        ? `${fmt(Math.abs(foreignNetBuy5dEok), 0, "억원")} — ${foreignNetBuy5dEok >= 0 ? "순매수" : "순매도"}`
+        : "확인 못함",
+      met: null,
+    },
     { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
     { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
     { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },

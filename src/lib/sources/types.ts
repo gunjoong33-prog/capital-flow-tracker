@@ -34,6 +34,7 @@ export const METRICS = {
   DXY: "DXY", // 달러 인덱스(ICE US Dollar Index, Yahoo DX-Y.NYB) — 4단계 달러 방향 판정 기준.
   // USD/KRW는 한국 고유 수급(반도체 수출, 배당 송금, 연기금 헤지) 영향이 커서 글로벌 달러 강약의
   // 대리변수로 부적합 — 원화는 "한국 투자자 관점 보조 지표"로만 남기고 판정 기준은 DXY로 바꾼다.
+  FOREIGN_NET_BUY_KOSPI: "FOREIGN_NET_BUY_KOSPI", // 외국인 코스피 순매수 대금(백만원) — 한국투자증권 Open API, USD/KRW 변동의 원인 참고용
 
   // 5단계
   NDX: "NDX",
@@ -109,7 +110,7 @@ export interface FetchedPoint {
   metric: string;
   date: string; // YYYY-MM-DD
   value: number;
-  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "manual";
+  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual";
 }
 
 export interface SourceFetchResult {
