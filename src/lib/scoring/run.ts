@@ -84,7 +84,8 @@ function summarizeStep2(
   creditSpreadBp: number | null,
   netLiqRising: boolean | null,
   rrpDepleted: boolean | null,
-  tgaWithinNormalRange: boolean | null
+  tgaWithinNormalRange: boolean | null,
+  reserveFlow: string | null
 ): string {
   const { overseasQualifyingCount: q, overseasTotalCount: t, finalScore } = step2Result;
   const ratio = t > 0 ? q / t : 0;
@@ -104,6 +105,8 @@ function summarizeStep2(
   if (rrpDepleted !== null) auxParts.push(`RRP 방파제는 ${rrpDepleted ? "고갈 경고" : "정상"}`);
   if (tgaWithinNormalRange !== null) auxParts.push(`TGA는 평균 대비 ${tgaWithinNormalRange ? "정상 범위" : "이탈"}`);
   if (auxParts.length > 0) lines.push(`${auxParts.join(", ")}입니다.`);
+
+  if (reserveFlow !== null) lines.push(reserveFlow);
 
   return lines.join("\n");
 }
@@ -504,6 +507,45 @@ async function netLiquidityTrend(asOf: Date = new Date()): Promise<{ detail: str
   };
 }
 
+/**
+ * 회계 항등식(기준잔액 = 연준 총자산-TGA-RRP)대로면 TGA·RRP가 줄어든 만큼 기준잔액이 늘어야
+ * 정상이다 — 순유동성(월가 프레임워크)은 이 항등식의 "예상값"만 보여주고 실제 기준잔액이
+ * 그 방향대로 움직였는지는 따로 확인하지 않는다. 여기서는 TGA·RRP 변화로 예상되는 기준잔액
+ * 변화량과 실제 기준잔액 변화를 직접 대조해, 정말 그 경로로 흘러들어갔는지 아니면 연준
+ * 총자산(WALCL) 변화 등 다른 요인이 끼어들었는지를 판정한다. netLiquidityTrend와 같은
+ * 4기간 전 대비 창을 쓴다.
+ */
+async function reserveFlowNote(asOf: Date = new Date()): Promise<string | null> {
+  const [walcl, tga, rrp, reserves] = await Promise.all([
+    getMetricHistoryByCount(METRICS.WALCL, 5, asOf),
+    getMetricHistoryByCount(METRICS.TGA, 5, asOf),
+    getMetricHistoryByCount(METRICS.RRP, 5, asOf),
+    getMetricHistoryByCount(METRICS.TOTRESNS, 5, asOf),
+  ]);
+  if (walcl.length < 5 || tga.length < 5 || rrp.length < 5 || reserves.length < 5) return null;
+
+  const deltaWalcl = (walcl[4].value - walcl[0].value) / 1000; // 백만달러 -> 십억달러
+  const deltaTga = (tga[4].value - tga[0].value) / 1000;
+  const deltaRrp = rrp[4].value - rrp[0].value; // 이미 십억달러
+  const deltaReserves = (reserves[4].value - reserves[0].value) / 1000;
+  // TGA·RRP 변화만 놓고 볼 때(연준 총자산 변화는 제외) 기준잔액이 받았어야 할 변화량.
+  const expectedFromDrain = -(deltaTga + deltaRrp);
+  const fmtBn = (v: number) => `${v >= 0 ? "+" : ""}${comma(v, 1)}십억달러`;
+
+  if (Math.abs(expectedFromDrain) < 1 && Math.abs(deltaReserves) < 1) {
+    return "최근 TGA·RRP·기준잔액 모두 큰 변화가 없어 자금 이동은 뚜렷하지 않습니다.";
+  }
+
+  const sameDirection = (expectedFromDrain >= 0) === (deltaReserves >= 0);
+  if (sameDirection) {
+    const verb = expectedFromDrain >= 0
+      ? "RRP·TGA에서 빠진 돈이 기준잔액으로 흘러들어간"
+      : "기준잔액에서 빠진 돈이 RRP·TGA로 흘러들어간";
+    return `TGA·RRP 변화분(${fmtBn(expectedFromDrain)})과 기준잔액 실제 변화(${fmtBn(deltaReserves)})의 방향이 같아, ${verb} 것으로 보입니다.`;
+  }
+  return `TGA·RRP 변화분(${fmtBn(expectedFromDrain)})과 기준잔액 실제 변화(${fmtBn(deltaReserves)})의 방향이 달라, 그만큼은 흘러들어가지 않고 연준 총자산(WALCL) 변화(${fmtBn(deltaWalcl)}) 등 다른 경로로 설명해야 합니다.`;
+}
+
 /** RRP가 2023년 고점(~2.5조 달러) 대비 사실상 바닥났는지 — 고갈되면 연준 QT 충격을 흡수해줄 방파제가 사라진다. */
 function rrpBufferStatus(rrpBillions: number): { depleted: boolean; label: string } {
   if (rrpBillions < 50) return { depleted: true, label: "고갈(방파제 소진) — QT·국채발행이 지준을 직접 흡수할 위험" };
@@ -802,12 +844,14 @@ export async function runDailyAnalysis(
     met: t10y2yBp !== null ? t10y2yBp >= 0 : null,
   });
 
+  const reserveFlow = await reserveFlowNote(asOf);
   details.step2Summary = summarizeStep2(
     step2,
     creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null,
     netLiq.risingTrend,
     rrpDepleted,
-    tgaDeviation.withinNormalRange
+    tgaDeviation.withinNormalRange,
+    reserveFlow
   );
 
   // 3단계
