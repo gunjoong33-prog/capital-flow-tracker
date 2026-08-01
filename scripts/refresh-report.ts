@@ -11,7 +11,9 @@ import { generateComprehensiveReport } from "../src/lib/comprehensive-report";
 import { BIG_TECH_TICKERS } from "../src/lib/sources/types";
 
 async function main() {
-  const date = process.argv[2] ?? new Date().toISOString().slice(0, 10);
+  const args = process.argv.slice(2).filter((a) => a !== "--regen-report");
+  const regenReport = process.argv.includes("--regen-report");
+  const date = args[0] ?? new Date().toISOString().slice(0, 10);
   const existing = await db.dailyReport.findUnique({ where: { date: new Date(date) } });
   if (!existing) {
     console.log("no report for", date);
@@ -38,10 +40,19 @@ async function main() {
     institutionalSignals,
   });
 
-  try {
-    report.details.comprehensiveReport = await generateComprehensiveReport(report);
-  } catch (err) {
-    report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+  // 종합 보고서(comprehensiveReport)는 LLM(Mistral) 호출이라 매번 다시 쓰면 스타일 규칙(존댓말,
+  // 단계 번호 미언급 등)을 매번 다시 지킬지 장담 못 한다 — 손으로 다듬어둔 기존 텍스트를 채점
+  // 로직만 바꾼 재계산이 조용히 덮어써버린 적이 있었다. 그래서 기본은 기존 텍스트를 그대로
+  // 보존하고, 정말로 새로 쓰고 싶을 때만 --regen-report 플래그로 명시적으로 켠다.
+  const existingDetails = existing.details as { comprehensiveReport?: string } | null;
+  if (regenReport || !existingDetails?.comprehensiveReport) {
+    try {
+      report.details.comprehensiveReport = await generateComprehensiveReport(report);
+    } catch (err) {
+      report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+    }
+  } else {
+    report.details.comprehensiveReport = existingDetails.comprehensiveReport;
   }
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
