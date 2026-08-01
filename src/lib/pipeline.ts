@@ -117,7 +117,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
   const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
-  if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Gemini)", error: bigTechErrors.join("; ") });
+  if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
   const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
   if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
   const report = await runDailyAnalysis({
@@ -228,7 +228,7 @@ async function buildNotionInput(
           link: report.step1.riskyNews[0].url,
           risky: true,
         }
-      : { summary: "Gemini 판정 결과 리스크 뉴스 없음", link: null, risky: false },
+      : { summary: "LLM 판정 결과 리스크 뉴스 없음", link: null, risky: false },
     domesticLiquidity: [
       { name: "한국은행 기준금리", condition: "인하 또는 동결 흐름", status: "자동 미판정" },
       { name: "국내 CPI", condition: "목표치(2%) 근접 추세", status: "자동 미판정" },

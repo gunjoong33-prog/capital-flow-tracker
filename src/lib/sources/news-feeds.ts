@@ -274,8 +274,8 @@ async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
  * 키워드 목록은 회사명·지명 등 명시적 마커가 있는 국내 뉴스만 잡는다 — 정치인 실명, 세수 통계처럼
  * 한국 특유 맥락이지만 고유명사가 없는 헤드라인은 못 걸러낸다("코스피 6500선 돌파"처럼 세계 정치
  * 토픽에도 새어든 사례 확인). 이런 잔여 케이스는 끝없이 키워드를 추가해도 다 못 잡으므로, 키워드
- * 필터를 통과한 나머지만 Gemini에 넘겨 한 번 더 국내/해외를 판정한다(비용 절감을 위해 전체가 아닌
- * 잔여분만 판정).
+ * 필터를 통과한 나머지만 LLM(Groq)에 넘겨 한 번 더 국내/해외를 판정한다(비용 절감을 위해 전체가
+ * 아닌 잔여분만 판정).
  */
 async function classifyKoreaRelated(headlines: CategoryHeadline[]): Promise<Set<number>> {
   if (!process.env.GROQ_API_KEY || headlines.length === 0) return new Set();
@@ -297,7 +297,9 @@ ${list}`;
   // Set을 돌려줘 키워드 필터만 적용된 상태로 계속 진행한다.
   let text: string;
   try {
-    text = await callGroq(prompt, { maxTokens: 2048, reasoningEffort: "low" });
+    // 응답은 [1, 4, 7]처럼 짧은 번호 배열뿐이라 2048은 과했다 — 512로 낮춰 bigtech-reasons.ts와
+    // 같은 분(TPM 8000)에 몰려도 합계가 한도에 덜 빠듯하게 걸리도록 여유를 늘렸다.
+    text = await callGroq(prompt, { maxTokens: 512, reasoningEffort: "low" });
   } catch {
     return new Set();
   }
@@ -305,7 +307,7 @@ ${list}`;
   return indices ? new Set(indices.filter((n) => typeof n === "number")) : new Set();
 }
 
-/** 세계 정치/경제 토픽 피드를 국내/해외로 가른다 — 키워드로 1차, 통과한 잔여분만 Gemini로 2차 판정. */
+/** 세계 정치/경제 토픽 피드를 국내/해외로 가른다 — 키워드로 1차, 통과한 잔여분만 LLM(Groq)으로 2차 판정. */
 async function splitTopicByKorea(topicId: string): Promise<{ korea: CategoryHeadline[]; world: CategoryHeadline[] }> {
   const items = await fetchGoogleNewsRss(`https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko`);
   const keywordKorea = items.filter((h) => isKoreaRelated(h.title));
@@ -338,8 +340,8 @@ function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
 }
 
 /**
- * /news 페이지 5개 카테고리를 전부 계산한다. Gemini 무료 티어 일일 할당량(20건)을 메인 리포트
- * 파이프라인(judgeHeadlines)과 공유하기 때문에 페이지 방문마다 실시간 호출하면 안 되고, 이 함수를
+ * /news 페이지 5개 카테고리를 전부 계산한다. Groq 무료 티어 일일 할당량(RPD/TPD)을 메인 리포트
+ * 파이프라인(judgeHeadlines 등)과 공유하기 때문에 페이지 방문마다 실시간 호출하면 안 되고, 이 함수를
  * 하루 배치에서 딱 한 번만 호출해 결과를 DB(NewsPageHeadline)에 저장한다 — 세계 정치/경제 토픽도
  * (국내/해외 분리에) 한 번씩만 조회해 두 국내 탭에 재사용한다.
  */

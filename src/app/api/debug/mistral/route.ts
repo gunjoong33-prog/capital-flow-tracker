@@ -1,6 +1,6 @@
 import { generateNarrative } from "@/lib/narrative";
 
-// Gemini 키가 실제로 동작하는지 확인하는 진단용 엔드포인트.
+// Mistral 키가 실제로 동작하는지 확인하는 진단용 엔드포인트.
 export async function GET() {
   try {
     const text = await generateNarrative(

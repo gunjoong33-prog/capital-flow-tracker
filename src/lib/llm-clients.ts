@@ -30,6 +30,18 @@ export async function callMistral(prompt: string, maxTokens = 2048, temperature 
   return text.trim();
 }
 
+/** Groq 429 응답에서 재시도 대기시간(초)을 뽑는다 — Retry-After 헤더 우선, 없으면 에러 메시지에
+ * 박힌 "try again in 7.56s" 문구를 파싱한다. 둘 다 없으면 5초를 기본값으로 쓴다. */
+function parseGroqRetryAfterSeconds(res: Response, bodyText: string): number {
+  const header = res.headers.get("retry-after");
+  if (header) {
+    const n = Number(header);
+    if (!Number.isNaN(n)) return n;
+  }
+  const m = bodyText.match(/try again in ([\d.]+)s/);
+  return m ? Number(m[1]) : 5;
+}
+
 export async function callGroq(
   prompt: string,
   options: {
@@ -47,11 +59,21 @@ export async function callGroq(
   };
   if (reasoningEffort) body.reasoning_effort = reasoningEffort;
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify(body),
-  });
+  const request = () =>
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify(body),
+    });
+
+  let res = await request();
+  // 분당 토큰 한도(TPM)에 걸리면 Groq가 정확한 재시도 대기시간을 응답에 알려준다 — 그만큼만 기다렸다가
+  // 한 번 재시도한다(무한 재시도는 안 하고, 그래도 실패하면 진짜 에러로 처리).
+  if (res.status === 429) {
+    const waitSec = Math.min(parseGroqRetryAfterSeconds(res, await res.text()), 30);
+    await sleep(Math.ceil(waitSec * 1000) + 500);
+    res = await request();
+  }
   if (!res.ok) throw new Error(`Groq 요청 실패: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as ChatCompletionResponse;
   const text = data.choices?.[0]?.message?.content;

@@ -249,7 +249,7 @@ function summarizeStep5(
     );
   }
 
-  // 나스닥100 쏠림·순환매 판정이 실제로 어느 종목에서 나오는지 짚어준다 — 원인은 Gemini가 뉴스
+  // 나스닥100 쏠림·순환매 판정이 실제로 어느 종목에서 나오는지 짚어준다 — 원인은 LLM(Groq)이 뉴스
   // 헤드라인으로 판정한 값을 그대로 쓰고, 확인 안 된 경우 지어내지 않는다(데이터 정직성 원칙).
   if (topBigTechMover && topBigTechMover.change.changePct !== null) {
     const { label, reason } = topBigTechMover;
@@ -588,7 +588,7 @@ async function detectJpyVolSpike(
  * 지표가 없으면 해당 판정은 null(모름)로 남기고 억지로 채우지 않는다 —
  * 원칙: "확인 못하면 확인 못함이라고 쓴다"(v2 프롬프트 핵심 원칙).
  *
- * 뉴스 판정(1단계)은 매일 파이프라인이 미리 수집·Gemini 판정해 NewsEvent에 저장해둔 것을 읽기만 한다 —
+ * 뉴스 판정(1단계)은 매일 파이프라인이 미리 수집·LLM(Mistral) 판정해 NewsEvent에 저장해둔 것을 읽기만 한다 —
  * 여기서 다시 뉴스를 가져와 판정하면 페이지를 열 때마다 LLM을 호출하게 되므로 분리했다.
  * FOMC·CPI·고용지표 등 "14일 내 큰 이벤트"도 마찬가지로 MajorEvent 테이블을 읽기만 한다.
  * 엔화 변동성 급등은 이미 저장된 USD/JPY 시계열로 그때그때 계산한다(DB 조회만 필요, 비용 없음).
@@ -991,7 +991,7 @@ export async function runDailyAnalysis(
   // 종목을 짚어줄 수 있도록 summarizeStep5보다 먼저 계산해둔다.
   const bigTechChanges = await Promise.all(BIG_TECH_TICKERS.map((ticker) => dailyChange(ticker, asOf)));
   const bigTechReasons = manualInputs.bigTechReasons ?? {};
-  const reasonFor = (ticker: string) => bigTechReasons[ticker] ?? "원인 확인 못함(Gemini 미판정)";
+  const reasonFor = (ticker: string) => bigTechReasons[ticker] ?? "명확한 원인 확인 안 됨";
   const bigTechMovers = BIG_TECH_TICKERS.map((ticker, i) => ({
     ticker, label: BIG_TECH_LABELS[ticker], change: bigTechChanges[i], reason: reasonFor(ticker),
   }));

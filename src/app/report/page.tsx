@@ -9,7 +9,7 @@ import { checkReportFreshness } from "@/lib/report-freshness";
 
 export const dynamic = "force-dynamic"; // 매번 최신 DB 값으로 계산 — 캐시하면 안 됨
 
-// 홈은 매번 새로 계산하지만, Gemini(빅테크 원인)·외부 스크래핑(기관·내부자 매집)까지
+// 홈은 매번 새로 계산하지만, Groq(빅테크 원인)·외부 스크래핑(기관·내부자 매집)까지
 // 접속마다 반복하면 무료 티어 소진·응답 지연이 생기므로 하루 1회(파이프라인)만 돌린 결과를
 // 오늘자 DB에서 읽어 재사용한다. 나머지(가격·점수 등)는 live 값을 그대로 쓴다.
 interface PersistedDetails {
