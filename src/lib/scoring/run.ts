@@ -225,11 +225,17 @@ function summarizeStep5(
 ): string {
   const lines: string[] = [];
 
+  // 격차(gapPp)만 보면 "둘 다 하락하는데 격차만 작은 날"과 "둘 다 상승하는데 격차만 작은 날"이
+  // 똑같이 "건강한 순환매"로 잡힌다 — 격차는 방향에 눈이 멀어 있어서, 실제 두 지수 수익률의
+  // 부호를 직접 봐야 동반 하락(광범위 이탈)과 순환매(자금이 옮겨다니는 것)를 구분할 수 있다.
+  const bothNegative = ndxReturn20d < 0 && rutReturn20d < 0;
   const concentrationDesc = step5Result.concentrationWarning
     ? step5Result.gapPp > 0
       ? "대형 기술주(나스닥100) 쪽으로 자금이 쏠리는 집중 장세"
       : "중소형주(러셀2000) 쪽으로 자금이 쏠리는 구간"
-    : "나스닥100·러셀2000이 비슷하게 움직이는 건강한 순환매";
+    : bothNegative
+      ? "나스닥100·러셀2000 둘 다 하락하는 동반 약세(순환매가 아니라 광범위한 자금 이탈)"
+      : "나스닥100·러셀2000이 비슷하게 움직이는 건강한 순환매";
   lines.push(
     `나스닥100 ${ndxReturn20d.toFixed(2)}% / 러셀2000 ${rutReturn20d.toFixed(2)}%(20거래일)로 격차 ${step5Result.gapPp.toFixed(2)}%p — ${concentrationDesc}입니다.`
   );

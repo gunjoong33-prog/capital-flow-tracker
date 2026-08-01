@@ -53,7 +53,14 @@ async function fetchYahooSymbol(
   result.timestamp.forEach((ts, i) => {
     const value = closes[i];
     if (value === null || value === undefined) return;
-    out.push({ date: new Date(ts * 1000).toISOString().slice(0, 10), value });
+    const date = new Date(ts * 1000);
+    // 통화쌍(USD/JPY 등)은 실제 거래가 없는 토·일요일에도 야후가 금요일 종가를 그대로 복제한
+    // 봉을 얹어 돌려줄 때가 있다 — 이걸 그대로 저장하면 "전일 대비 0.00%"로 찍혀 실제로는
+    // 이미 금요일 값에 반영된 변동을 "안정"으로 오판하게 만든다(엔화 변동성 급등 감지 무력화).
+    // 주식·지수는 애초에 주말 봉이 안 오므로 이 필터가 평일 데이터에 영향을 주지 않는다.
+    const day = date.getUTCDay();
+    if (day === 0 || day === 6) return;
+    out.push({ date: date.toISOString().slice(0, 10), value });
   });
   return out;
 }
