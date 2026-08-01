@@ -789,6 +789,19 @@ export async function runDailyAnalysis(
     met: tgaDeviation.withinNormalRange,
   });
 
+  // 美 2Y-10Y 스프레드(FRED T10Y2Y): 신용·유동성보다 먼저 움직이는 선행 신호라 원본 프롬프트
+  // 지표엔 없지만 참고용 경고로 추가한다 — 0bp 미만(장단기 역전)은 과거 경기침체 선행 신호로
+  // 널리 쓰이는 임계값(역전 자체보다 역전이 "풀리는" 시점이 더 유명한 신호지만, 우선 역전 여부만
+  // 표시하고 해석은 사용자 몫으로 남긴다 — 데이터 정직성 원칙).
+  const t10y2y = await getLatestMetric(METRICS.US10Y_2Y10Y_SPREAD, asOf);
+  const t10y2yBp = t10y2y ? t10y2y.value * 100 : null;
+  details.step2Aux.push({
+    label: "美 2Y-10Y 스프레드",
+    criterion: "0bp 미만(장단기 금리 역전) 시 경기침체 선행 신호로 해석",
+    value: t10y2yBp !== null ? `${t10y2yBp.toFixed(0)}bp` : "확인 못함",
+    met: t10y2yBp !== null ? t10y2yBp >= 0 : null,
+  });
+
   details.step2Summary = summarizeStep2(
     step2,
     creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null,

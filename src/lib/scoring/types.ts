@@ -156,7 +156,7 @@ export type StepDetails = {
   comprehensiveReport?: string; // 1단계 카드 위 "보고서" 버튼이 보여주는 종합 해설(경제 초심자용, 1~8단계 인과관계 서술)
   step1: StepDetailRow[];
   step2: StepDetailRow[];
-  step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드) — 별도 토글
+  step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드, 美 2Y-10Y 스프레드) — 별도 토글
   step2Summary?: string; // 2단계 지표 결과를 1~3줄로 요약한 종합판단(결정론적 생성, "상세 보기" 위에 표시)
   step3Summary?: string; // 3단계 지표 결과를 1~3줄로 요약한 종합판단
   step4Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(환율 USD/KRW·USD/JPY, 유가 WTI·브렌트의 전일 대비 변동) — 별도 토글
