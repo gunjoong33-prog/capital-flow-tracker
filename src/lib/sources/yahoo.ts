@@ -89,11 +89,25 @@ export async function fetchYahooHistorical(metric: string): Promise<FetchedPoint
 // 종가 오염이 발견됐던 USD/JPY와 같은 메커니즘이 GOLD·DXY·WTI·브렌트·USD/KRW에도 똑같이 적용된다).
 // 그래서 이 6개 지표는 1d봉 대신 장중봉을 받아, 뉴욕 정규장 마감(오후 4시 ET)에 가장 가까운(그 시각을
 // 넘지 않는 마지막) 봉을 그 날의 값으로 확정한다 — "미국장 마감 시각 기준"이라는 명확한 정의를 준다.
+// 처음엔 전부 16:00 ET(뉴욕 "증시" 마감)로 통일했었는데, 상품선물·FX는 각자 정산 관행이 따로 있다
+// (지적 받아 실제 확인·수정 — 16:00은 NYSE·Nasdaq 정규장 마감일 뿐, 다른 시장의 정산 시각이 아니다):
+// - WTI(NYMEX CL): 종가 정산이 오후 2:30 ET 마감 구간 거래로 결정된다.
+// - 브렌트(ICE BZ): 19:30 GMT(=오후 2:30 ET) 정산.
+// - 금(COMEX GC): 오후 1:30 ET 정산.
+// - 달러인덱스(ICE DXY): 오후 3:00 ET 정산.
+// - FX(USD/KRW, USD/JPY): 공식 "정산"은 없지만 은행권이 하루 거래일 경계로 쓰는 관행이 오후 5:00 ET다.
 const US_CLOSE_ADJUSTED_METRICS = new Set<string>([
   METRICS.GOLD, METRICS.WTI, METRICS.BRENT, METRICS.USDKRW, METRICS.USDJPY, METRICS.DXY,
 ]);
-const NY_CLOSE_MINUTES = 16 * 60; // 16:00 ET
-const NY_CLOSE_GRACE_MINUTES = 15; // 정산 지연분 허용(장중봉이 정확히 16:00에 안 찍힐 수 있어서)
+const SETTLEMENT_MINUTES_ET: Record<string, number> = {
+  [METRICS.WTI]: 14 * 60 + 30,
+  [METRICS.BRENT]: 14 * 60 + 30,
+  [METRICS.GOLD]: 13 * 60 + 30,
+  [METRICS.DXY]: 15 * 60,
+  [METRICS.USDKRW]: 17 * 60,
+  [METRICS.USDJPY]: 17 * 60,
+};
+const NY_CLOSE_GRACE_MINUTES = 15; // 정산 지연분 허용(장중봉이 정확히 정산 시각에 안 찍힐 수 있어서)
 
 function etDateAndMinutes(unixSeconds: number): { dateET: string; minutesFromMidnight: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -107,8 +121,13 @@ function etDateAndMinutes(unixSeconds: number): { dateET: string; minutesFromMid
   };
 }
 
-/** 24시간 가까이 거래되는 자산의 장중봉에서, 뉴욕증시 정규장 마감(16:00 ET) 기준 값을 날짜별로 추출한다. */
-async function fetchYahooAtUsClose(symbol: string, range: string, interval: string): Promise<{ date: string; value: number }[]> {
+/** 24시간 가까이 거래되는 자산의 장중봉에서, 지표별 정산 시각(settlementMinutesEt) 기준 값을 날짜별로 추출한다. */
+async function fetchYahooAtUsClose(
+  symbol: string,
+  range: string,
+  interval: string,
+  settlementMinutesEt: number
+): Promise<{ date: string; value: number }[]> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!res.ok) throw new Error(`Yahoo ${symbol} 요청 실패: ${res.status}`);
@@ -123,7 +142,7 @@ async function fetchYahooAtUsClose(symbol: string, range: string, interval: stri
     const value = closes[i];
     if (value === null || value === undefined) return;
     const { dateET, minutesFromMidnight } = etDateAndMinutes(ts);
-    if (minutesFromMidnight > NY_CLOSE_MINUTES + NY_CLOSE_GRACE_MINUTES) return;
+    if (minutesFromMidnight > settlementMinutesEt + NY_CLOSE_GRACE_MINUTES) return;
     // 날짜만으로 요일 판정(UTC 자정 기준 파싱 — 시간대 보정 없이 순수 캘린더 날짜 비교용).
     const weekday = new Date(`${dateET}T12:00:00Z`).getUTCDay();
     if (weekday === 0 || weekday === 6) return;
@@ -142,7 +161,8 @@ async function fetchYahooAtUsClose(symbol: string, range: string, interval: stri
 async function fetchYahooLatestAtUsClose(metric: string): Promise<FetchedPoint[]> {
   const symbol = YAHOO_TICKERS[metric];
   if (!symbol) throw new Error(`${metric}은 Yahoo 대상이 아니다`);
-  const points = await fetchYahooAtUsClose(symbol, "5d", "15m");
+  const settlement = SETTLEMENT_MINUTES_ET[metric] ?? 16 * 60;
+  const points = await fetchYahooAtUsClose(symbol, "5d", "15m", settlement);
   return points.map((p) => ({ ...p, metric, source: "yahoo" as const }));
 }
 
@@ -150,7 +170,8 @@ async function fetchYahooLatestAtUsClose(metric: string): Promise<FetchedPoint[]
 export async function fetchYahooHistoricalAtUsClose(metric: string): Promise<FetchedPoint[]> {
   const symbol = YAHOO_TICKERS[metric];
   if (!symbol) throw new Error(`${metric}은 Yahoo 대상이 아니다`);
-  const points = await fetchYahooAtUsClose(symbol, "60d", "30m");
+  const settlement = SETTLEMENT_MINUTES_ET[metric] ?? 16 * 60;
+  const points = await fetchYahooAtUsClose(symbol, "60d", "30m", settlement);
   return points.map((p) => ({ ...p, metric, source: "yahoo" as const }));
 }
 
