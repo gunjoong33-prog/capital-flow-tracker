@@ -84,6 +84,7 @@ export interface Step4Input {
   goldDirection: Direction;
   realRateDirection: Direction;
   dollarDirection: Direction; // 보조 확인용
+  us30yPercentile: number | null; // 美 30년물 국채금리의 최근 1년 백분위(텀프리미엄 급등 판별용)
 }
 export interface Step4Result {
   quadrant: string;

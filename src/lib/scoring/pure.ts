@@ -106,7 +106,7 @@ export function scoreStep3(input: Step3Input): Step3Result {
 // 사분면별 점수는 원래 3변수 표(좋음10/보통5/나쁨0)의 취지를 2x2로 옮긴 것 —
 // 본문에 숫자로 명시되지 않았던 부분이라 이식 시 직접 매긴 값임을 밝혀둔다.
 export function scoreStep4(input: Step4Input): Step4Result {
-  const { goldDirection: gold, realRateDirection: rate, dollarDirection: dollar } = input;
+  const { goldDirection: gold, realRateDirection: rate, dollarDirection: dollar, us30yPercentile } = input;
   let score: number;
   let quadrant: string;
   let note: string;
@@ -130,6 +130,17 @@ export function scoreStep4(input: Step4Input): Step4Result {
   }
 
   const dollarConfirms = dollar === rate;
+
+  // "금↓ 실질금리↑" 만점(10점)은 실질금리가 왜 오르는지 구분하지 못한다 — 성장 기대로 오른 경우와
+  // 장기물 금리 자체가 급등(텀프리미엄, 금융여건 긴축)해서 오른 경우를 같은 칸에 넣는다(외부 감사
+  // 지적, 코드 확인 결과 실제 그랬다). 30년물이 자체 1년 분포 상단(90%ile 이상)까지 급등하면서
+  // 동시에 달러가 실질금리와 다른 방향으로 가는(디커플링) 경우는 "성장 기대"보다 "텀프리미엄 급등"
+  // 신호에 가깝다고 보고 점수를 절반(5)으로 낮춘다. 두 조건 모두 필요 — 30Y 백분위만으로는 원인을
+  // 못 가리므로(고금리가 오래 지속되면 항상 상단에 있을 수 있다) 디커플링과 함께 볼 때만 조정한다.
+  if (gold === "down" && rate === "up" && us30yPercentile !== null && us30yPercentile >= 90 && !dollarConfirms) {
+    score = 5;
+    note = "실질금리 상승이 성장 기대보다 장기물 금리 급등(텀프리미엄·금융여건 긴축)에 의한 것으로 보여 성장주 호재로 보기 어려움 — 점수 하향 조정";
+  }
 
   return { quadrant, score, note, dollarConfirms };
 }

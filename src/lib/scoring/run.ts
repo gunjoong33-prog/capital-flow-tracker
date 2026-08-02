@@ -24,8 +24,13 @@ import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
  * 쓰는 임계점 그대로(3단계 캐리 트레이드 구간표와 같은 방식으로 추가). "3기간 연속 축소" 추세와는
  * 별개로, "지금 수준 자체가 위험한 구간인가"를 보여주는 보조 정보다.
  */
+// 300bp 미만 구간은 met=true(유동성 우호 충족)로 판정하면서 동시에 "반등 리스크 경계"라는 문구를
+// 붙이는데, 화면상 ✓ 표시와 경고 문구가 한 줄에 같이 보이면 모순처럼 읽힌다(외부 감사 지적) — 실제
+// 논리는 모순이 아니다: 스프레드가 이미 우호적 극단에 있다는 사실(met=true 근거)과, 그렇게 낮은
+// 스프레드가 오래가지 못하고 되돌림(반등) 위험을 안고 있다는 사실(경계 문구)은 서로 다른 얘기다.
+// 문구 자체를 "충족 근거 + 별도 경계"로 명확히 분리해 같은 오독이 반복되지 않게 한다.
 function creditSpreadZone(bp: number): string {
-  if (bp < 300) return "과도한 낙관, 반등 리스크 경계";
+  if (bp < 300) return "유동성 우호 구간(충족) — 단, 과도한 낙관 상태라 되돌림(반등) 리스크는 별도 경계";
   if (bp < 400) return "낙관에서 정상으로 이행";
   if (bp <= 500) return "역사적 평균 정상 구간";
   if (bp < 600) return "정상에서 경색으로 이행, 주의";
@@ -97,7 +102,7 @@ function summarizeStep2(
   const lines = [`해외 유동성 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(1)}/10).`];
 
   if (creditSpreadBp !== null) {
-    lines.push(`크레딧 스프레드는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}" 구간입니다.`);
+    lines.push(`크레딧 스프레드는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}"입니다.`);
   }
 
   const auxParts: string[] = [];
@@ -499,7 +504,11 @@ async function m2YoyAcceleration(asOf: Date = new Date()): Promise<TrendCheck & 
     const prevYear = history[idxPrevYear].value;
     yoy.push(((curr - prevYear) / prevYear) * 100);
   }
-  const met = yoy[2] > yoy[1] && yoy[1] > yoy[0];
+  // 엄격한 부등호(a>b>c)는 노이즈 한 틱에도 뒤집힌다 — 예: 0.85%p 가속한 뒤 마지막 구간만 0.05%p
+  // 감속해도(측정 노이즈 범위 안) "미충족"으로 떨어진다(외부 감사 지적, 실제 확인). 최소 변화폭
+  // 이내(±TOLERANCE)의 하락은 "사실상 유지"로 보고 감속으로 치지 않는다.
+  const TOLERANCE_PP = 0.1;
+  const met = yoy[1] - yoy[0] > -TOLERANCE_PP && yoy[2] - yoy[1] > -TOLERANCE_PP && yoy[2] > yoy[0];
   return { met, latestValue, detail: `YoY 증가율 ${yoy.map((v) => `${v.toFixed(2)}%`).join(" → ")}` };
 }
 
@@ -893,11 +902,20 @@ export async function runDailyAnalysis(
   // 표시하고 해석은 사용자 몫으로 남긴다 — 데이터 정직성 원칙).
   const t10y2y = await getLatestMetric(METRICS.US10Y_2Y10Y_SPREAD, asOf);
   const t10y2yBp = t10y2y ? t10y2y.value * 100 : null;
+  // 스프레드가 0bp 이상이어도 "정상"이라고 단정할 수 없다 — 단기물이 내려서 양수인 경우(불
+  // 스티프닝, 인하 기대·건강한 신호)와 장기물이 급등해서 양수인 경우(베어 스티프닝, 금융여건
+  // 긴축·주식엔 악재)를 부호만으로는 구분 못 한다(외부 감사 지적, 실제 확인 — 2026-07-31처럼
+  // 30년물이 자체 최고치로 급등하는데도 스프레드 부호만 보고 ✓로 표시된 사례). 30년물 방향을
+  // 같이 봐서, 스프레드가 양수여도 30년물이 상승 중이면 베어 스티프닝으로 보고 met을 false로 뒤집는다.
+  const us30yDir = await directionOf(METRICS.US30Y, asOf);
+  const bearSteepening = t10y2yBp !== null && t10y2yBp >= 0 && us30yDir === "up";
   details.step2Aux.push({
     label: "美 2Y-10Y 스프레드",
-    criterion: "0bp 미만(장단기 금리 역전) 시 경기침체 선행 신호로 해석",
-    value: t10y2yBp !== null ? `${t10y2yBp.toFixed(0)}bp` : "확인 못함",
-    met: t10y2yBp !== null ? t10y2yBp >= 0 : null,
+    criterion: "0bp 미만(장단기 금리 역전)은 침체 선행 신호. 0bp 이상이어도 30년물이 같이 급등 중이면\n베어 스티프닝(금융여건 긴축)으로 해석 — 부호만으로 판단하지 않음",
+    value: t10y2yBp !== null
+      ? `${t10y2yBp.toFixed(0)}bp${bearSteepening ? " — 베어 스티프닝 경계(30년물 동반 상승)" : ""}`
+      : "확인 못함",
+    met: t10y2yBp !== null ? (bearSteepening ? false : t10y2yBp >= 0) : null,
   });
 
   // 美 30년물 국채금리(FRED DGS30): 장단기 스프레드(T10Y2Y)는 역전 여부만 보여줘서, 역전 없이
@@ -1016,7 +1034,12 @@ export async function runDailyAnalysis(
   const dollarFresh = await directionOfWithFreshness(METRICS.DXY, asOf);
   const dollarStale = dollarFresh.daysOld !== null && dollarFresh.daysOld >= STALE_UNKNOWN_DAYS;
   const dollarDir = dollarStale ? "flat" : dollarFresh.direction ?? "flat";
-  const step4 = scoreStep4({ goldDirection: goldDir, realRateDirection: realRateDir, dollarDirection: dollarDir });
+  const step4 = scoreStep4({
+    goldDirection: goldDir,
+    realRateDirection: realRateDir,
+    dollarDirection: dollarDir,
+    us30yPercentile,
+  });
   const dirLabel = (d: Direction) => (d === "up" ? "상승" : d === "down" ? "하락" : "보합");
   const staleSuffix = (daysOld: number | null, stale: boolean) =>
     !stale && daysOld !== null && daysOld >= STALE_WARN_DAYS ? ` (${daysOld}일 전 데이터)` : "";

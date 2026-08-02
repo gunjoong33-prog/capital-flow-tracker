@@ -84,14 +84,24 @@ describe("scoreStep3", () => {
 
 describe("scoreStep4", () => {
   it("금 하락·실질금리 상승이면 만점(성장주 유리 국면)", () => {
-    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up" });
+    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
     expect(result.score).toBe(10);
     expect(result.dollarConfirms).toBe(true);
   });
 
   it("달러가 실질금리와 다른 방향이면 dollarConfirms=false", () => {
-    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "down" });
+    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "down", us30yPercentile: null });
     expect(result.dollarConfirms).toBe(false);
+  });
+
+  it("30년물 급등(90%ile+)에 달러 디커플링까지 겹치면 텀프리미엄 급등으로 보고 만점을 절반으로 낮춘다", () => {
+    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "down", us30yPercentile: 95 });
+    expect(result.score).toBe(5);
+  });
+
+  it("30년물이 급등해도 달러가 실질금리와 같은 방향(디커플링 아님)이면 만점 그대로", () => {
+    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: 95 });
+    expect(result.score).toBe(10);
   });
 });
 

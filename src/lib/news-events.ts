@@ -82,14 +82,21 @@ async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
 
 골라낸 항목마다 심각도(severity)도 함께 매겨라(3단계):
 - "high": 이 사건 하나만으로도 시장이 즉시 크게 흔들릴 수준(예: 실제 무력 충돌·전쟁 발발, 국가 디폴트,
-  예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴)
+  예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴). "high"는 매우 드물어야 한다 — 일주일에
+  실제로 이 정도 사건이 여러 건 겹치는 경우는 거의 없다. 확전 "가능성", 긴장 "고조", 발언·경고 수준은
+  아무리 자극적으로 보도돼도 high가 아니라 medium/low다.
 - "medium": 명확한 리스크 요인이고 시장이 반응할 만하지만, 이미 진행 중인 사안의 추가 조치·확전 신호
   수준(예: 관세 "인상 발표·시행"처럼 실제 조치, 새로운 제재, 무력 충돌 관련 긴장 고조)
 - "low": 리스크 요인이긴 하나 아직 경고·발언·우려 표명 수준이라 단독 영향은 제한적인 경우(정책 발언,
   경고성 언급, 무역분쟁 "우려" 등 — 여러 건이 쌓여야 리스크로 볼 만한 것들)
 
+"high"로 매긴 항목은 evidence 필드에 "어떤 국가/기관이 무엇을 했는가"를 사실 하나로 구체적으로 적어라
+(예: "이스라엘군이 이란 나탄즈 핵시설을 공습했다"). 헤드라인이 그 정도로 구체적인 실제 행동을 담고
+있지 않으면(전망·우려·경고·가능성 언급뿐이면) 애초에 high로 매기지 마라. medium/low는 evidence를
+빈 문자열로 둬도 된다.
+
 각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라:
-[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "medium"}]
+[{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "medium", "evidence": ""}]
 
 risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게 없으면 빈 배열 []만 답해라.
 
@@ -97,7 +104,13 @@ risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게
 ${list}`;
 
   const text = await callMistral(prompt, 8192);
-  const parsed = extractJsonArray<{ index: number; summary: string; risky: boolean; severity?: string }>(text);
+  const parsed = extractJsonArray<{
+    index: number;
+    summary: string;
+    risky: boolean;
+    severity?: string;
+    evidence?: string;
+  }>(text);
   if (!parsed) return [];
 
   const judged = parsed
@@ -110,14 +123,37 @@ ${list}`;
       category: headlines[p.index - 1].category,
       severity: capScheduledPolicyMeetingSeverity(
         headlines[p.index - 1].title,
-        p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium"
+        downgradeUnsupportedHigh(
+          p.severity === "high" || p.severity === "medium" || p.severity === "low" ? p.severity : "medium",
+          p.evidence
+        )
       ),
     }));
 
   // LLM의 근접중복 병합 지침(위 프롬프트)이 대부분 걸러내지만 temperature>0라 완전히 결정론적이진
   // 않다 — 제목 유사도 기반으로 한 번 더 걸러 대표 1건만 남긴다(news-feeds.ts dedupOfficialHeadlines와
   // 같은 안전망 원리).
-  return dedupBySimilarTitle(judged, (j) => j.title);
+  const deduped = dedupBySimilarTitle(judged, (j) => j.title);
+
+  // 프롬프트에서 "high는 드물어야 한다"고 지시해도 모델이 지키지 않을 수 있다(외부 감사 지적 —
+  // 실제로 7일 창에서 high 16건이 나온 사례 확인) — 거부권 규칙2(hasSevereNewsInWindow)는 high
+  // 단 1건만으로도 즉시 발동하므로, 남발되면 거부권이 상시 켜져 사실상 무의미해진다. 방어선으로
+  // 한 배치(하루 수집분)당 high는 최대 2건까지만 인정하고 초과분은 medium으로 강제 강등한다 —
+  // FOMC 정기회의 상한(capScheduledPolicyMeetingSeverity)과 같은 원리의 안전장치.
+  const MAX_HIGH_PER_BATCH = 2;
+  let highCount = 0;
+  return deduped.map((j) => {
+    if (j.severity !== "high") return j;
+    highCount++;
+    return highCount <= MAX_HIGH_PER_BATCH ? j : { ...j, severity: "medium" as const };
+  });
+}
+
+/** high인데 evidence가 구체적 사실 없이 비어있거나 짧으면(전망·우려 수준일 가능성) medium으로 강등. */
+function downgradeUnsupportedHigh(severity: NewsSeverity, evidence: string | undefined): NewsSeverity {
+  if (severity !== "high") return severity;
+  if (!evidence || evidence.trim().length < 8) return "medium";
+  return severity;
 }
 
 // FOMC·BOJ 통화정책 회의는 날짜가 미리 공개된 정기 일정(major-events.ts FOMC_DATES_2026·
