@@ -83,6 +83,77 @@ export async function fetchYahooHistorical(metric: string): Promise<FetchedPoint
   return points.map((p) => ({ ...p, metric, source: "yahoo" as const }));
 }
 
+// 외환(KRW=X, JPY=X)·상품선물(GC=F, CL=F, BZ=F)·달러인덱스(DX-Y.NYB)는 거의 24시간 거래돼 "오늘 종가"가
+// 없다 — 파이프라인이 도는 09:00 KST(=전날 오후 7~8시 ET)엔 이 시장들이 한창 거래 중이라, 1d봉의
+// close는 진짜 정산가가 아니라 조회 시점의 실시간가일 뿐이다(사용자 지적, 실제 확인 — 이전에 확정
+// 종가 오염이 발견됐던 USD/JPY와 같은 메커니즘이 GOLD·DXY·WTI·브렌트·USD/KRW에도 똑같이 적용된다).
+// 그래서 이 6개 지표는 1d봉 대신 장중봉을 받아, 뉴욕 정규장 마감(오후 4시 ET)에 가장 가까운(그 시각을
+// 넘지 않는 마지막) 봉을 그 날의 값으로 확정한다 — "미국장 마감 시각 기준"이라는 명확한 정의를 준다.
+const US_CLOSE_ADJUSTED_METRICS = new Set<string>([
+  METRICS.GOLD, METRICS.WTI, METRICS.BRENT, METRICS.USDKRW, METRICS.USDJPY, METRICS.DXY,
+]);
+const NY_CLOSE_MINUTES = 16 * 60; // 16:00 ET
+const NY_CLOSE_GRACE_MINUTES = 15; // 정산 지연분 허용(장중봉이 정확히 16:00에 안 찍힐 수 있어서)
+
+function etDateAndMinutes(unixSeconds: number): { dateET: string; minutesFromMidnight: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(unixSeconds * 1000));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+  return {
+    dateET: `${get("year")}-${get("month")}-${get("day")}`,
+    minutesFromMidnight: Number(get("hour")) * 60 + Number(get("minute")),
+  };
+}
+
+/** 24시간 가까이 거래되는 자산의 장중봉에서, 뉴욕증시 정규장 마감(16:00 ET) 기준 값을 날짜별로 추출한다. */
+async function fetchYahooAtUsClose(symbol: string, range: string, interval: string): Promise<{ date: string; value: number }[]> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!res.ok) throw new Error(`Yahoo ${symbol} 요청 실패: ${res.status}`);
+  const data = (await res.json()) as YahooChartResult;
+  if (data.chart.error) throw new Error(`Yahoo ${symbol} 오류: ${data.chart.error.description}`);
+  const result = data.chart.result?.[0];
+  if (!result) throw new Error(`Yahoo ${symbol}: 데이터 없음`);
+
+  const closes = result.indicators.quote[0].close;
+  const byDate = new Map<string, { value: number; minutesFromMidnight: number }>();
+  result.timestamp.forEach((ts, i) => {
+    const value = closes[i];
+    if (value === null || value === undefined) return;
+    const { dateET, minutesFromMidnight } = etDateAndMinutes(ts);
+    if (minutesFromMidnight > NY_CLOSE_MINUTES + NY_CLOSE_GRACE_MINUTES) return;
+    // 날짜만으로 요일 판정(UTC 자정 기준 파싱 — 시간대 보정 없이 순수 캘린더 날짜 비교용).
+    const weekday = new Date(`${dateET}T12:00:00Z`).getUTCDay();
+    if (weekday === 0 || weekday === 6) return;
+    const existing = byDate.get(dateET);
+    if (!existing || minutesFromMidnight > existing.minutesFromMidnight) {
+      byDate.set(dateET, { value, minutesFromMidnight });
+    }
+  });
+
+  return Array.from(byDate.entries())
+    .map(([date, v]) => ({ date, value: v.value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 매일 파이프라인용 — US_CLOSE_ADJUSTED_METRICS 전용, 최근 5일치를 15분봉으로 조회. */
+async function fetchYahooLatestAtUsClose(metric: string): Promise<FetchedPoint[]> {
+  const symbol = YAHOO_TICKERS[metric];
+  if (!symbol) throw new Error(`${metric}은 Yahoo 대상이 아니다`);
+  const points = await fetchYahooAtUsClose(symbol, "5d", "15m");
+  return points.map((p) => ({ ...p, metric, source: "yahoo" as const }));
+}
+
+/** 백필용 — Yahoo 장중봉 보관 한도(약 60일)까지만 가능. 그 이전은 1d봉(실시간가 오염 가능성 있음)만 남는다. */
+export async function fetchYahooHistoricalAtUsClose(metric: string): Promise<FetchedPoint[]> {
+  const symbol = YAHOO_TICKERS[metric];
+  if (!symbol) throw new Error(`${metric}은 Yahoo 대상이 아니다`);
+  const points = await fetchYahooAtUsClose(symbol, "60d", "30m");
+  return points.map((p) => ({ ...p, metric, source: "yahoo" as const }));
+}
+
 export async function fetchAllYahooLatest(): Promise<{
   points: FetchedPoint[];
   errors: { metric: string; message: string }[];
@@ -90,7 +161,9 @@ export async function fetchAllYahooLatest(): Promise<{
   // 지표별로 독립적인 Yahoo 요청이라 순차 for 루프로 돌면 지표 개수만큼 왕복 지연이 누적된다
   // (파이프라인 55초 소요의 주요 원인 중 하나 — 외부 감사 지적, 실제 확인). 병렬로 바꾼다.
   const metrics = Object.keys(YAHOO_TICKERS);
-  const results = await Promise.allSettled(metrics.map((metric) => fetchYahooLatest(metric)));
+  const results = await Promise.allSettled(
+    metrics.map((metric) => (US_CLOSE_ADJUSTED_METRICS.has(metric) ? fetchYahooLatestAtUsClose(metric) : fetchYahooLatest(metric)))
+  );
 
   const points: FetchedPoint[] = [];
   const errors: { metric: string; message: string }[] = [];
