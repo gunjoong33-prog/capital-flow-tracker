@@ -224,95 +224,94 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     previousReport?.marketDate != null &&
     previousReport.marketDate.toISOString().slice(0, 10) === marketDate;
   if (isRepeatMarketDay) {
-    return {
-      date: today,
-      metricsSaved,
-      sourceErrors: [
-        ...sourceErrors,
-        { source: "휴장일 스킵", error: `marketDate(${marketDate})가 직전 리포트와 동일 — 새 리포트 생성 건너뜀` },
-      ],
-      narrative: "",
-      finalDecision: previousReport.step8 && typeof previousReport.step8 === "object" && "finalDecision" in previousReport.step8
-        ? String((previousReport.step8 as { finalDecision: unknown }).finalDecision)
-        : "",
-      macroTrendScore: 0,
-      notionWriteCount: 0,
-      periodReportsGenerated: [],
-    };
+    sourceErrors.push({ source: "휴장일 스킵", error: `marketDate(${marketDate})가 직전 리포트와 동일 — 새 일일 리포트 생성 건너뜀` });
   }
 
-  // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
-  // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서
-  // 이미 Mistral을 한 번 호출했으니 여기서 곧바로 2번 더 부르면 짧은 시간 안에 3번째 요청이 될
-  // 위험이 있다 — 사이에 여유를 둬 레이트리밋(429)을 피한다.
-  let narrative: string;
-  try {
-    narrative = await generateNarrative(buildDailyNarrativePrompt(report));
-  } catch (err) {
-    narrative = `[해설 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
-  }
-
-  await sleep(20_000);
-
-  try {
-    report.details.comprehensiveReport = await generateComprehensiveReport(report);
-  } catch (err) {
-    report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
-  }
-
-  // 4) DB 저장
-  const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
-  await db.dailyReport.upsert({
-    where: { date: new Date(today) },
-    create: {
-      date: new Date(today),
-      marketDate: new Date(marketDate),
-      step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
-      step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
-      details: asJson(report.details),
-      narrative,
-      dataCompleteness: asJson({ sourceErrors }),
-    },
-    update: {
-      marketDate: new Date(marketDate),
-      step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
-      step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
-      details: asJson(report.details),
-      narrative,
-      dataCompleteness: asJson({ sourceErrors }),
-    },
-  });
-
-  // /report·홈은 이제 이 DB 스냅샷을 읽기 전용으로 쓴다(force-dynamic 제거) — 시간 기반 캐시
-  // 대신 저장 직후 바로 무효화해서 스테일 0초로 최신 반영한다.
-  revalidatePath("/report");
-  revalidatePath("/");
-
-  // 5) 노션 기록 — 11개 하위 DB(상세) + Calender DB(시장 체크리스트 페이지에 실제로 보이는 항목)
+  let narrative = "";
   let notionWriteCount = 0;
-  try {
-    const notionInput = await buildNotionInput(today, report, sectors);
-    const result = await writeDailyChecklistToNotion(notionInput);
-    notionWriteCount = result.count;
-  } catch (err) {
-    sourceErrors.push({ source: "Notion(하위DB)", error: err instanceof Error ? err.message : String(err) });
-  }
-  try {
-    await writeCalendarEntry({
-      date: today,
-      finalDecision: report.step8.finalDecision,
-      macroTrendScore: report.step8.macroTrendScore,
-      narrative,
+
+  // 주간 리포트 실시일(period-report.ts isReportDay)은 매주 일요일인데, 일요일은 항상 미국장
+  // 휴장일이라 isRepeatMarketDay가 상시 참이 된다 — 이 블록 전체를 건너뛰는 return으로 처리하면
+  // 아래 6)번 주기별 리포트 생성까지 같이 막혀서 주간 리포트가 영구히 안 만들어진다(연간도 1/1이
+  // 항상 휴장일이라 같은 문제 — 실제 라이브에서 확인된 회귀). 그래서 "새 일일 리포트 저장"만
+  // 조건부로 건너뛰고, 6)번은 아래에서 항상 실행한다 — 주기별 집계는 이미 저장된 과거 DailyReport만
+  // 읽으므로 오늘자 새 리포트 생성 여부와 무관하게 항상 돌아도 안전하다.
+  if (!isRepeatMarketDay) {
+    // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
+    // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서
+    // 이미 Mistral을 한 번 호출했으니 여기서 곧바로 2번 더 부르면 짧은 시간 안에 3번째 요청이 될
+    // 위험이 있다 — 사이에 여유를 둬 레이트리밋(429)을 피한다.
+    try {
+      narrative = await generateNarrative(buildDailyNarrativePrompt(report));
+    } catch (err) {
+      narrative = `[해설 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+    }
+
+    await sleep(20_000);
+
+    try {
+      report.details.comprehensiveReport = await generateComprehensiveReport(report);
+    } catch (err) {
+      report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+    }
+
+    // 4) DB 저장
+    const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
+    await db.dailyReport.upsert({
+      where: { date: new Date(today) },
+      create: {
+        date: new Date(today),
+        marketDate: new Date(marketDate),
+        step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
+        step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
+        details: asJson(report.details),
+        narrative,
+        dataCompleteness: asJson({ sourceErrors }),
+      },
+      update: {
+        marketDate: new Date(marketDate),
+        step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
+        step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
+        details: asJson(report.details),
+        narrative,
+        dataCompleteness: asJson({ sourceErrors }),
+      },
     });
-  } catch (err) {
-    sourceErrors.push({ source: "Notion(캘린더)", error: err instanceof Error ? err.message : String(err) });
+
+    // /report·홈은 이제 이 DB 스냅샷을 읽기 전용으로 쓴다(force-dynamic 제거) — 시간 기반 캐시
+    // 대신 저장 직후 바로 무효화해서 스테일 0초로 최신 반영한다.
+    revalidatePath("/report");
+    revalidatePath("/");
+
+    // 5) 노션 기록 — 11개 하위 DB(상세) + Calender DB(시장 체크리스트 페이지에 실제로 보이는 항목)
+    try {
+      const notionInput = await buildNotionInput(today, report, sectors);
+      const result = await writeDailyChecklistToNotion(notionInput);
+      notionWriteCount = result.count;
+    } catch (err) {
+      sourceErrors.push({ source: "Notion(하위DB)", error: err instanceof Error ? err.message : String(err) });
+    }
+    try {
+      await writeCalendarEntry({
+        date: today,
+        finalDecision: report.step8.finalDecision,
+        macroTrendScore: report.step8.macroTrendScore,
+        narrative,
+      });
+    } catch (err) {
+      sourceErrors.push({ source: "Notion(캘린더)", error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
-  // 6) 오늘이 주/월/분기/년 마감일이면 사이트 전용 주기별 리포트 생성
+  // 6) 오늘이 주/월/분기/년 마감일이면 사이트 전용 주기별 리포트 생성 — isRepeatMarketDay와
+  // 무관하게 항상 실행한다(위 주석 참고, 실제 라이브에서 확인된 회귀 수정).
   let periodReportsGenerated: string[] = [];
   try {
     const due = await generatePeriodReportsIfDue(new Date(today));
     periodReportsGenerated = due.filter((d) => d.generated).map((d) => d.type);
+    for (const d of due.filter((x) => x.generated)) {
+      revalidatePath(`/reports/${d.type}`);
+    }
   } catch (err) {
     sourceErrors.push({ source: "주기별리포트", error: err instanceof Error ? err.message : String(err) });
   }

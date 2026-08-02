@@ -12,6 +12,12 @@ import type { StepDetails } from "@/lib/scoring/types";
 // 약속도 "매일 오전 9시(KST) 갱신"이라 실시간 재계산은 애초에 그 약속과 안 맞았다. 09시 파이프라인이
 // 저장한 DailyReport 스냅샷을 읽기 전용으로 쓰고, 파이프라인이 저장 직후 revalidatePath로
 // 무효화하므로 캐시 시차 없이 최신 반영된다(pipeline.ts 참고).
+//
+// 안전장치: revalidatePath는 파이프라인(배포된 앱 내부)에서만 호출된다 — scripts/backfill-*.ts,
+// reapply-*.ts처럼 로컬 tsx로 DB만 직접 고치는 스크립트는 배포된 앱의 캐시를 무효화할 방법이
+// 없다(같은 프로세스가 아니라서 revalidatePath를 불러도 효과가 없다). 그런 스크립트 실행 뒤
+// 코드 재배포를 안 하면 화면이 stale할 수 있다는 지적이 있어, 5분 ISR을 안전망으로 둔다.
+export const revalidate = 300;
 async function getReportRow() {
   const today = kstToday();
   const todayRow = await db.dailyReport.findUnique({ where: { date: new Date(today) } });
