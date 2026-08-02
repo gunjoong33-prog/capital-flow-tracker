@@ -60,19 +60,6 @@ model PeriodReport {
   @@unique([periodType, periodStart])
 }
 
-// 자동화 안 되는 지표(CNN F&G, 국내비중 설정)의 수동 입력 기록.
-// MetricValue와 별개로 "언제 마지막으로 손으로 입력했는지" 추적용.
-model ManualInputLog {
-  id        String   @id @default(cuid())
-  metric    String
-  date      DateTime @db.Date
-  value     Float
-  note      String?
-  createdAt DateTime @default(now())
-
-  @@unique([metric, date])
-}
-
 // 1단계 거부권 판정용 — 매일 파이프라인이 뉴스 헤드라인을 모아 Gemini로 "시장을 흔들 리스크인가" 판정,
 // 리스크로 판단된 것만 저장한다(전부 저장하면 노이즈만 쌓임). 최근 7일 내 건수가 거부권 기준.
 model NewsEvent {
