@@ -6,7 +6,7 @@ import { fetchAllFredMetrics } from "../src/lib/sources/fred";
 import { fetchCftcJpyNetPosition } from "../src/lib/sources/cftc";
 import { fetchCoinGeckoRange } from "../src/lib/sources/coingecko";
 import { fetchJp10yHistorical } from "../src/lib/sources/mof-japan";
-import { fetchYahooHistorical } from "../src/lib/sources/yahoo";
+import { fetchYahooHistorical, fetchYahooHistoricalAtUsClose } from "../src/lib/sources/yahoo";
 import { fetchKr10y } from "../src/lib/sources/ecos";
 import { fetchCnnFearGreedHistorical } from "../src/lib/sources/cnn-feargreed";
 import { METRICS, type FetchedPoint } from "../src/lib/sources/types";
@@ -69,9 +69,23 @@ async function main() {
     console.log("❌ MOF 실패:", err instanceof Error ? err.message : err);
   }
 
-  // Yahoo Finance (금, 유가, 환율, 지수, VIX)
+  // Yahoo Finance — 금·유가·원화/엔화는 거의 24시간 거래돼 1d봉이 정산가가 아니라 조회 시점
+  // 실시간가일 수 있다(8ca88ce에서 확인·수정, scripts/backfill-us-close.ts 참고) — 이 5개는
+  // 반드시 미국장 마감 시각 기준 함수를 써야 한다. 예전엔 이 스크립트가 옛 함수를 그대로 써서,
+  // 다시 실행하면 이미 고친 오염을 되살리는 문제가 있었다(외부 지적, 실제 확인).
+  const usCloseMetrics = [METRICS.GOLD, METRICS.WTI, METRICS.BRENT, METRICS.USDKRW, METRICS.USDJPY];
+  for (const metric of usCloseMetrics) {
+    try {
+      const points = await fetchYahooHistoricalAtUsClose(metric);
+      await save(points, `Yahoo(미국장 마감 기준): ${metric}`);
+    } catch (err) {
+      console.log(`❌ Yahoo ${metric} 실패:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  // 나머지(지수·VIX·개별주)는 미국 정규장 시간에 갇혀 거래돼 09시 KST 파이프라인 시점엔 이미
+  // 마감 후라 1d봉 종가가 그대로 정산가다 — 옛 함수 그대로 써도 안전하다.
   const yahooMetrics = [
-    METRICS.GOLD, METRICS.WTI, METRICS.BRENT, METRICS.USDKRW, METRICS.USDJPY,
     METRICS.NDX, METRICS.RUT, METRICS.DJI, METRICS.SPX, METRICS.VIX,
     METRICS.AAPL, METRICS.MSFT, METRICS.GOOGL, METRICS.AMZN, METRICS.NVDA, METRICS.META, METRICS.TSLA,
   ];

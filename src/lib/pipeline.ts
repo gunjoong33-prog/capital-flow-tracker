@@ -145,77 +145,18 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   const metricsSaved = await saveMetricPoints(allPoints);
 
-  // ticker를 계속 들고 다닌다 — 채점 입력(name/return5d/changePct1d/volumeRatio)과 시계열 저장
-  // (SECTOR_<티커>_*) 둘 다 Yahoo 성공분·Alpha Vantage 폴백분이 합쳐진 같은 목록을 써야
-  // 저장 누락 없이 일치한다.
-  const sectors: { name: string; ticker: string; return5d: number; changePct1d: number; volumeRatio: number; source: "yahoo" | "alphavantage" }[] =
-    sectorsResult.status === "fulfilled"
-      ? sectorsResult.value.sectors.map((s) => ({ ...s, source: "yahoo" as const }))
-      : [];
-  const missingSectorLabels: string[] = [];
-  if (sectorsResult.status !== "fulfilled") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
-
-  // 섹터 폴백은 Yahoo와 같은 티커(XLK 등)를 그대로 쓰므로 지수 폴백과 달리 스케일 문제가 없다 —
-  // 실패한 섹터만 Alpha Vantage로 직접 계산해서 채운다.
-  if (sectorsResult.status === "fulfilled") {
-    const tickerToKey = new Map<string, keyof typeof SECTOR_ETFS>(
-      Object.entries(SECTOR_ETFS).map(([key, ticker]) => [ticker, key as keyof typeof SECTOR_ETFS])
-    );
-    for (const e of sectorsResult.value.errors) {
-      sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
-      const ticker = e.sector.match(/\(([^)]+)\)$/)?.[1];
-      const sectorKey = ticker ? tickerToKey.get(ticker) : undefined;
-      if (!avApiKey || !sectorKey) {
-        missingSectorLabels.push(e.sector);
-        continue;
-      }
-      try {
-        const fallback = await fetchSectorFallback(sectorKey, avApiKey);
-        sectors.push({ ...fallback, source: "alphavantage" as const });
-      } catch (err) {
-        sourceErrors.push({ source: `AlphaVantage(섹터 폴백):${e.sector}`, error: err instanceof Error ? err.message : String(err) });
-        missingSectorLabels.push(e.sector);
-      }
-      await alphaVantagePace();
-    }
-  }
-
-  // 섹터 원자료(return5d·volumeRatio·전일 대비)는 지금까지 라이브 조회 전용이라 시계열로 안 남았다
-  // — 6단계는 백테스트가 원천 불가능했다(외부 감사 지적). MetricValue에 티커별로 저장해두면
-  // 나중에 scoreStep6 로직 변경(예: P0-3 분모 수정)의 과거 영향도 재계산해볼 수 있다.
-  const sectorPoints: FetchedPoint[] = sectors.flatMap((s) => [
-    { metric: `SECTOR_${s.ticker}_RET5D`, date: today, value: s.return5d, source: s.source },
-    { metric: `SECTOR_${s.ticker}_VOLRATIO`, date: today, value: s.volumeRatio, source: s.source },
-    { metric: `SECTOR_${s.ticker}_CHG1D`, date: today, value: s.changePct1d, source: s.source },
-  ]);
-  await saveMetricPoints(sectorPoints);
-
-  // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
-  const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
-  if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
-  const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
-  if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
-  const report = await runDailyAnalysis({
-    sectors,
-    missingSectorLabels,
-    bigTechReasons,
-    institutionalSignals,
-  });
-
-  // 뉴스 리스크 가중점수 시계열 저장 시작 — 지금 당장은 표본이 30개 미만이라 백분위 전환에
-  // 못 쓰지만(calculatePercentile 최소 표본 요건), 쌓아두지 않으면 나중에도 영영 못 쓴다.
-  if (report.step1.newsRiskScore !== undefined) {
-    await saveMetricPoints([
-      { metric: METRICS.NEWS_RISK_SCORE_7D, date: today, value: report.step1.newsRiskScore, source: "manual" },
-    ]);
-  }
-
   // 휴장일(주말 등) 중복 실행 방지 — 크론은 요일 상관없이 매일 돈다(vercel.json "0 0 * * *")인데,
   // 미국장이 쉰 날은 Yahoo 종가가 직전 거래일 것 그대로 다시 들어와 marketDate가 안 바뀐다. 이걸
   // 그대로 새 DailyReport로 저장하면 같은 시장 데이터가 여러 date에 중복 계상돼 백테스트가 왜곡된다
   // (외부 감사 지적, 실제 확인 — 8/1·8/2 리포트가 둘 다 7/31 데이터였던 사례). 직전 리포트와
   // marketDate가 같으면 새 리포트를 만들지 않고 여기서 끝낸다 — 원자료(MetricValue)는 위에서 이미
   // 정상 저장했으니 FRED처럼 주말에도 갱신되는 지표는 손실 없다.
+  //
+  // 이 판정을 가능한 한 일찍(무거운 계산 전에) 해야 한다 — 처음엔 runDailyAnalysis()·섹터
+  // Alpha Vantage 폴백·빅테크 등락원인(Groq)·기관매집(Dataroma/OpenInsider 스크레이핑)을 전부
+  // 계산한 "뒤에" 이 판정을 해서, 휴장일마다 저장만 스킵하고 이 무거운 API 호출들은 매번 낭비되고
+  // 있었다(코드 재검토 중 발견, 실제 확인). marketDate는 위에서 이미 구했으니 그 무거운 계산들
+  // 전에 여기서 먼저 판정한다.
   const previousReport = await db.dailyReport.findFirst({
     where: { date: { lt: new Date(today) } },
     orderBy: { date: "desc" },
@@ -229,14 +170,83 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   let narrative = "";
   let notionWriteCount = 0;
+  let finalDecision = (previousReport?.step8 as { finalDecision?: string } | null)?.finalDecision ?? "";
+  let macroTrendScore = (previousReport?.step8 as { macroTrendScore?: number } | null)?.macroTrendScore ?? 0;
 
   // 주간 리포트 실시일(period-report.ts isReportDay)은 매주 일요일인데, 일요일은 항상 미국장
   // 휴장일이라 isRepeatMarketDay가 상시 참이 된다 — 이 블록 전체를 건너뛰는 return으로 처리하면
   // 아래 6)번 주기별 리포트 생성까지 같이 막혀서 주간 리포트가 영구히 안 만들어진다(연간도 1/1이
-  // 항상 휴장일이라 같은 문제 — 실제 라이브에서 확인된 회귀). 그래서 "새 일일 리포트 저장"만
-  // 조건부로 건너뛰고, 6)번은 아래에서 항상 실행한다 — 주기별 집계는 이미 저장된 과거 DailyReport만
+  // 항상 휴장일이라 같은 문제 — 실제 라이브에서 확인된 회귀). 그래서 "새 일일 리포트 계산·저장"만
+  // 통째로 건너뛰고, 6)번은 아래에서 항상 실행한다 — 주기별 집계는 이미 저장된 과거 DailyReport만
   // 읽으므로 오늘자 새 리포트 생성 여부와 무관하게 항상 돌아도 안전하다.
   if (!isRepeatMarketDay) {
+    // ticker를 계속 들고 다닌다 — 채점 입력(name/return5d/changePct1d/volumeRatio)과 시계열 저장
+    // (SECTOR_<티커>_*) 둘 다 Yahoo 성공분·Alpha Vantage 폴백분이 합쳐진 같은 목록을 써야
+    // 저장 누락 없이 일치한다.
+    const sectors: { name: string; ticker: string; return5d: number; changePct1d: number; volumeRatio: number; source: "yahoo" | "alphavantage" }[] =
+      sectorsResult.status === "fulfilled"
+        ? sectorsResult.value.sectors.map((s) => ({ ...s, source: "yahoo" as const }))
+        : [];
+    const missingSectorLabels: string[] = [];
+    if (sectorsResult.status !== "fulfilled") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
+
+    // 섹터 폴백은 Yahoo와 같은 티커(XLK 등)를 그대로 쓰므로 지수 폴백과 달리 스케일 문제가 없다 —
+    // 실패한 섹터만 Alpha Vantage로 직접 계산해서 채운다.
+    if (sectorsResult.status === "fulfilled") {
+      const tickerToKey = new Map<string, keyof typeof SECTOR_ETFS>(
+        Object.entries(SECTOR_ETFS).map(([key, ticker]) => [ticker, key as keyof typeof SECTOR_ETFS])
+      );
+      for (const e of sectorsResult.value.errors) {
+        sourceErrors.push({ source: `섹터(Yahoo):${e.sector}`, error: e.message });
+        const ticker = e.sector.match(/\(([^)]+)\)$/)?.[1];
+        const sectorKey = ticker ? tickerToKey.get(ticker) : undefined;
+        if (!avApiKey || !sectorKey) {
+          missingSectorLabels.push(e.sector);
+          continue;
+        }
+        try {
+          const fallback = await fetchSectorFallback(sectorKey, avApiKey);
+          sectors.push({ ...fallback, source: "alphavantage" as const });
+        } catch (err) {
+          sourceErrors.push({ source: `AlphaVantage(섹터 폴백):${e.sector}`, error: err instanceof Error ? err.message : String(err) });
+          missingSectorLabels.push(e.sector);
+        }
+        await alphaVantagePace();
+      }
+    }
+
+    // 섹터 원자료(return5d·volumeRatio·전일 대비)는 지금까지 라이브 조회 전용이라 시계열로 안 남았다
+    // — 6단계는 백테스트가 원천 불가능했다(외부 감사 지적). MetricValue에 티커별로 저장해두면
+    // 나중에 scoreStep6 로직 변경(예: P0-3 분모 수정)의 과거 영향도 재계산해볼 수 있다.
+    const sectorPoints: FetchedPoint[] = sectors.flatMap((s) => [
+      { metric: `SECTOR_${s.ticker}_RET5D`, date: today, value: s.return5d, source: s.source },
+      { metric: `SECTOR_${s.ticker}_VOLRATIO`, date: today, value: s.volumeRatio, source: s.source },
+      { metric: `SECTOR_${s.ticker}_CHG1D`, date: today, value: s.changePct1d, source: s.source },
+    ]);
+    await saveMetricPoints(sectorPoints);
+
+    // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
+    const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
+    if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
+    const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
+    if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
+    const report = await runDailyAnalysis({
+      sectors,
+      missingSectorLabels,
+      bigTechReasons,
+      institutionalSignals,
+    });
+    finalDecision = report.step8.finalDecision;
+    macroTrendScore = report.step8.macroTrendScore;
+
+    // 뉴스 리스크 가중점수 시계열 저장 시작 — 지금 당장은 표본이 30개 미만이라 백분위 전환에
+    // 못 쓰지만(calculatePercentile 최소 표본 요건), 쌓아두지 않으면 나중에도 영영 못 쓴다.
+    if (report.step1.newsRiskScore !== undefined) {
+      await saveMetricPoints([
+        { metric: METRICS.NEWS_RISK_SCORE_7D, date: today, value: report.step1.newsRiskScore, source: "manual" },
+      ]);
+    }
+
     // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
     // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서
     // 이미 Mistral을 한 번 호출했으니 여기서 곧바로 2번 더 부르면 짧은 시간 안에 3번째 요청이 될
@@ -321,8 +331,8 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     metricsSaved,
     sourceErrors,
     narrative,
-    finalDecision: report.step8.finalDecision,
-    macroTrendScore: report.step8.macroTrendScore,
+    finalDecision,
+    macroTrendScore,
     notionWriteCount,
     periodReportsGenerated,
   };
