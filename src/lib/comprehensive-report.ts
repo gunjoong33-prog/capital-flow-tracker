@@ -66,7 +66,11 @@ export function buildComprehensiveReportPrompt(report: {
 - 오늘 최종 투자 적합도 점수(숫자)를 언급할 때는 절대 네가 직접 숫자를 옮겨 적지 마라 — 반드시
   {{FINAL_SCORE}}라는 문자열 그대로 써라(예: "최종 점수는 {{FINAL_SCORE}}점으로"). 최종 결론
   (매수/지켜보기/현금비중늘리기)을 언급할 때도 마찬가지로 반드시 {{FINAL_DECISION}} 그대로 써라.
-  둘 다 나중에 정확한 값으로 기계적으로 치환된다 — 직접 숫자를 타이핑하면 오타가 나도 못 잡는다.
+- 엔화 변동성이 급등했는지 여부를 언급할 때도 절대 네가 직접 판단해서 쓰지 마라(실제 JSON에서는
+  급등이 아닌데 급등했다고 쓴 사례가 있었다) — 반드시 {{JPY_VOL_NOTE}}라는 문자열을 완결된 문장
+  하나로 그대로 써라(예: "한편 {{JPY_VOL_NOTE}}" 처럼 앞에 접속어만 붙이고 뒤에 다른 말을 덧붙이지
+  마라). 위 세 플레이스홀더 전부 나중에 정확한 값으로 기계적으로 치환된다 — 직접 쓰면 오타가 나도
+  못 잡는다.
 - 매일 읽는 자기 자신을 위한 글이니 전문용어를 매번 괄호로 풀어 설명하지 마라 — 이미 알고 있다고 가정해라.
 - 본문 어디에도 "1단계", "2단계"처럼 단계 번호를 그대로 언급하지 마라. "뉴스 리스크", "유동성",
   "캐리 트레이드", "환율·금·유가", "자금 도착", "섹터", "기관 매집·심리 지표", "최종 점수"처럼
@@ -121,7 +125,8 @@ export function buildComprehensiveReportPrompt(report: {
 하드캡을 걸었다"처럼 번호 없이 내용으로 풀어써라:
 - 각 단계 결과의 note/warning 필드에 "조정", "하향", "경계", "우선한다"처럼 통상적인 판정을 코드가
   의도적으로 뒤집거나 깎았다는 문구가 있는 경우(예: 4단계 텀프리미엄 급등으로 점수를 절반으로 낮춘
-  경우, 3단계 엔화 변동성 급등으로 하드캡을 건 경우).
+  경우, 3단계 엔화 변동성 급등으로 하드캡을 건 경우 — 이 경우 위에서 설명한 {{JPY_VOL_NOTE}}로
+  언급해라).
 - details.step2Aux/step4Aux 안에 met:false이면서 value나 criterion에 "경계", "스티프닝", "이상"처럼
   평소와 다르다고 표시된 보조 지표가 있는 경우(예: 2Y-10Y 스프레드가 양수인데도 30년물 급등 때문에
   met:false로 뒤집힌 경우 — 부호만 보면 정상 같지만 실제로는 경계 신호라는 걸 짚어야 한다).
@@ -137,23 +142,47 @@ ${JSON.stringify(stripStepNumbers(report), null, 2)}`;
 }
 
 export async function generateComprehensiveReport(report: Parameters<typeof buildComprehensiveReportPrompt>[0]): Promise<string> {
-  const text = await generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS);
+  let text = await generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS);
 
-  // LLM이 JSON에 있는 숫자를 그대로 옮겨 적다가도 가끔 틀린다(외부 감사 지적, 실제 확인 — 실제
-  // macroTrendScore 2.901을 "3.35"로 잘못 서술한 사례) — 가장 중요한 두 값(최종 점수·최종 결론)만은
-  // LLM이 직접 쓰지 않고 플레이스홀더 토큰으로 남기게 한 뒤 여기서 기계적으로 정확한 값을 채운다.
+  // LLM이 JSON에 있는 사실을 그대로 옮겨 적다가도 가끔 틀린다 — 실제 확인된 사례 둘: (1)
+  // macroTrendScore 2.901을 "3.35"로 잘못 서술, (2) step3.warning이 null(급등 미감지)인데도
+  // "엔화 변동성이 급등하면서"라고 반대로 서술. 셋 다 LLM이 직접 판단해서 쓰지 않고 플레이스홀더
+  // 토큰으로 남기게 한 뒤 여기서 기계적으로 정확한 값을 채운다 — 직접 쓰면 판단이 틀려도 못 잡는다.
+  const step3 = report.step3 as { warning?: string | null } | undefined;
   const step8 = report.step8 as { macroTrendScore?: number; finalDecision?: string } | undefined;
-  if (!step8 || typeof step8.macroTrendScore !== "number" || !step8.finalDecision) return text;
 
-  const hadScorePlaceholder = text.includes("{{FINAL_SCORE}}");
-  const hadDecisionPlaceholder = text.includes("{{FINAL_DECISION}}");
-  if (!hadScorePlaceholder || !hadDecisionPlaceholder) {
+  const missing: string[] = [];
+
+  if (text.includes("{{JPY_VOL_NOTE}}")) {
+    const jpyVolNote =
+      step3?.warning != null
+        ? "엔화 변동성이 급등해 청산 압박이 커지고 있습니다."
+        : "엔화 변동성 급등은 감지되지 않아 안정적입니다.";
+    text = text.replaceAll("{{JPY_VOL_NOTE}}", jpyVolNote);
+  } else {
+    missing.push("jpyVolNote");
+  }
+
+  if (step8 && typeof step8.macroTrendScore === "number" && step8.finalDecision) {
+    if (text.includes("{{FINAL_SCORE}}")) {
+      text = text.replaceAll("{{FINAL_SCORE}}", step8.macroTrendScore.toFixed(2));
+    } else {
+      missing.push("score");
+    }
+    if (text.includes("{{FINAL_DECISION}}")) {
+      text = text.replaceAll("{{FINAL_DECISION}}", step8.finalDecision);
+    } else {
+      missing.push("decision");
+    }
+  }
+
+  if (missing.length > 0) {
     console.error(
-      `generateComprehensiveReport: LLM이 플레이스홀더 토큰을 안 지켰다(score=${hadScorePlaceholder}, decision=${hadDecisionPlaceholder}) — 숫자 오기 가능성, 원문 확인 필요`
+      `generateComprehensiveReport: LLM이 플레이스홀더 토큰을 안 지켰다(누락: ${missing.join(", ")}) — 사실 오기 가능성, 원문 확인 필요`
     );
   }
 
-  return text
-    .replaceAll("{{FINAL_SCORE}}", step8.macroTrendScore.toFixed(2))
-    .replaceAll("{{FINAL_DECISION}}", step8.finalDecision);
+  // jpyVolNote가 이미 마침표로 끝나는 완결된 문장인데, LLM이 그 뒤에 자기 마침표를 하나 더 붙이는
+  // 경우가 있었다("...습니다.." 중복) — 치환 후 남는 이중 마침표만 하나로 정리한다.
+  return text.replace(/\.\.+/g, ".");
 }
