@@ -141,7 +141,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   // 종가가 직전 거래일 것 그대로 다시 들어온다(외부 감사 지적 — 8/1·8/2가 모두 7/31 데이터로 리포트가
   // 중복 생성되는 문제, 실제 확인). SPX 포인트의 date를 그대로 쓰면 어떤 소스(Yahoo/Alpha Vantage
   // 폴백)든 "그 값이 실제로 어느 거래일 것인가"를 정확히 반영한다.
-  const marketDate = allPoints.find((p) => p.metric === METRICS.SPX)?.date ?? today;
+  //
+  // allPoints.find()가 아니라 최댓값(가장 최근 날짜)을 찾아야 한다 — fetchAllYahooLatest()가
+  // "5d" range로 지수를 조회해서 SPX가 최근 5거래일치(예: 7/27~7/31) 여러 개로 allPoints에
+  // 쌓이는데, Yahoo가 오래된 날짜부터 순서대로 반환해서 find()는 그중 가장 오래된 걸 집는다 —
+  // 실제 라이브 파이프라인 실행에서 marketDate가 7/31 대신 7/27로 잘못 계산돼 휴장일 중복 방지
+  // 로직 전체가 무력화된 걸 확인했다(사용자가 라이브 테스트로 발견).
+  const spxDates = allPoints.filter((p) => p.metric === METRICS.SPX).map((p) => p.date);
+  const marketDate = spxDates.length > 0 ? spxDates.reduce((latest, d) => (d > latest ? d : latest)) : today;
 
   const metricsSaved = await saveMetricPoints(allPoints);
 
