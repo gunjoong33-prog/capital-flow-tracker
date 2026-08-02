@@ -49,6 +49,26 @@ function relabelMetrics(pct: Record<string, number | null>): Record<string, numb
   return Object.fromEntries(Object.entries(pct).map(([code, v]) => [METRIC_LABELS[code] ?? code, v]));
 }
 
+// 크레딧 스프레드·실질금리·국채금리·VIX는 원자료 자체가 이미 %(또는 포인트) 단위라, "값이 몇 %
+// 움직였는지"(상대 변화율)와 "몇 bp/포인트 움직였는지"(절대 변화폭)가 전혀 다른 얘기가 된다 —
+// 281bp였던 크레딧 스프레드가 284bp가 된 걸 metricChangesPct는 "+1.07%"로만 보여주는데, 이걸
+// 그대로 "1.07% 상승"이라고 쓰면 스프레드가 1%p(100bp)나 벌어진 것처럼 오해하기 쉽다(사용자
+// 지적, 실제 확인 — 3bp 움직임을 %만 보고 "신용 경색 우려"로 과장해 서술한 사례). 그래서 이
+// 5개 지표는 절대 변화폭(bp 또는 포인트)도 따로 계산해서 LLM에게 같이 준다.
+export const RATE_TYPE_METRICS = new Set(["CREDIT_SPREAD", "REAL_RATE", "US10Y", "JP10Y", "VIX"]);
+
+async function metricPointChange(metric: string, start: Date, end: Date): Promise<number | null> {
+  const [first, last] = await Promise.all([
+    db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "asc" } }),
+    db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "desc" } }),
+  ]);
+  if (!first || !last) return null;
+  const raw = last.value - first.value;
+  // VIX는 지수 자체가 "포인트" 단위로 흔히 불린다(예: "15.99"). 나머지 4개는 원자료가 소수 %라
+  // ×100 해서 bp로 바꾼다(0.03 → 3bp).
+  return metric === "VIX" ? Number(raw.toFixed(2)) : Number((raw * 100).toFixed(1));
+}
+
 function utc(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m, d));
 }
@@ -182,8 +202,12 @@ export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
   const base = await aggregateFromDaily(start, end);
 
   const metricChanges: Record<string, number | null> = {};
+  const metricPointChanges: Record<string, number | null> = {};
   for (const metric of TREND_METRICS) {
     metricChanges[metric] = await metricChangePct(metric, start, end);
+    if (RATE_TYPE_METRICS.has(metric)) {
+      metricPointChanges[metric] = await metricPointChange(metric, start, end);
+    }
   }
 
   return {
@@ -192,6 +216,7 @@ export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
     end: end.toISOString().slice(0, 10),
     ...base,
     metricChangesPct: metricChanges,
+    metricPointChangesBp: metricPointChanges,
   };
 }
 
@@ -205,7 +230,11 @@ function buildPeriodNarrativePrompt(summary: Awaited<ReturnType<typeof aggregate
   // DB에 저장되는 summary(UI가 읽는 원본)는 원자료 코드(WALCL 등)를 그대로 두고, LLM에게 보낼
   // 사본만 한글 이름으로 바꾼다 — 위 문체 규칙에서 "코드 대신 이 이름을 그대로 써라"고 지시한 것과
   // 짝을 이룬다.
-  const promptJson = { ...summary, metricChangesPct: relabelMetrics(summary.metricChangesPct) };
+  const promptJson = {
+    ...summary,
+    metricChangesPct: relabelMetrics(summary.metricChangesPct),
+    metricPointChangesBp: relabelMetrics(summary.metricPointChangesBp),
+  };
   return `너는 매크로 자본흐름을 직접 챙겨보는 개인 투자자이고, 지금 쓰는 글은 자기 자신에게 존댓말로
 보고하는 ${PERIOD_LABEL[summary.periodType]} 브리핑이다(반말로 쓰는 사적인 일기가 아니다). 아래는
 ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
@@ -224,6 +253,12 @@ ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
   decisionCounts, firstScore/lastScore 같은 영문 변수명)을 절대 본문에 그대로 옮겨 적지 마라 —
   괄호 안에도 안 된다. 뜻만 한국어 문장으로 풀어써라(예: "거부권 발동 일수(vetoDays)가 4일"이
   아니라 그냥 "이 기간 중 나흘이나 거부권이 발동됐습니다"처럼).
+- 크레딧 스프레드·실질금리·미국/일본 10년물·VIX는 원자료 자체가 이미 %(또는 포인트) 단위라서
+  "몇 % 움직였는지"(metricChangesPct)와 "몇 bp/포인트 움직였는지"(metricPointChangesBp)가
+  전혀 다른 얘기다 — 281bp였던 크레딧 스프레드가 284bp로 3bp만 움직여도 metricChangesPct는
+  "+1.07%"로 나오는데, 이걸 그대로 "1.07% 상승"이라고만 쓰면 스프레드가 1%p(100bp)나 벌어진
+  것처럼 오해하게 만든다. 이 5개 지표는 반드시 metricPointChangesBp의 bp(또는 포인트) 값으로
+  말해라 — %는 쓰지 마라. 나머지 지표(지수·환율·원자재 등)는 원래대로 %를 써도 된다.
 
 원칙
 - 집계 JSON에 없는 숫자나 사실을 지어내지 마라. 데이터가 있는 날이 적으면 그 사실을 먼저 밝혀라.

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { SiteNav } from "@/components/SiteNav";
-import type { PeriodType } from "@/lib/period-report";
+import { RATE_TYPE_METRICS, type PeriodType } from "@/lib/period-report";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ interface PeriodSummary {
   lastScore: number | null;
   decisionCounts: Record<string, number>;
   metricChangesPct: Record<string, number | null>;
+  metricPointChangesBp: Record<string, number | null>;
 }
 
 const METRIC_LABEL: Record<string, string> = {
@@ -81,15 +82,25 @@ export default async function ReportDetailPage({
 
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <h2 className="mb-3 text-sm font-medium text-zinc-400">기간 내 주요 지표 변화</h2>
+          {/* 크레딧 스프레드·실질금리·국채금리·VIX는 원자료가 이미 %(포인트) 단위라, "%가 몇 %
+              움직였는지"(상대 변화율)를 그대로 보여주면 실제보다 훨씬 크게 움직인 것처럼 보인다
+              (281bp→284bp가 "+1.07%"로 표시되던 문제, 사용자 지적) — 이 5개는 bp/포인트
+              절대 변화폭을 대신 보여준다. */}
           <div className="space-y-1.5 text-sm">
-            {Object.entries(summary.metricChangesPct ?? {}).map(([metric, pct]) => (
-              <div key={metric} className="flex items-baseline justify-between border-b border-zinc-800/60 py-1 last:border-0">
-                <span className="text-zinc-500">{METRIC_LABEL[metric] ?? metric}</span>
-                <span className={pct === null ? "text-zinc-600" : pct >= 0 ? "text-emerald-400" : "text-rose-400"}>
-                  {pct === null ? "확인 못함" : `${pct > 0 ? "+" : ""}${pct}%`}
-                </span>
-              </div>
-            ))}
+            {Object.entries(summary.metricChangesPct ?? {}).map(([metric, pct]) => {
+              const isRateType = RATE_TYPE_METRICS.has(metric);
+              const bp = summary.metricPointChangesBp?.[metric] ?? null;
+              const value = isRateType ? bp : pct;
+              const unit = isRateType ? (metric === "VIX" ? "pt" : "bp") : "%";
+              return (
+                <div key={metric} className="flex items-baseline justify-between border-b border-zinc-800/60 py-1 last:border-0">
+                  <span className="text-zinc-500">{METRIC_LABEL[metric] ?? metric}</span>
+                  <span className={value === null ? "text-zinc-600" : value >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                    {value === null ? "확인 못함" : `${value > 0 ? "+" : ""}${value}${unit}`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
       </main>
