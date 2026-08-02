@@ -136,6 +136,13 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     }
   }
 
+  // marketDate: 이 리포트가 실제로 반영한 미국장 마감 거래일. today(크론 실행일 KST)와 다를 수 있다 —
+  // 크론은 주말·미국 휴장일에도 매일 돌기 때문에(vercel.json "0 0 * * *"), 그런 날은 SPX 등 Yahoo
+  // 종가가 직전 거래일 것 그대로 다시 들어온다(외부 감사 지적 — 8/1·8/2가 모두 7/31 데이터로 리포트가
+  // 중복 생성되는 문제, 실제 확인). SPX 포인트의 date를 그대로 쓰면 어떤 소스(Yahoo/Alpha Vantage
+  // 폴백)든 "그 값이 실제로 어느 거래일 것인가"를 정확히 반영한다.
+  const marketDate = allPoints.find((p) => p.metric === METRICS.SPX)?.date ?? today;
+
   const metricsSaved = await saveMetricPoints(allPoints);
 
   // ticker를 계속 들고 다닌다 — 채점 입력(name/return5d/changePct1d/volumeRatio)과 시계열 저장
@@ -203,6 +210,37 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     ]);
   }
 
+  // 휴장일(주말 등) 중복 실행 방지 — 크론은 요일 상관없이 매일 돈다(vercel.json "0 0 * * *")인데,
+  // 미국장이 쉰 날은 Yahoo 종가가 직전 거래일 것 그대로 다시 들어와 marketDate가 안 바뀐다. 이걸
+  // 그대로 새 DailyReport로 저장하면 같은 시장 데이터가 여러 date에 중복 계상돼 백테스트가 왜곡된다
+  // (외부 감사 지적, 실제 확인 — 8/1·8/2 리포트가 둘 다 7/31 데이터였던 사례). 직전 리포트와
+  // marketDate가 같으면 새 리포트를 만들지 않고 여기서 끝낸다 — 원자료(MetricValue)는 위에서 이미
+  // 정상 저장했으니 FRED처럼 주말에도 갱신되는 지표는 손실 없다.
+  const previousReport = await db.dailyReport.findFirst({
+    where: { date: { lt: new Date(today) } },
+    orderBy: { date: "desc" },
+  });
+  const isRepeatMarketDay =
+    previousReport?.marketDate != null &&
+    previousReport.marketDate.toISOString().slice(0, 10) === marketDate;
+  if (isRepeatMarketDay) {
+    return {
+      date: today,
+      metricsSaved,
+      sourceErrors: [
+        ...sourceErrors,
+        { source: "휴장일 스킵", error: `marketDate(${marketDate})가 직전 리포트와 동일 — 새 리포트 생성 건너뜀` },
+      ],
+      narrative: "",
+      finalDecision: previousReport.step8 && typeof previousReport.step8 === "object" && "finalDecision" in previousReport.step8
+        ? String((previousReport.step8 as { finalDecision: unknown }).finalDecision)
+        : "",
+      macroTrendScore: 0,
+      notionWriteCount: 0,
+      periodReportsGenerated: [],
+    };
+  }
+
   // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
   // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서
   // 이미 Mistral을 한 번 호출했으니 여기서 곧바로 2번 더 부르면 짧은 시간 안에 3번째 요청이 될
@@ -228,6 +266,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     where: { date: new Date(today) },
     create: {
       date: new Date(today),
+      marketDate: new Date(marketDate),
       step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
       step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
       details: asJson(report.details),
@@ -235,6 +274,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       dataCompleteness: asJson({ sourceErrors }),
     },
     update: {
+      marketDate: new Date(marketDate),
       step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
       step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
       details: asJson(report.details),

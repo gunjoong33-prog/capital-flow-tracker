@@ -38,9 +38,15 @@ export default async function ReportPage() {
 
   // 저장된 날짜(date-only, UTC 자정)를 그대로 포맷 — Asia/Seoul로 다시 해석하면 자정 UTC가
   // 다음날로 밀릴 수 있어 calendar/[date] 페이지와 같은 방식(UTC)으로 표시한다.
-  const dateLabel = reportRow.date.toLocaleDateString("ko-KR", {
+  const dateOnlyLabel = reportRow.date.toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "UTC",
   });
+  // marketDate(실제 데이터 기준 미국장 마감 거래일)가 리포트 생성일과 다르면(휴장일 등) 병기 —
+  // "8/1 리포트인데 실제로는 7/31 데이터"처럼 두 날짜가 섞여 혼동되는 걸 막는다(외부 감사 지적).
+  const marketDateLabel = reportRow.marketDate?.toISOString().slice(0, 10);
+  const dateOnlyStr = reportRow.date.toISOString().slice(0, 10);
+  const dateLabel =
+    marketDateLabel && marketDateLabel !== dateOnlyStr ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel;
 
   const reportData: ReportViewData = {
     step1: reportRow.step1 as unknown as ReportViewData["step1"],

@@ -31,6 +31,8 @@ model MetricValue {
 model DailyReport {
   id                String   @id @default(cuid())
   date              DateTime @unique @db.Date
+  marketDate        DateTime? @db.Date // 실제 데이터 기준 미국장 마감 거래일(Yahoo SPX 종가일) — date(크론 실행일)와
+  // 다를 수 있다(주말·휴장일). 백테스트에서 같은 거래일 데이터가 여러 date로 중복 계상되는 걸 막는 데 쓴다.
   step1             Json // 글로벌 환경: {newsCount, hasBigEvent, vetoTriggered}
   step2             Json // 유동성: {overseasScore, domesticAdjustment, finalScore, details}
   step3             Json // 캐리 트레이드: {spreadBp, zone, carryToVol, jpyVolSpike, cftcNetPosition, score}
