@@ -83,6 +83,7 @@ async function main() {
       step4Aux: fresh.details.step4Aux,
       step4Summary: fresh.details.step4Summary,
       step8: step8Details,
+      forwardSignals: fresh.details.forwardSignals,
     };
 
     const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;

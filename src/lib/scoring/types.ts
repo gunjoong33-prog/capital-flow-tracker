@@ -182,4 +182,25 @@ export type StepDetails = {
   step6: StepDetailRow[];
   step7: StepDetailRow[]; // VIX·공포탐욕지수 — 기존 표, 충족열 유지
   step8: StepDetailRow[];
+  // 종합 보고서 "앞으로 자본이 이동할 곳" 문단 전용 재료 — 예측을 만들어내는 게 아니라 "무엇이
+  // 바뀌면 무엇이 따라 바뀌는가"의 조건문 재료만 제공한다(LLM이 여기 없는 미래를 지어내지 못하게
+  // 막는 게 목적). 전부 이미 계산된 값의 재조합이라 별도 API 호출 없음.
+  forwardSignals?: {
+    liquidityCycle: {
+      netLiquidityDirection: "상승" | "하락" | "확인 못함";
+      rrpBuffer: string;
+      creditSpreadBp: number | null;
+      creditLeadsEquity: string;
+    };
+    upcomingEvents: string | null;
+    quadrantExit: { current: string; ifGoldFlips: string; ifRateFlips: string };
+    distanceToThresholds: {
+      carrySpreadBp: number;
+      carrySafeGapBp: number;
+      vixFearGapPt: number | null;
+      creditNormalGapBp: number | null;
+      scoreToWatchGap: number;
+    };
+    institutionalDirection: string | null;
+  };
 };

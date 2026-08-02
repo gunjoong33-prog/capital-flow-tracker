@@ -1322,6 +1322,35 @@ export async function runDailyAnalysis(
     { label: "최종 결론", criterion: "≥7.0 매수\n≥5.0 지켜보기\n미만 현금비중늘리기", value: step8.finalDecision, met: null },
   ];
 
+  // forwardSignals — 종합 보고서 "앞으로 자본이 이동할 곳" 문단 전용 재료(StepDetails 타입 주석 참고).
+  const upcomingEventsRow = details.step1.find((r) => r.label === "14일 내 예정된 이벤트");
+  const institutionalFlowRow = details.step7Institutional?.find((r) => r.label === "섹터 및 자금 흐름");
+  details.forwardSignals = {
+    liquidityCycle: {
+      netLiquidityDirection: netLiq.risingTrend === null ? "확인 못함" : netLiq.risingTrend ? "상승" : "하락",
+      rrpBuffer: rrpStatus?.depleted ? "고갈(충격 흡수 여력 없음)" : "여유 있음",
+      creditSpreadBp,
+      creditLeadsEquity:
+        creditSpreadBp !== null && creditSpreadBp < 300
+          ? "스프레드가 역사적 저점권이라 추가 축소 여력은 작고, 확대 전환 시 주식이 뒤따를 위험"
+          : "스프레드가 정상 구간 — 추가 확대 여부가 다음 관문",
+    },
+    upcomingEvents: upcomingEventsRow && upcomingEventsRow.value !== "없음" ? upcomingEventsRow.value : null,
+    quadrantExit: {
+      current: step4.quadrant,
+      ifGoldFlips: "금이 상승 전환하면 '금↑ 실질금리↑'(최저점 2/10)로 이동",
+      ifRateFlips: "실질금리가 하락 전환하면 '금↓ 실질금리↓'(3/10)로 이동",
+    },
+    distanceToThresholds: {
+      carrySpreadBp: step3.spreadBp,
+      carrySafeGapBp: Number((350 - step3.spreadBp).toFixed(0)),
+      vixFearGapPt: vix !== null ? Number((25 - vix).toFixed(2)) : null,
+      creditNormalGapBp: creditSpreadBp !== null ? Number((300 - creditSpreadBp).toFixed(0)) : null,
+      scoreToWatchGap: Number((5.0 - step8.macroTrendScore).toFixed(2)),
+    },
+    institutionalDirection: institutionalFlowRow?.value ?? null,
+  };
+
   return { step1, step2, step3, step4, step5, step6, step7, step8, details };
 }
 
