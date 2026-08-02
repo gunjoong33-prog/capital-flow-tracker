@@ -24,6 +24,10 @@ export function buildComprehensiveReportPrompt(report: {
 
 원칙
 - 결과 JSON에 없는 숫자나 사실을 지어내지 마라. 근거가 없으면 "확인 안 됨"이라고 써라.
+- 오늘 최종 투자 적합도 점수(숫자)를 언급할 때는 절대 네가 직접 숫자를 옮겨 적지 마라 — 반드시
+  {{FINAL_SCORE}}라는 문자열 그대로 써라(예: "최종 점수는 {{FINAL_SCORE}}점으로"). 최종 결론
+  (매수/지켜보기/현금비중늘리기)을 언급할 때도 마찬가지로 반드시 {{FINAL_DECISION}} 그대로 써라.
+  둘 다 나중에 정확한 값으로 기계적으로 치환된다 — 직접 숫자를 타이핑하면 오타가 나도 못 잡는다.
 - 매일 읽는 자기 자신을 위한 글이니 전문용어를 매번 괄호로 풀어 설명하지 마라 — 이미 알고 있다고 가정해라.
 - 처음부터 끝까지 예외 없이 존댓말(합니다체)만 써라. 중간에 "~다", "~았다/었다" 같은 평서체가
   한 문장이라도 섞이면 안 된다.
@@ -58,5 +62,23 @@ ${JSON.stringify(report, null, 2)}`;
 }
 
 export async function generateComprehensiveReport(report: Parameters<typeof buildComprehensiveReportPrompt>[0]): Promise<string> {
-  return generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS);
+  const text = await generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS);
+
+  // LLM이 JSON에 있는 숫자를 그대로 옮겨 적다가도 가끔 틀린다(외부 감사 지적, 실제 확인 — 실제
+  // macroTrendScore 2.901을 "3.35"로 잘못 서술한 사례) — 가장 중요한 두 값(최종 점수·최종 결론)만은
+  // LLM이 직접 쓰지 않고 플레이스홀더 토큰으로 남기게 한 뒤 여기서 기계적으로 정확한 값을 채운다.
+  const step8 = report.step8 as { macroTrendScore?: number; finalDecision?: string } | undefined;
+  if (!step8 || typeof step8.macroTrendScore !== "number" || !step8.finalDecision) return text;
+
+  const hadScorePlaceholder = text.includes("{{FINAL_SCORE}}");
+  const hadDecisionPlaceholder = text.includes("{{FINAL_DECISION}}");
+  if (!hadScorePlaceholder || !hadDecisionPlaceholder) {
+    console.error(
+      `generateComprehensiveReport: LLM이 플레이스홀더 토큰을 안 지켰다(score=${hadScorePlaceholder}, decision=${hadDecisionPlaceholder}) — 숫자 오기 가능성, 원문 확인 필요`
+    );
+  }
+
+  return text
+    .replaceAll("{{FINAL_SCORE}}", step8.macroTrendScore.toFixed(2))
+    .replaceAll("{{FINAL_DECISION}}", step8.finalDecision);
 }
