@@ -62,7 +62,7 @@ export default async function ReportDetailPage({
         </header>
 
         {report.narrative && (
-          <p className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300">
+          <p className="whitespace-pre-line rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300">
             {report.narrative}
           </p>
         )}
