@@ -871,7 +871,7 @@ export async function runDailyAnalysis(
   const netLiq = await netLiquidityTrend(asOf);
   details.step2Aux.push({
     label: "순유동성 Net Liquidity",
-    criterion: "연준 총자산-TGA-RRP. 상승하면 증시에 우호적(월가 프레임워크)",
+    criterion: "연준 총자산-TGA-RRP\n상승하면 증시에 우호적(월가 프레임워크)",
     value: netLiq.detail,
     met: netLiq.risingTrend,
   });
@@ -911,7 +911,7 @@ export async function runDailyAnalysis(
   const bearSteepening = t10y2yBp !== null && t10y2yBp >= 0 && us30yDir === "up";
   details.step2Aux.push({
     label: "美 2Y-10Y 스프레드",
-    criterion: "0bp 미만(장단기 금리 역전)은 침체 선행 신호. 0bp 이상이어도 30년물이 같이 급등 중이면\n베어 스티프닝(금융여건 긴축)으로 해석 — 부호만으로 판단하지 않음",
+    criterion: "0bp 미만(장단기 금리 역전)은 침체 선행 신호\n0bp 이상이어도 30년물이 같이 급등 중이면 베어 스티프닝(금융여건 긴축)으로 해석 — 부호만으로 판단하지 않음",
     value: t10y2yBp !== null
       ? `${t10y2yBp.toFixed(0)}bp${bearSteepening ? " — 베어 스티프닝 경계(30년물 동반 상승)" : ""}`
       : "확인 못함",
