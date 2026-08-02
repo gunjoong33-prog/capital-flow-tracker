@@ -150,7 +150,7 @@ ${list}`;
 }
 
 /** high인데 evidence가 구체적 사실 없이 비어있거나 짧으면(전망·우려 수준일 가능성) medium으로 강등. */
-function downgradeUnsupportedHigh(severity: NewsSeverity, evidence: string | undefined): NewsSeverity {
+export function downgradeUnsupportedHigh(severity: NewsSeverity, evidence: string | undefined): NewsSeverity {
   if (severity !== "high") return severity;
   if (!evidence || evidence.trim().length < 8) return "medium";
   return severity;
@@ -164,7 +164,7 @@ function downgradeUnsupportedHigh(severity: NewsSeverity, evidence: string | und
 // medium/high를 오갈 수 있어, 여기서 상한을 강제한다.
 const SCHEDULED_POLICY_MEETING_PATTERN = /FOMC|Federal Open Market Committee|Bank of Japan.{0,20}(monetary policy|rate decision)/i;
 
-function capScheduledPolicyMeetingSeverity(title: string, severity: NewsSeverity): NewsSeverity {
+export function capScheduledPolicyMeetingSeverity(title: string, severity: NewsSeverity): NewsSeverity {
   if (severity === "high" && SCHEDULED_POLICY_MEETING_PATTERN.test(title)) return "medium";
   return severity;
 }
