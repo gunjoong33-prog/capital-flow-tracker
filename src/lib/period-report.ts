@@ -17,6 +17,38 @@ const TREND_METRICS = [
   "SPX", "NDX", "RUT", "DJI", "BTC", "GOLD", "WTI", "VIX", // 자산가격
 ];
 
+// LLM에게 원자료 코드명(WALCL, RRP 등)을 그대로 던지면 프롬프트로 "한글로 불러라"라고 아무리
+// 지시해도 그 코드를 그대로 베껴 쓰는 경우가 많다(comprehensive-report.ts의 stripStepNumbers()와
+// 같은 문제·같은 해법) — JSON을 보내기 전에 키 자체를 한글 이름으로 바꿔서 원천 차단한다.
+// 종합보고서 수준을 "고등학생도 이해할 수 있게" 낮추라는 요청에 맞춰, 생소할 만한 용어는 괄호로
+// 짧은 설명을 같이 붙인다.
+const METRIC_LABELS: Record<string, string> = {
+  WALCL: "연준 대차대조표(중앙은행이 시중에 푼 돈의 총량)",
+  M2: "M2 통화량",
+  TOTRESNS: "은행 지급준비금",
+  RRP: "역레포(은행들이 하루짜리로 연준에 맡겨두는 돈, 늘면 시중에 도는 돈은 준다)",
+  TGA: "재무부 일반계정(정부가 연준에 둔 통장 잔액)",
+  REAL_RATE: "실질금리(물가상승률을 뺀 진짜 금리)",
+  CREDIT_SPREAD: "크레딧 스프레드(회사채가 국채보다 얼마나 위험하게 보이는지)",
+  US10Y: "미국 10년물 국채금리",
+  JP10Y: "일본 10년물 국채금리",
+  USDJPY: "엔/달러 환율",
+  USDKRW: "원/달러 환율",
+  DXY: "달러 인덱스(달러가 다른 주요국 통화 대비 강한지)",
+  SPX: "S&P500",
+  NDX: "나스닥100",
+  RUT: "러셀2000(미국 중소형주 지수)",
+  DJI: "다우존스",
+  BTC: "비트코인",
+  GOLD: "금값",
+  WTI: "WTI 국제유가",
+  VIX: "VIX(월가 변동성·공포 지수)",
+};
+
+function relabelMetrics(pct: Record<string, number | null>): Record<string, number | null> {
+  return Object.fromEntries(Object.entries(pct).map(([code, v]) => [METRIC_LABELS[code] ?? code, v]));
+}
+
 function utc(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m, d));
 }
@@ -170,6 +202,10 @@ export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
 // 줄바꿈을 넣어도 화면에서 다 붙어버렸다, 같이 수정함). 일간과 달리 "예측"에 해당하는 재료가
 // firstScore→lastScore 방향성 하나뿐이라 ④ 항목은 그만큼 짧게 쓰도록 명시한다.
 function buildPeriodNarrativePrompt(summary: Awaited<ReturnType<typeof aggregatePeriod>>): string {
+  // DB에 저장되는 summary(UI가 읽는 원본)는 원자료 코드(WALCL 등)를 그대로 두고, LLM에게 보낼
+  // 사본만 한글 이름으로 바꾼다 — 위 문체 규칙에서 "코드 대신 이 이름을 그대로 써라"고 지시한 것과
+  // 짝을 이룬다.
+  const promptJson = { ...summary, metricChangesPct: relabelMetrics(summary.metricChangesPct) };
   return `너는 매크로 자본흐름을 직접 챙겨보는 개인 투자자이고, 지금 쓰는 글은 자기 자신에게 존댓말로
 보고하는 ${PERIOD_LABEL[summary.periodType]} 브리핑이다(반말로 쓰는 사적인 일기가 아니다). 아래는
 ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
@@ -179,6 +215,11 @@ ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
   끝나야 한다. "~다/~였다/~한다/~하다/~겠다"처럼 "다"로 끝나는 평서체 문장은 단 하나도 섞이면 안 된다.
 - 문장이 끝날 때마다 반드시 줄바꿈해라 — 한 줄에 문장 하나만 오게 써라. 두 문장을 한 줄에 이어
   쓰거나 문단처럼 길게 흘려 쓰지 마라(일간 종합 보고서와 다른 부분이니 특히 주의해라).
+- 독자는 경제·금융을 따로 공부한 적 없는 고등학생이라고 생각해라. "역레포", "크레딧 스프레드",
+  "베어 스티프닝", "사분면", "텀프리미엄" 같은 말이 나오면 처음 등장할 때 한 번은 짧게 무슨
+  뜻인지 풀어줘라(예: "역레포(은행이 하루짜리로 연준에 돈을 맡기는 것)"). 매번 길게 설명할
+  필요는 없고, 문장 안에 자연스럽게 짧은 괄호 설명만 끼워 넣으면 된다. 아래 JSON의 항목 이름은
+  이미 한글로 풀어져 있으니(예: WALCL 대신 "연준 대차대조표") 그 이름을 그대로 써라.
 
 원칙
 - 집계 JSON에 없는 숫자나 사실을 지어내지 마라. daysWithData가 적으면 그 사실을 먼저 밝혀라.
@@ -192,12 +233,14 @@ ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
    거부권 발동 일수(vetoDays)가 기간의 절반을 넘으면 그 자체가 이 기간의 성격이다.
    엔화 변동성 급등 감지 일수(jpySpikeDays)가 있으면 반드시 짚어라.
 ② 이 기간이 자산 가격을 들어올리기 좋은 환경이었는지.
-   유동성 평균 점수(avgStepScores.liquidity)와 metricChangesPct의 WALCL·RRP·TGA·
-   CREDIT_SPREAD·REAL_RATE 변화율을 근거로 판정해라. 캐리 트레이드 평균 점수
-   (avgStepScores.carry)도 함께 다뤄라 — 이것도 자산을 떠받치는 자금원이기 때문이다.
+   유동성 평균 점수(avgStepScores.liquidity)와 metricChangesPct 안의 유동성 관련 항목
+   (연준 대차대조표·역레포·재무부 일반계정·크레딧 스프레드·실질금리) 변화율을 근거로 판정해라.
+   캐리 트레이드 평균 점수(avgStepScores.carry)도 함께 다뤄라 — 이것도 자산을 떠받치는
+   자금원이기 때문이다.
 ③ 자본이 실제로 어디로 갔는지.
-   지수별 변화율(SPX·NDX·RUT·DJI)과 금·달러·비트코인의 방향, 이 기간 가장 자주 충족된
-   섹터(topSectors)를 종합해 지목해라. 사분면 분포(quadrantCounts)가 한쪽으로 쏠렸으면
+   지수별 변화율(S&P500·나스닥100·러셀2000·다우존스)과 금·달러·비트코인의 방향, 이 기간
+   가장 자주 충족된 섹터(topSectors)를 종합해 지목해라. 사분면 분포(quadrantCounts)가
+   한쪽으로 쏠렸으면
    그 국면이 기간 내내 지속됐는지도 짚어라. ②의 환경 판정과 ③의 실제 이동이 어긋나면
    반드시 짚어라 — 환경은 나쁜데 자금은 들어왔거나, 환경은 좋은데 안 들어왔다면 그게
    이 기간 가장 중요한 관찰이다.
@@ -213,7 +256,7 @@ ${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
 마지막으로 다시 한번: 문장이 끝날 때마다 줄바꿈해라. 한 줄에 문장 하나뿐이어야 한다.
 
 집계 JSON:
-${JSON.stringify(summary, null, 2)}`;
+${JSON.stringify(promptJson, null, 2)}`;
 }
 
 export async function generateAndSavePeriodReport(type: PeriodType, reportDate: Date) {

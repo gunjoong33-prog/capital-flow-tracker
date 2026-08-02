@@ -22,8 +22,11 @@ interface PeriodSummary {
 }
 
 const METRIC_LABEL: Record<string, string> = {
-  WALCL: "Fed 자산(WALCL)", M2: "M2 통화량", SPX: "S&P500", NDX: "나스닥100",
-  BTC: "비트코인", USDKRW: "원/달러", GOLD: "금", VIX: "VIX", US10Y: "미국 10년물", JP10Y: "일본 10년물",
+  WALCL: "Fed 자산(WALCL)", M2: "M2 통화량", TOTRESNS: "은행 지급준비금", RRP: "역레포(RRP)",
+  TGA: "재무부 일반계정(TGA)", REAL_RATE: "실질금리", CREDIT_SPREAD: "크레딧 스프레드",
+  US10Y: "미국 10년물", JP10Y: "일본 10년물", USDJPY: "엔/달러", USDKRW: "원/달러", DXY: "달러 인덱스",
+  SPX: "S&P500", NDX: "나스닥100", RUT: "러셀2000", DJI: "다우존스", BTC: "비트코인",
+  GOLD: "금", WTI: "WTI 유가", VIX: "VIX",
 };
 
 export default async function ReportDetailPage({
