@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { generateNarrative } from "@/lib/narrative";
-import type { Step8Result } from "@/lib/scoring/types";
+import type { Step1Result, Step2Result, Step3Result, Step4Result, Step5Result, Step6Result, Step8Result } from "@/lib/scoring/types";
 
 export type PeriodType = "week" | "month" | "quarter" | "year";
 
@@ -9,7 +9,13 @@ const PERIOD_LABEL: Record<PeriodType, string> = {
   week: "주간", month: "월간", quarter: "분기", year: "연간",
 };
 
-const TREND_METRICS = ["WALCL", "M2", "SPX", "NDX", "BTC", "USDKRW", "GOLD", "VIX", "US10Y", "JP10Y"];
+// 원래 유동성(2단계, 가중치 2.5 — 이 사이트의 1순위 드라이버) 핵심 지표가 하나도 없었다(외부 지적,
+// 실제 확인) — RRP·TGA·크레딧 스프레드·실질금리·기준잔액을 추가한다.
+const TREND_METRICS = [
+  "WALCL", "M2", "TOTRESNS", "RRP", "TGA", "REAL_RATE", "CREDIT_SPREAD", // 유동성(핵심)
+  "US10Y", "JP10Y", "USDJPY", "USDKRW", "DXY", // 캐리·환율
+  "SPX", "NDX", "RUT", "DJI", "BTC", "GOLD", "WTI", "VIX", // 자산가격
+];
 
 function utc(y: number, m: number, d: number) {
   return new Date(Date.UTC(y, m, d));
@@ -49,20 +55,23 @@ export function getPrecedingPeriodBounds(type: PeriodType, reportDate: Date): { 
   return { start: utc(y - 1, 0, 1), end: utc(y - 1, 11, 31) };
 }
 
-interface ChildPeriodRef {
-  type: PeriodType;
-  start: string;
-  end: string;
-  avgMacroTrendScore: number | null;
-}
-
 interface AggregatedBase {
   daysWithData: number;
   avgMacroTrendScore: number | null;
   firstScore: number | null;
   lastScore: number | null;
   decisionCounts: Record<string, number>;
-  childPeriods?: ChildPeriodRef[];
+  avgStepScores: {
+    liquidity: number | null; // 2단계, 가중치 2.5
+    carry: number | null; // 3단계
+    fxGoldOil: number | null; // 4단계
+    flows: number | null; // 5단계
+    sectors: number | null; // 6단계
+  };
+  vetoDays: number; // 1단계 거부권 발동 일수
+  jpySpikeDays: number; // 엔화 변동성 급등 감지 일수
+  quadrantCounts: Record<string, number>; // 4단계 사분면 분포
+  topSectors: Record<string, number>; // 6단계 충족 섹터별 등장 횟수
 }
 
 async function metricChangePct(metric: string, start: Date, end: Date): Promise<number | null> {
@@ -74,12 +83,24 @@ async function metricChangePct(metric: string, start: Date, end: Date): Promise<
   return Number((((last.value - first.value) / Math.abs(first.value)) * 100).toFixed(2));
 }
 
-/** 주간 리포트 전용 — DailyReport를 직접 집계한다(더 작은 하위 주기가 없으므로). */
+function avg(nums: number[]): number | null {
+  return nums.length > 0 ? Number((nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2)) : null;
+}
+
+/**
+ * 모든 주기(주/월/분기/년) 공통 — DailyReport를 [start,end]로 직접 집계한다.
+ * 예전엔 월/분기/연간이 하위 PeriodReport(주/월)를 다시 집계하는 계층 구조였는데, 두 가지 버그가
+ * 있었다(외부 지적, 코드로 실제 확인): ① 주마다 daysWithData가 다른데 가중치 없이 단순평균했고,
+ * ② 하위 주가 상위 기간 경계를 걸치면(예: 월~토가 7/27~8/1인 주) periodStart 기준 필터 때문에
+ * 시작월(7월)로만 통째로 귀속돼 다음 달(8월) 첫날 데이터가 그 달 집계에서 통째로 빠졌다.
+ * DailyReport에서 매번 직접 뽑으면 두 문제 다 원천적으로 없다 — 연간이라도 365행 이내라
+ * 계산량 문제도 없다(외부 제안, 검토 후 채택).
+ */
 async function aggregateFromDaily(start: Date, end: Date): Promise<AggregatedBase> {
   const dailyReports = await db.dailyReport.findMany({
     where: { date: { gte: start, lte: end } },
     orderBy: { date: "asc" },
-    select: { date: true, step8: true },
+    select: { date: true, step1: true, step2: true, step3: true, step4: true, step5: true, step6: true, step8: true },
   });
 
   const scores = dailyReports.map((r) => (r.step8 as unknown as Step8Result).macroTrendScore);
@@ -89,82 +110,44 @@ async function aggregateFromDaily(start: Date, end: Date): Promise<AggregatedBas
     return acc;
   }, {});
 
+  const quadrantCounts: Record<string, number> = {};
+  const topSectors: Record<string, number> = {};
+  let vetoDays = 0;
+  let jpySpikeDays = 0;
+  for (const r of dailyReports) {
+    const step1 = r.step1 as unknown as Step1Result;
+    const step3 = r.step3 as unknown as Step3Result;
+    const step4 = r.step4 as unknown as Step4Result;
+    const step6 = r.step6 as unknown as Step6Result;
+    if (step1?.vetoTriggered) vetoDays++;
+    if (step3?.warning) jpySpikeDays++;
+    if (step4?.quadrant) quadrantCounts[step4.quadrant] = (quadrantCounts[step4.quadrant] ?? 0) + 1;
+    for (const s of step6?.qualifying ?? []) topSectors[s] = (topSectors[s] ?? 0) + 1;
+  }
+
   return {
     daysWithData: dailyReports.length,
-    avgMacroTrendScore: scores.length ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)) : null,
+    avgMacroTrendScore: avg(scores),
     firstScore: scores[0] ?? null,
     lastScore: scores[scores.length - 1] ?? null,
     decisionCounts,
+    avgStepScores: {
+      liquidity: avg(dailyReports.map((r) => (r.step2 as unknown as Step2Result).finalScore)),
+      carry: avg(dailyReports.map((r) => (r.step3 as unknown as Step3Result).score)),
+      fxGoldOil: avg(dailyReports.map((r) => (r.step4 as unknown as Step4Result).score)),
+      flows: avg(dailyReports.map((r) => (r.step5 as unknown as Step5Result).score)),
+      sectors: avg(dailyReports.map((r) => (r.step6 as unknown as Step6Result).score)),
+    },
+    vetoDays,
+    jpySpikeDays,
+    quadrantCounts,
+    topSectors,
   };
-}
-
-/** 월/분기/연간 리포트 전용 — 하위 주기 리포트(childType)들을 종합한다(일별 재계산 아님). */
-async function aggregateFromChildren(childType: PeriodType, start: Date, end: Date): Promise<AggregatedBase> {
-  const children = await db.periodReport.findMany({
-    where: { periodType: childType, periodStart: { gte: start, lte: end } },
-    orderBy: { periodStart: "asc" },
-  });
-
-  const childSummaries = children.map(
-    (c) =>
-      c.summary as unknown as {
-        daysWithData: number;
-        avgMacroTrendScore: number | null;
-        firstScore: number | null;
-        lastScore: number | null;
-        decisionCounts: Record<string, number>;
-      }
-  );
-
-  const daysWithData = childSummaries.reduce((a, c) => a + c.daysWithData, 0);
-  const scoreVals = childSummaries.map((c) => c.avgMacroTrendScore).filter((v): v is number => v !== null);
-  const avgMacroTrendScore = scoreVals.length ? Number((scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length).toFixed(2)) : null;
-
-  const decisionCounts: Record<string, number> = {};
-  for (const c of childSummaries) {
-    for (const [dcn, cnt] of Object.entries(c.decisionCounts ?? {})) {
-      decisionCounts[dcn] = (decisionCounts[dcn] ?? 0) + cnt;
-    }
-  }
-
-  const firstScore = childSummaries.find((c) => c.firstScore !== null)?.firstScore ?? null;
-  const lastScore = [...childSummaries].reverse().find((c) => c.lastScore !== null)?.lastScore ?? null;
-
-  const childPeriods: ChildPeriodRef[] = children.map((c, i) => ({
-    type: childType,
-    start: c.periodStart.toISOString().slice(0, 10),
-    end: c.periodEnd.toISOString().slice(0, 10),
-    avgMacroTrendScore: childSummaries[i]?.avgMacroTrendScore ?? null,
-  }));
-
-  return { daysWithData, avgMacroTrendScore, firstScore, lastScore, decisionCounts, childPeriods };
 }
 
 export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
   const { start, end } = getPrecedingPeriodBounds(type, reportDate);
-
-  let base: AggregatedBase;
-  if (type === "week") {
-    base = await aggregateFromDaily(start, end);
-  } else if (type === "month") {
-    base = await aggregateFromChildren("week", start, end);
-  } else if (type === "quarter") {
-    base = await aggregateFromChildren("month", start, end);
-  } else {
-    // year — 월간 12개를 집계 기준으로 삼고(중복 계산 방지), 분기 4개는 참고용으로만 덧붙인다.
-    base = await aggregateFromChildren("month", start, end);
-    const quarters = await db.periodReport.findMany({
-      where: { periodType: "quarter", periodStart: { gte: start, lte: end } },
-      orderBy: { periodStart: "asc" },
-    });
-    const quarterRefs: ChildPeriodRef[] = quarters.map((q) => ({
-      type: "quarter",
-      start: q.periodStart.toISOString().slice(0, 10),
-      end: q.periodEnd.toISOString().slice(0, 10),
-      avgMacroTrendScore: (q.summary as unknown as { avgMacroTrendScore: number | null } | null)?.avgMacroTrendScore ?? null,
-    }));
-    base = { ...base, childPeriods: [...(base.childPeriods ?? []), ...quarterRefs] };
-  }
+  const base = await aggregateFromDaily(start, end);
 
   const metricChanges: Record<string, number | null> = {};
   for (const metric of TREND_METRICS) {
@@ -180,17 +163,48 @@ export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
   };
 }
 
+// 일간 종합 보고서(comprehensive-report.ts)와 같은 5단 구조로 통일한다 — 원인→환경→이동→전망→판단
+// 순서로, 시간축만 하루에서 기간으로 늘어날 뿐 질문은 같다(외부 제안, 검토 후 채택). 일간과 달리
+// "예측"에 해당하는 재료가 firstScore→lastScore 방향성 하나뿐이라 ④ 문단은 그만큼 짧게 쓰도록
+// 명시한다 — 재료 없이 단정하는 것보다 낫다.
 function buildPeriodNarrativePrompt(summary: Awaited<ReturnType<typeof aggregatePeriod>>): string {
-  const childNote = summary.childPeriods?.length
-    ? `\n이 집계는 하위 주기 리포트 ${summary.childPeriods.length}건(${summary.childPeriods
-        .map((c) => `${c.start}~${c.end}: 평균 ${c.avgMacroTrendScore ?? "확인 못함"}`)
-        .join(", ")})을 종합한 것이다.`
-    : "";
-  return `너는 매크로 자본흐름 애널리스트다. 아래는 ${PERIOD_LABEL[summary.periodType]} 기간(${summary.start} ~ ${summary.end}) 동안 집계된 데이터다.${childNote}
-이 숫자만 근거로 3~5문장짜리 한국어 해설을 써라. 이 기간 동안 자본이 어느 쪽으로 흘렀는지(위험자산/안전자산, 유동성 확장/축소 등)에 집중해라.
-규칙:
-- 집계 JSON에 없는 숫자나 사실을 지어내지 마라. 데이터가 부족하면(daysWithData가 적으면) 그렇다고 명시해라.
-- 과장하지 말고 담백하게 써라. 존댓말 아닌 평서체로.
+  return `너는 매크로 자본흐름을 직접 챙겨보는 개인 투자자이고, 지금 쓰는 글은 자기 자신에게 존댓말로
+보고하는 ${PERIOD_LABEL[summary.periodType]} 브리핑이다(반말로 쓰는 사적인 일기가 아니다). 아래는
+${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
+
+*** 문체 규칙(가장 중요, 다른 모든 규칙보다 우선) ***
+출력하는 모든 문장은 예외 없이 "~습니다/~입니다/~합니다/~했습니다/~겠습니다" 같은 존댓말(합니다체)로
+끝나야 한다. "~다/~였다/~한다/~하다/~겠다"처럼 "다"로 끝나는 평서체 문장은 단 하나도 섞이면 안 된다.
+
+원칙
+- 집계 JSON에 없는 숫자나 사실을 지어내지 마라. daysWithData가 적으면 그 사실을 먼저 밝혀라.
+- 하루치 사건이 아니라 "이 기간 전체의 흐름"을 써라 — firstScore에서 lastScore로 어떻게
+  달라졌는지, decisionCounts가 며칠씩 나뉘었는지가 핵심이다.
+- 단계 번호("2단계" 등)를 쓰지 말고 "유동성", "캐리 트레이드"처럼 내용으로 불러라.
+- 정해진 소제목을 달지 마라. 문단 흐름으로만 다섯 덩어리를 구분해라.
+
+다뤄야 할 내용 — 아래 다섯 덩어리를 이 순서대로, 각각 문단 하나씩 써라.
+① 이 기간 자본을 움직인 가장 큰 요인은 무엇이었는지.
+   거부권 발동 일수(vetoDays)가 기간의 절반을 넘으면 그 자체가 이 기간의 성격이다.
+   엔화 변동성 급등 감지 일수(jpySpikeDays)가 있으면 반드시 짚어라.
+② 이 기간이 자산 가격을 들어올리기 좋은 환경이었는지.
+   유동성 평균 점수(avgStepScores.liquidity)와 metricChangesPct의 WALCL·RRP·TGA·
+   CREDIT_SPREAD·REAL_RATE 변화율을 근거로 판정해라. 캐리 트레이드 평균 점수
+   (avgStepScores.carry)도 함께 다뤄라 — 이것도 자산을 떠받치는 자금원이기 때문이다.
+③ 자본이 실제로 어디로 갔는지.
+   지수별 변화율(SPX·NDX·RUT·DJI)과 금·달러·비트코인의 방향, 이 기간 가장 자주 충족된
+   섹터(topSectors)를 종합해 지목해라. 사분면 분포(quadrantCounts)가 한쪽으로 쏠렸으면
+   그 국면이 기간 내내 지속됐는지도 짚어라. ②의 환경 판정과 ③의 실제 이동이 어긋나면
+   반드시 짚어라 — 환경은 나쁜데 자금은 들어왔거나, 환경은 좋은데 안 들어왔다면 그게
+   이 기간 가장 중요한 관찰이다.
+④ 다음 기간에 자본이 어디로 갈 가능성이 있는지.
+   *** 집계에 있는 추세로만 조건문으로 써라. 그 밖의 예측은 절대 하지 마라. *** 점수가
+   firstScore에서 lastScore로 어느 방향으로 움직였는지가 사실상 유일한 추세 재료다.
+   단정하지 마라 — 재료가 얇으면 "지금 데이터로는 방향을 좁히기 어렵습니다"라고 쓰는 게
+   지어내는 것보다 낫다.
+⑤ 이 기간을 통틀어 주식시장에 들어가기 좋았는지, 그리고 지금은 어떤지.
+   평균 점수(avgMacroTrendScore)와 판정 분포(decisionCounts)를 근거로 담백하게 정리해라.
+   매번 같은 문장으로 끝내지 말고 이 기간 상황에 맞는 대응 한 문장으로 마무리해라.
 
 집계 JSON:
 ${JSON.stringify(summary, null, 2)}`;
