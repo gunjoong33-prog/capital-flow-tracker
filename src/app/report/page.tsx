@@ -1,8 +1,6 @@
 import { db } from "@/lib/db";
 import { ReportView, type ReportViewData } from "@/components/ReportView";
 import { SiteNav } from "@/components/SiteNav";
-import { FreshnessBanner } from "@/components/FreshnessBanner";
-import { checkReportFreshness } from "@/lib/report-freshness";
 import { kstToday } from "@/lib/date";
 import type { StepDetails } from "@/lib/scoring/types";
 
@@ -22,20 +20,19 @@ async function getReportRow() {
   const today = kstToday();
   const todayRow = await db.dailyReport.findUnique({ where: { date: new Date(today) } });
   if (todayRow) return todayRow;
-  // 크론이 오늘 아직 실패·미실행이면 가장 최근 리포트로 대체 — 빈 화면 대신 "며칠 전 데이터"임을
-  // 명시하고 보여준다(FreshnessBanner가 그 사실을 알리고, 아래 dateLabel도 실제 스냅샷 날짜를 쓴다).
+  // 크론이 스킵(휴장일 등)됐거나 아직 미실행이면 가장 최근 리포트로 대체 — 빈 화면 대신 "며칠 전
+  // 데이터"임을 아래 dateLabel(marketDate 병기)로 보여준다.
   return db.dailyReport.findFirst({ orderBy: { date: "desc" } });
 }
 
 export default async function ReportPage() {
-  const [reportRow, freshness] = await Promise.all([getReportRow(), checkReportFreshness()]);
+  const reportRow = await getReportRow();
 
   if (!reportRow) {
     return (
       <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
         <main className="mx-auto max-w-3xl space-y-4">
           <SiteNav active="report" />
-          <FreshnessBanner freshness={freshness} />
           <p className="text-sm text-zinc-400">아직 생성된 리포트가 없습니다.</p>
         </main>
       </div>
@@ -69,7 +66,6 @@ export default async function ReportPage() {
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-3xl space-y-4">
         <SiteNav active="report" />
-        <FreshnessBanner freshness={freshness} />
         <ReportView dateLabel={dateLabel} report={reportData} details={reportRow.details as unknown as StepDetails | null} />
       </main>
     </div>

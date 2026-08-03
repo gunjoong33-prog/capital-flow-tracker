@@ -2,10 +2,8 @@ import type { ReactNode } from "react";
 import { SiteNav } from "@/components/SiteNav";
 import { TradingViewWidget } from "@/components/TradingViewWidget";
 import { CnnFearGreedGauge } from "@/components/CnnFearGreedGauge";
-import { FreshnessBanner } from "@/components/FreshnessBanner";
 import { getLatestMetric } from "@/lib/metrics";
 import { METRICS } from "@/lib/sources/types";
-import { checkReportFreshness } from "@/lib/report-freshness";
 
 export const dynamic = "force-dynamic"; // CNN 공포탐욕지수를 매 요청 시 DB에서 최신값으로 조회
 
@@ -144,13 +142,11 @@ export default async function LandingPage() {
   const fearGreedDateLabel = fearGreedMetric
     ? fearGreedMetric.date.toLocaleDateString("ko-KR", { month: "long", day: "numeric", timeZone: "UTC" })
     : null;
-  const freshness = await checkReportFreshness();
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
       <main className="mx-auto max-w-6xl space-y-4">
         <SiteNav active="landing" />
-        <FreshnessBanner freshness={freshness} />
 
         <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40">
           {/* 심볼 10개 기준 트레이딩뷰 티커테이프의 adaptive 모드는 컨테이너가 ~1200px보다 좁으면
