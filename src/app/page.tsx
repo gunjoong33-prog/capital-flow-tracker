@@ -1,189 +1,231 @@
-import type { ReactNode } from "react";
-import { SiteNav } from "@/components/SiteNav";
-import { TradingViewWidget } from "@/components/TradingViewWidget";
-import { CnnFearGreedGauge } from "@/components/CnnFearGreedGauge";
-import { getLatestMetric } from "@/lib/metrics";
+import Link from "next/link";
+import { getLatestMetric, getMetricHistory, getMetricHistoryByCount } from "@/lib/metrics";
+import { getNewsPageCategory } from "@/lib/news-page";
 import { METRICS } from "@/lib/sources/types";
+import { HomeThemeToggle } from "@/components/HomeThemeToggle";
+import { ibmPlexMono, mrsSaintDelafield } from "@/app/home-fonts";
+import styles from "@/app/page.module.css";
 
-export const dynamic = "force-dynamic"; // CNN 공포탐욕지수를 매 요청 시 DB에서 최신값으로 조회
+export const dynamic = "force-dynamic"; // 환율·공포탐욕지수·뉴스를 매 요청 시 최신값으로 조회
 
-// 노션 대시보드 페이지의 트레이딩뷰 위젯 구성(티커테이프 + 히트맵 + 환율 + 기술적분석)을
-// 그대로 옮긴 홈 화면 — 사이트 디자인 테마(zinc 다크)에 맞춰 껍데기만 새로 입혔다.
-const TICKER_TAPE_CONFIG = {
-  symbols: [
-    { proName: "FOREXCOM:SPXUSD", title: "S&P500" },
-    { proName: "AMEX:IWM", title: "러셀2000" },
-    { proName: "FOREXCOM:NSXUSD", title: "나스닥100" },
-    { proName: "AMEX:DIA", title: "다우존스" },
-    { proName: "FX_IDC:USDKRW", title: "USD/KRW" },
-    { proName: "FX:USDJPY", title: "USD/JPY" },
-    { proName: "TVC:GOLD", title: "금" },
-    { proName: "TVC:USOIL", title: "WTI" },
-    { proName: "TVC:UKOIL", title: "브렌트유" },
-    { proName: "BITSTAMP:BTCUSD", title: "BTC" },
-  ],
-  colorTheme: "dark",
-  locale: "kr",
-  largeChartUrl: "",
-  isTransparent: true,
-  showSymbolLogo: true,
-  displayMode: "adaptive",
-};
+const NAV_ITEMS = [
+  { href: "/", label: "지표", current: true },
+  { href: "/news", label: "뉴스", current: false },
+  { href: "/report", label: "오늘의 리포트", current: false },
+  { href: "/calendar", label: "캘린더", current: false },
+  { href: "/reports/weekly", label: "주기별 리포트", current: false },
+];
 
-const HEATMAP_CONFIG = {
-  exchanges: [],
-  dataSource: "SPX500",
-  grouping: "sector",
-  blockSize: "market_cap_basic",
-  blockColor: "change",
-  locale: "kr",
-  symbolUrl: "",
-  colorTheme: "dark",
-  hasTopBar: true,
-  isDataSetEnabled: true,
-  isZoomEnabled: true,
-  hasSymbolTooltip: true,
-  isMonoSize: false,
-  width: "100%",
-  height: "100%",
-};
+const STEPS = [
+  { title: "글로벌 환경", desc: "뉴스·정책 리스크가 자본을 안전자산으로 몰아낼 만큼 큰지 판정합니다. 기준을 넘으면 거부권이 발동합니다." },
+  { title: "자본의 유동성", desc: "Fed 대차대조표·M2·RRP·TGA 등 7개 지표로 시중에 풀린 돈의 양과 방향을 확인합니다." },
+  { title: "캐리 트레이드", desc: "美·日 10년물 금리차와 CFTC 엔화 포지션을 대조해 캐리 자금의 유입과 청산을 포착합니다." },
+  { title: "환율·금·유가", desc: "금과 실질금리 조합으로 안전자산과 위험자산 사이의 이동을 판별합니다." },
+  { title: "자금 도착", desc: "나스닥100·러셀2000·비트코인의 동조 여부로 자금이 실제로 흘러간 곳을 확인합니다." },
+  { title: "섹터", desc: "10개 섹터의 5일 수익률과 거래량으로 자금이 도착한 업종을 사후 확인합니다." },
+  { title: "심리 필터", desc: "기관·내부자 매집과 VIX·공포탐욕지수로 판단이 큰손과 일치하는지 대조합니다. 참고용입니다." },
+  { title: "최종 결론", desc: "앞선 다섯 단계를 가중합해 매수·지켜보기·현금비중늘리기 중 오늘의 결론을 계산합니다." },
+];
 
-const FX_CONFIG = {
-  symbol: "FX_IDC:USDKRW",
-  width: "100%",
-  height: "100%",
-  locale: "kr",
-  dateRange: "1M",
-  colorTheme: "dark",
-  isTransparent: true,
-  autosize: true,
-  largeChartUrl: "",
-};
-
-/** "→ 요약문장" 줄만 굵게 강조해서 나머지 설명과 시각적으로 구분한다(가독성 최적화). */
-function TipText({ text }: { text: string }) {
-  const lines = text.split("\n");
-  return (
-    <div className="space-y-1.5">
-      {lines.map((line, i) =>
-        line.startsWith("→") ? (
-          <p key={i} className="[word-break:keep-all] pt-1 font-medium text-zinc-200">
-            {line}
-          </p>
-        ) : (
-          <p key={i} className="[word-break:keep-all]">
-            {line}
-          </p>
-        )
-      )}
-    </div>
-  );
+function fearGreedLabel(value: number): { label: string; color: "pos" | "neg" | "neutral" } {
+  if (value <= 24) return { label: "극단적 공포", color: "neg" };
+  if (value <= 44) return { label: "공포", color: "neg" };
+  if (value <= 55) return { label: "중립", color: "neutral" };
+  if (value <= 75) return { label: "탐욕", color: "pos" };
+  return { label: "극단적 탐욕", color: "pos" };
 }
 
-function WidgetCard({
-  title,
-  height,
-  tip,
-  children,
-}: {
-  title: string;
-  height: string;
-  tip?: string;
-  children: ReactNode;
-}) {
-  const tipId = tip ? `home-tip-${title}` : undefined;
-  return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
-      <div className="mb-2 flex items-center gap-1.5">
-        <p className="text-xs text-zinc-500">{title}</p>
-        {tip && (
-          <label
-            htmlFor={tipId}
-            className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-zinc-700 text-[10px] leading-none text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
-          >
-            ?
-          </label>
-        )}
-      </div>
-      {tip && (
-        <div className="peer-checked:block mb-2 hidden rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
-          <TipText text={tip} />
-        </div>
-      )}
-      <div className={height}>{children}</div>
-    </div>
-  );
+function relativeTime(date: Date | null): string {
+  if (!date) return "";
+  const diffMin = Math.round((Date.now() - date.getTime()) / 60000);
+  if (diffMin < 1) return "방금 전";
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}시간 전`;
+  return `${Math.round(diffHour / 24)}일 전`;
 }
-
-const HEATMAP_TIP = `S&P500 편입 종목을 섹터별 사각형으로 표시한 지도.
-- 사각형 크기 = 기본값은 시가총액 — 상단 "사이즈" 메뉴에서 거래량 등으로 바꿀 수 있다
-- 색상 = 등락률(초록 상승 · 빨강 하락) — 진할수록 변동폭이 크다는 뜻
-- 상단 "그룹 기준"에서 섹터별 · 개별 종목 등 묶는 기준을 바꿀 수 있다
-- 상단 "자료"에서 S&P500 외 다른 지수·업종으로 바꿔볼 수 있다
-이 차트를 보면 오늘 시장이 전반적으로 오르고 있는지, 어떤 업종이 강한지, 약한지를 한눈에 알 수 있다.
-→ 오늘 미국 시장의 분위기와 자금이 몰리는 방향을 볼 때 확인`;
-
-const FX_TIP = `원·달러(USD/KRW) 환율 미니 차트.
-- 값이 오르면 달러 강세 · 원화 약세, 내리면 반대
-- 하단 기간 탭(1M 등)에서 조회 기간을 바꿀 수 있다
-- 해외 투자·환헤지 비용을 가늠할 때 참고하는 기초 지표다`;
-
-const CNN_FEARGREED_TIP = `CNN이 매일 발표하는 시장 심리 종합지수(0~100)다.
-리포트 7단계에서 매수 비중 조절에 실제로 쓰는 지표와 같다.
-- 성격이 다른 7개 하위지표(주가 모멘텀·강도·폭, 풋/콜 옵션 비율, 변동성(VIX), 안전자산 수요, 정크본드 수요)를 종합한 값이다
-- 0~24 극단적 공포 · 25~44 공포 · 45~55 중립 · 56~75 탐욕 · 76~100 극단적 탐욕
-- 매일 오전 9시(한국시간) 파이프라인이 갱신 — 그 전에는 전날 값이 표시된다
-→ 극단적 공포는 역발상 매수, 극단적 탐욕은 단기 조정 위험 신호로 참고`;
 
 export default async function LandingPage() {
-  const fearGreedMetric = await getLatestMetric(METRICS.CNN_FEAR_GREED);
+  const [usdkrwRecent, usdkrwYear, fearGreedMetric, worldEconomyNews, domesticEconomyNews] = await Promise.all([
+    getMetricHistoryByCount(METRICS.USDKRW, 15),
+    getMetricHistory(METRICS.USDKRW, 365),
+    getLatestMetric(METRICS.CNN_FEAR_GREED),
+    getNewsPageCategory("world-economy", 4),
+    getNewsPageCategory("domestic-economy", 4),
+  ]);
+
+  const latestFx = usdkrwRecent.at(-1) ?? null;
+  const prevFx = usdkrwRecent.length >= 2 ? usdkrwRecent.at(-2)! : null;
+  const fxChange = latestFx && prevFx ? latestFx.value - prevFx.value : null;
+  const fxChangePct = latestFx && prevFx ? (fxChange! / prevFx.value) * 100 : null;
+  const fxHigh = usdkrwYear.length > 0 ? Math.max(...usdkrwYear.map((r) => r.value)) : null;
+  const fxLow = usdkrwYear.length > 0 ? Math.min(...usdkrwYear.map((r) => r.value)) : null;
+  const fxBarMax = usdkrwRecent.length > 0 ? Math.max(...usdkrwRecent.map((r) => r.value)) : 0;
+  const fxBarMin = usdkrwRecent.length > 0 ? Math.min(...usdkrwRecent.map((r) => r.value)) : 0;
+  const fxBarRange = fxBarMax - fxBarMin || 1;
+
   const fearGreedValue = fearGreedMetric?.value ?? null;
-  const fearGreedDateLabel = fearGreedMetric
-    ? fearGreedMetric.date.toLocaleDateString("ko-KR", { month: "long", day: "numeric", timeZone: "UTC" })
-    : null;
+  const fearGreed = fearGreedValue !== null ? fearGreedLabel(fearGreedValue) : null;
+
+  const news = [...worldEconomyNews, ...domesticEconomyNews]
+    .sort((a, b) => {
+      const at = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const bt = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return bt - at;
+    })
+    .slice(0, 4);
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-6xl space-y-4">
-        <SiteNav active="landing" />
+    <div
+      className={`${styles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        // Gothic A1 · IBM Plex Sans KR(한글 포함)은 next/font가 아니라 아래 <link>로 불러온
+        // Google Fonts CSS를 그대로 참조한다 — home-fonts.ts 주석 참고.
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <header className={styles.header}>
+        <span className={styles.brand__logo}>Macroeconomic Analysis</span>
+        <nav className={styles.nav}>
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.href} href={item.href} className={item.current ? styles.navCurrent : undefined}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <HomeThemeToggle />
+      </header>
 
-        <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40">
-          {/* 심볼 10개 기준 트레이딩뷰 티커테이프의 adaptive 모드는 컨테이너가 ~1200px보다 좁으면
-              가격·변동액·변동률 텍스트를 모두 버리고 +/- 기호만 남기므로, 모바일 폭에서도 항상
-              전체 텍스트로 렌더링되도록 내부 폭을 고정하고 바깥 박스에서만 화면 폭에 맞게 잘라낸다. */}
-          <div className="min-w-[1200px]">
-            <TradingViewWidget
-              src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
-              config={TICKER_TAPE_CONFIG}
-            />
+      <div className={styles.wrap}>
+        <section className={styles.hero}>
+          <span className={styles.hero__eyebrow}>매일 아침 9시, 자본이 움직이는 흐름을 점검합니다</span>
+          <h1 className={styles.hero__title}>
+            데이터로 확인하는
+            <br />
+            오늘의 자본 흐름
+          </h1>
+          <p className={styles.hero__desc}>
+            <span>뉴스·유동성·환율·자금 흐름을 여덟 개의 단계로 순차 점검합니다.</span>
+            <span>감정을 배제한 결정론적 규칙과 실제 시장 데이터로만 판단합니다.</span>
+          </p>
+          <div className={styles.hero__ctaRow}>
+            <Link className={`${styles.btn} ${styles["btn--primary"]}`} href="/report">
+              오늘의 리포트 읽기
+            </Link>
+            <Link className={`${styles.btn} ${styles["btn--ghost"]}`} href="/calendar">
+              캘린더 보기
+            </Link>
           </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[68fr_32fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[560px]" tip={HEATMAP_TIP}>
-            <TradingViewWidget
-              src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
-              config={HEATMAP_CONFIG}
-            />
-          </WidgetCard>
+        <section className={styles.section}>
+          <div className={styles.widgetGrid}>
+            <div className={styles.card}>
+              <div className={styles.fxCard__head}>환율 · 원/달러 (USD/KRW)</div>
+              <div className={styles.fxCard__value}>
+                <b>{latestFx ? latestFx.value.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "확인 못함"}</b>
+                {fxChange !== null && fxChangePct !== null && (
+                  <span className={styles.fxCard__change} style={{ color: fxChange >= 0 ? "var(--pos)" : "var(--neg)" }}>
+                    {fxChange >= 0 ? "+" : ""}
+                    {fxChange.toFixed(2)} ({fxChangePct >= 0 ? "+" : ""}
+                    {fxChangePct.toFixed(2)}%)
+                  </span>
+                )}
+              </div>
+              <div className={styles.fxCard__range}>
+                {fxHigh !== null && fxLow !== null
+                  ? `52주 최고 ${fxHigh.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · 52주 최저 ${fxLow.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : "52주 최고·최저 확인 못함"}
+              </div>
+              {usdkrwRecent.length > 1 && (
+                <div className={styles.fxCard__bars} aria-hidden="true">
+                  {usdkrwRecent.map((r, i) => (
+                    <i
+                      key={r.date.toISOString()}
+                      className={i === usdkrwRecent.length - 1 ? styles.isLast : undefined}
+                      style={{ height: `${Math.max(((r.value - fxBarMin) / fxBarRange) * 100, 8)}%` }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
-          <div className="space-y-4">
-            <WidgetCard title="환율 — 원·달러(USD/KRW)" height="h-[200px]" tip={FX_TIP}>
-              <TradingViewWidget
-                src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
-                config={FX_CONFIG}
-              />
-            </WidgetCard>
-            <WidgetCard title="CNN 공포와 탐욕 지수" height="h-[210px]" tip={CNN_FEARGREED_TIP}>
-              <CnnFearGreedGauge value={fearGreedValue} />
-            </WidgetCard>
-            <p className="-mt-2 text-center text-[11px] text-zinc-600">
-              {fearGreedDateLabel ? `${fearGreedDateLabel} 기준` : "확인 못함"} · 매일 오전 9시(한국시간) 갱신
-            </p>
+            <div className={styles.card}>
+              <div className={styles.fgCard__head}>CNN 공포 · 탐욕 지수</div>
+              <div className={styles.fgCard__value}>
+                <b>{fearGreedValue !== null ? Math.round(fearGreedValue) : "확인 못함"}</b>
+                {fearGreed && (
+                  <span className={styles.fgCard__tag} style={{ color: `var(--${fearGreed.color === "neutral" ? "ink-dim" : fearGreed.color})` }}>
+                    {fearGreed.label}
+                  </span>
+                )}
+              </div>
+              {fearGreedValue !== null && (
+                <div className={styles.fgCard__gauge}>
+                  <span className={styles.fgCard__marker} style={{ left: `${fearGreedValue}%` }} />
+                </div>
+              )}
+              <div className={styles.fgCard__labels}>
+                <span>극단적 공포</span>
+                <span>공포</span>
+                <span>중립</span>
+                <span>탐욕</span>
+                <span>극단적 탐욕</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </main>
+        </section>
+
+        {news.length > 0 && (
+          <section className={styles.section}>
+            <div className={styles.card} style={{ padding: "1.5rem clamp(1.25rem,3vw,2rem)" }}>
+              <div className={styles.section__head}>
+                <h2 className={styles.section__title}>실시간 뉴스 · 속보</h2>
+                <Link className={styles.section__more} href="/news">
+                  더보기 →
+                </Link>
+              </div>
+              <div className={styles.newsList}>
+                {news.map((n) => (
+                  <a key={n.url} className={styles.newsRow} href={n.url} target="_blank" rel="noopener noreferrer">
+                    <div className={styles.newsRow__title}>{n.title}</div>
+                    <div className={styles.newsRow__meta}>
+                      {n.source}
+                      {n.publishedAt ? ` · ${relativeTime(new Date(n.publishedAt))}` : ""}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className={styles.section}>
+          <div className={styles.section__head}>
+            <h2 className={styles.section__title}>우리는 이렇게 분석합니다 — 여덟 개의 점검 단계</h2>
+          </div>
+          <div className={styles.stepGrid}>
+            {STEPS.map((step, i) => (
+              <div key={step.title} className={styles.stepCard}>
+                <div className={styles.stepCard__num}>{String(i + 1).padStart(2, "0")}</div>
+                <div className={styles.stepCard__title}>{step.title}</div>
+                <p className={styles.stepCard__desc}>{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <footer className={styles.footer}>
+          결정론적 규칙과 실시간 시장 데이터로만 계산합니다 · 투자 조언이 아닙니다 · © 2026 Macroeconomic Analysis
+        </footer>
+      </div>
     </div>
   );
 }
