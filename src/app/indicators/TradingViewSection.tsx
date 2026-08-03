@@ -31,11 +31,16 @@ export function TradingViewSection({ children }: { children: ReactNode }) {
   const theme = useSiteTheme();
 
   const tickerTapeConfig = {
+    // 러셀2000·다우존스는 원래 실제 상장 ETF(AMEX:IWM, AMEX:DIA)를 썼는데, 이 두 심볼만
+    // 지연시세라 트레이딩뷰가 가격 뒤에 "• 지연" 배지를 따로 붙인다 — 나머지 8개 심볼엔 없는
+    // 배지라 항목마다 너비가 들쭉날쭉해지고 그게 "배너 전체 글씨 간격이 안 맞다"는 지적의
+    // 실제 원인이었다(실사용 확인). S&P500·나스닥100처럼 FOREXCOM 실시간 프록시로 바꾸면
+    // (러셀2000은 FOREXCOM에 없어서 OANDA로 대체) 배지 없이 전부 같은 포맷으로 렌더링된다.
     symbols: [
       { proName: "FOREXCOM:SPXUSD", title: "S&P500" },
-      { proName: "AMEX:IWM", title: "러셀2000" },
+      { proName: "OANDA:US2000USD", title: "러셀2000" },
       { proName: "FOREXCOM:NSXUSD", title: "나스닥100" },
-      { proName: "AMEX:DIA", title: "다우존스" },
+      { proName: "FOREXCOM:DJI", title: "다우존스" },
       { proName: "FX_IDC:USDKRW", title: "USD/KRW" },
       { proName: "FX:USDJPY", title: "USD/JPY" },
       { proName: "TVC:GOLD", title: "금" },
