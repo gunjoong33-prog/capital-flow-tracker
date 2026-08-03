@@ -8,26 +8,29 @@ type Filter = "all" | Severity;
 
 // 1단계 리스크 뉴스 심각도별 표시 스타일. high=단독으로도 즉시 거부권 발동, medium=명확한 리스크지만
 // 실제 조치·확전 신호 수준, low=경고·우려 표명 수준(누적돼야 리스크로 봄) — pure.ts newsItemWeight 참고.
+// 다크에서는 반투명 오버레이가 잘 보이지만 라이트(흰 배경)에서는 같은 값이 거의 안 보여서
+// ("연하다" 지적, 실제 확인) 심각도별 배경·글자색을 CSS 변수(--risk-*, site.module.css)로
+// 뽑아 라이트/다크마다 다른 값을 쓰게 했다.
 const SEVERITY_STYLE: Record<Severity, { box: string; text: string; badge: string; link: string; label: string }> = {
   high: {
-    box: "bg-rose-500/10",
-    text: "text-rose-300",
-    badge: "bg-rose-500/30 text-rose-200",
-    link: "text-rose-400 hover:text-rose-300",
+    box: "bg-[var(--risk-high-bg)]",
+    text: "text-[var(--risk-high-text)]",
+    badge: "bg-[var(--risk-high-badge-bg)] text-[var(--risk-high-badge-text)]",
+    link: "text-[var(--risk-high-text)] hover:opacity-80",
     label: "심각 · 단독 즉시발동",
   },
   medium: {
-    box: "bg-amber-500/10",
-    text: "text-amber-300",
-    badge: "bg-amber-500/30 text-amber-200",
-    link: "text-amber-400 hover:text-amber-300",
+    box: "bg-[var(--risk-medium-bg)]",
+    text: "text-[var(--risk-medium-text)]",
+    badge: "bg-[var(--risk-medium-badge-bg)] text-[var(--risk-medium-badge-text)]",
+    link: "text-[var(--risk-medium-text)] hover:opacity-80",
     label: "중간",
   },
   low: {
-    box: "bg-[var(--ink-faint)]/10",
-    text: "text-[var(--ink-dim)]",
-    badge: "bg-[var(--ink-faint)]/30 text-[var(--ink)]",
-    link: "text-[var(--ink-dim)] hover:text-[var(--ink)]",
+    box: "bg-[var(--risk-low-bg)]",
+    text: "text-[var(--risk-low-text)]",
+    badge: "bg-[var(--risk-low-badge-bg)] text-[var(--risk-low-badge-text)]",
+    link: "text-[var(--risk-low-text)] hover:text-[var(--ink)]",
     label: "경미 · 누적형",
   },
 };

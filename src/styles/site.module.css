@@ -12,6 +12,21 @@
   --accent-ink: #05101f;
   --pos: #4fbf82;
   --neg: #ef8b8b;
+  /* 뉴스 심각도 배지(RiskyNewsList) — 다크에서는 반투명 오버레이가 잘 보이지만, 같은 값을
+     라이트(흰 배경)에 쓰면 색이 거의 안 보인다("연하다" 지적, 실제 확인) — 라이트 전용으로
+     더 진하고 대비가 높은 값을 따로 둔다. */
+  --risk-high-bg: rgba(244, 63, 94, 0.12);
+  --risk-high-text: #fda4af;
+  --risk-high-badge-bg: rgba(244, 63, 94, 0.32);
+  --risk-high-badge-text: #fecdd3;
+  --risk-medium-bg: rgba(245, 158, 11, 0.12);
+  --risk-medium-text: #fcd34d;
+  --risk-medium-badge-bg: rgba(245, 158, 11, 0.32);
+  --risk-medium-badge-text: #fde68a;
+  --risk-low-bg: rgba(143, 163, 156, 0.14);
+  --risk-low-text: var(--ink-dim);
+  --risk-low-badge-bg: rgba(143, 163, 156, 0.34);
+  --risk-low-badge-text: var(--ink);
   background: var(--bg);
   color: var(--ink);
   min-height: 100vh;
@@ -28,6 +43,18 @@
   --accent: #2f6fd6;
   --accent-strong: #1d54ad;
   --accent-ink: #ffffff;
+  --risk-high-bg: #fee2e2;
+  --risk-high-text: #be123c;
+  --risk-high-badge-bg: #fecdd3;
+  --risk-high-badge-text: #9f1239;
+  --risk-medium-bg: #fef3c7;
+  --risk-medium-text: #b45309;
+  --risk-medium-badge-bg: #fde68a;
+  --risk-medium-badge-text: #92400e;
+  --risk-low-bg: #eceeec;
+  --risk-low-text: var(--ink-dim);
+  --risk-low-badge-bg: #dfe3e1;
+  --risk-low-badge-text: var(--ink);
   --pos: #1f9d5c;
   --neg: #d5453f;
 }

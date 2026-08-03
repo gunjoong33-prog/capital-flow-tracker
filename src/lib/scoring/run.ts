@@ -747,12 +747,12 @@ export async function runDailyAnalysis(
   details.step1 = [
     {
       label: "최근 7일 리스크 뉴스 가중점수",
-      criterion: `${NEWS_RISK_SCORE_THRESHOLD}점 미만(심각도·출처·최근성 반영)`,
+      criterion: `${NEWS_RISK_SCORE_THRESHOLD}점 미만\n(심각도·출처·최근성 반영)`,
       value: `${newsRiskScore.toFixed(1)}점(${riskyNews.length}건)`,
       met: newsRiskScore < NEWS_RISK_SCORE_THRESHOLD,
     },
     {
-      label: "단독 즉시발동 수준(심각도 high) 뉴스",
+      label: "단독 즉시발동 수준 뉴스(심각도 high)",
       criterion: "없음",
       value: hasSevereNews ? "있음" : "없음",
       met: !hasSevereNews,
@@ -871,7 +871,7 @@ export async function runDailyAnalysis(
   const netLiq = await netLiquidityTrend(asOf);
   details.step2Aux.push({
     label: "순유동성 Net Liquidity",
-    criterion: "연준 총자산-TGA-RRP\n상승하면 증시에 우호적(월가 프레임워크)",
+    criterion: "연준 총자산-TGA-RRP\n상승하면 증시에 우호적\n(월가 프레임워크)",
     value: netLiq.detail,
     met: netLiq.risingTrend,
   });
@@ -941,7 +941,7 @@ export async function runDailyAnalysis(
   const us2yFfrSpreadBp = us2y && fedFunds ? (us2y.value - fedFunds.value) * 100 : null;
   details.step2Aux.push({
     label: "美 2년물-기준금리 스프레드",
-    criterion: "음수면 시장이 향후 금리 인하를, 양수면 인상을 가격에 반영 중으로 해석(방향성 참고용)",
+    criterion: "음수면 시장이 향후 금리 인하를, 양수면 인상을 가격에 반영 중으로 해석\n(방향성 참고용)",
     value: us2yFfrSpreadBp !== null ? `${us2yFfrSpreadBp >= 0 ? "+" : ""}${us2yFfrSpreadBp.toFixed(0)}bp` : "확인 못함",
     met: null,
   });
