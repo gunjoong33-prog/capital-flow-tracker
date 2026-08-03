@@ -84,15 +84,10 @@ export function TradingViewSection({ children }: { children: ReactNode }) {
   return (
     <>
       <div className={styles.tickerWrap}>
-        {/* 심볼 10개 기준 트레이딩뷰 티커테이프의 adaptive 모드는 컨테이너가 ~1200px보다 좁으면
-            가격·변동액·변동률 텍스트를 모두 버리고 +/- 기호만 남기므로, 모바일 폭에서도 항상
-            전체 텍스트로 렌더링되도록 내부 폭을 고정하고 바깥 박스에서만 화면 폭에 맞게 잘라낸다. */}
-        <div className={styles.tickerInner}>
-          <TradingViewWidget
-            src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
-            config={tickerTapeConfig}
-          />
-        </div>
+        <TradingViewWidget
+          src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
+          config={tickerTapeConfig}
+        />
       </div>
 
       <div className={styles.grid}>
