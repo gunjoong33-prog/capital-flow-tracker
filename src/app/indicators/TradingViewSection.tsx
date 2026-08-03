@@ -52,8 +52,13 @@ export function TradingViewSection({ children }: { children: ReactNode }) {
     locale: "kr",
     largeChartUrl: "",
     isTransparent: true,
-    showSymbolLogo: true,
-    displayMode: "adaptive",
+    // 심볼 로고 배지는 심볼마다 크기가 다르다(예: OANDA:US2000USD는 전용 로고가 없어서
+    // "2000"이라는 4자리 숫자를 넣은 배지로 대체되는데, 이게 다른 심볼의 작은 원형 로고보다
+    // 훨씬 커서 그 항목만 줄 높이가 튀어 보였다 — "세 줄 높낮이가 들쭉날쭉하다"는 지적의
+    // 실제 원인, 실사용 확인). 로고를 아예 껐다: 배지 크기 편차가 원천적으로 없어지고,
+    // 텍스트만 남아 폭도 줄어서 320px에서도 3줄로 안 쌓이고 한 줄을 유지한다.
+    showSymbolLogo: false,
+    displayMode: "regular",
   };
 
   const heatmapConfig = {
