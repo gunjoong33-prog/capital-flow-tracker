@@ -9,7 +9,7 @@ import styles from "@/app/page.module.css";
 export const dynamic = "force-dynamic"; // 환율·공포탐욕지수·뉴스를 매 요청 시 최신값으로 조회
 
 const NAV_ITEMS = [
-  { href: "/", label: "지표", current: true },
+  { href: "/indicators", label: "지표", current: false },
   { href: "/news", label: "뉴스", current: false },
   { href: "/report", label: "오늘의 리포트", current: false },
   { href: "/calendar", label: "캘린더", current: false },
