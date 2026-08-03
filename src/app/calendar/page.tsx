@@ -52,6 +52,16 @@ export default async function CalendarPage({
   });
   const byDate = new Map(reports.map((r) => [toDateKey(r.date), r.step8 as unknown as Step8Result]));
 
+  // 주간 리포트는 일요일 셀에 배지를 달아준다. periodStart(월요일, 일요일 기준 -6일)로 조회하는데
+  // 그 월요일이 이번 달 그리드보다 앞설 수 있어(예: 그리드 첫 줄의 일요일) gridStart보다 넓게 잡는다.
+  const weekStartRangeBegin = new Date(gridStart);
+  weekStartRangeBegin.setUTCDate(weekStartRangeBegin.getUTCDate() - 6);
+  const weeklyReports = await db.periodReport.findMany({
+    where: { periodType: "week", periodStart: { gte: weekStartRangeBegin, lte: gridEnd } },
+    select: { periodStart: true },
+  });
+  const weeklyReportStarts = new Set(weeklyReports.map((r) => toDateKey(r.periodStart)));
+
   const majorEvents = await getMajorEventsInRange(gridStart, gridEnd);
   const eventsByDate = new Map<string, string[]>();
   for (const e of majorEvents) {
@@ -104,10 +114,15 @@ export default async function CalendarPage({
             const step8 = byDate.get(key);
             const events = eventsByDate.get(key) ?? [];
             const isToday = key === todayKey;
-            const cell = (
-              <div
-                className={`min-h-24 max-sm:min-h-14 bg-zinc-950 p-2 max-sm:p-1 ${inMonth ? "" : "opacity-30"} ${isToday ? "ring-1 ring-inset ring-zinc-500" : ""}`}
-              >
+
+            // 주간 리포트 배지 — 일요일 셀에서만, 해당 리포트가 실제로 존재할 때만 보여준다.
+            const weekStart = new Date(d);
+            weekStart.setUTCDate(weekStart.getUTCDate() - 6);
+            const weekStartKey = toDateKey(weekStart);
+            const hasWeeklyReport = d.getUTCDay() === 0 && weeklyReportStarts.has(weekStartKey);
+
+            const dayContent = (
+              <>
                 <div className="text-xs text-zinc-500">{d.getUTCDate()}</div>
                 {step8 && (
                   <span
@@ -129,14 +144,35 @@ export default async function CalendarPage({
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             );
-            return step8 ? (
-              <Link key={key} href={`/calendar/${key}`} className="block hover:bg-zinc-900/60">
-                {cell}
-              </Link>
-            ) : (
-              <div key={key}>{cell}</div>
+
+            // 일요일엔 그 날짜 자체의 DailyReport가 휴장일 스킵으로 없는 경우가 대부분이라(cf.
+            // pipeline.ts 휴장일 스킵 로직), 주간 리포트 배지를 daily-report Link 안에 중첩시키면
+            // <a> 중첩(무효 HTML)이 될 수 있어 별도 형제 요소로 둔다.
+            return (
+              <div
+                key={key}
+                className={`min-h-24 max-sm:min-h-14 bg-zinc-950 ${inMonth ? "" : "opacity-30"} ${isToday ? "ring-1 ring-inset ring-zinc-500" : ""}`}
+              >
+                {step8 ? (
+                  <Link href={`/calendar/${key}`} className="block p-2 max-sm:p-1 hover:bg-zinc-900/60">
+                    {dayContent}
+                  </Link>
+                ) : (
+                  <div className="p-2 max-sm:p-1">{dayContent}</div>
+                )}
+                {hasWeeklyReport && (
+                  <div className="px-2 pb-2 max-sm:px-1 max-sm:pb-1">
+                    <Link
+                      href={`/reports/weekly/${weekStartKey}`}
+                      className="inline-block rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] max-sm:px-0.5 text-violet-400"
+                    >
+                      주간 리포트
+                    </Link>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
