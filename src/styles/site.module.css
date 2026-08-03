@@ -1,12 +1,15 @@
 /* 홈 화면(page.module.css)에서 승인된 디자인 토큰·헤더를 모든 페이지가 공유하도록 뽑아낸 것.
-   다크 기본, 라이트는 완전한 흰색 — 자세한 배경은 src/app/page.module.css 상단 주석 참고. */
+   다크 기본, 라이트는 완전한 흰색 — 자세한 배경은 src/app/page.module.css 상단 주석 참고.
+   다크 회색 계열은 순수 중립(R=G=B에 가깝게)으로 잡는다 — 예전 값(#0a1211 등)은 G가 R·B보다
+   높아 카드마다 초록빛이 도는 것처럼 보인다는 지적이 있었다(실제 확인 — 완전한 다크가 아니라
+   옅은 초록 틴트로 읽힘). */
 .page {
-  --bg: #0a1211;
-  --bg-raised: #101c19;
-  --border: #1c2d28;
-  --ink: #eef4f1;
-  --ink-dim: #8fa39c;
-  --ink-faint: #5e716b;
+  --bg: #0a0a0b;
+  --bg-raised: #141416;
+  --border: #26262a;
+  --ink: #eeeeec;
+  --ink-dim: #9a9c9b;
+  --ink-faint: #6c6e6d;
   --accent: #5b9bf0;
   --accent-strong: #86b6f5;
   --accent-ink: #05101f;

@@ -9,8 +9,18 @@ import styles from "@/app/page.module.css";
 
 export const dynamic = "force-dynamic"; // 환율·공포탐욕지수·뉴스를 매 요청 시 최신값으로 조회
 
+// news-feeds.ts의 "domestic-economy" 키워드 필터는 "예산" 같은 흔한 경제 낱말도 포함하는데,
+// "장애인권리예산 보장하라" 같은 사회 이슈 기사가 예산이라는 단어 때문에 국내 경제로 잘못
+// 분류돼 홈 화면 속보 칸에 섞여 들어온 사례가 있었다(실제 확인) — 시위·집회 성격의 사회
+// 이슈 기사를 걸러내는 보조 필터를 홈 화면 전용으로 둔다(전체 목록을 보여주는 /news 페이지의
+// "국내 경제" 탭 자체는 안 건드린다).
+const HOME_NEWS_EXCLUDE_KEYWORDS = ["전장연", "지하철 행동", "단식농성", "농성", "집회", "시위"];
+function isHomeNewsRelevant(title: string): boolean {
+  return !HOME_NEWS_EXCLUDE_KEYWORDS.some((kw) => title.includes(kw));
+}
+
 const STEPS = [
-  { title: "글로벌 환경", desc: "뉴스·정책 리스크가 자본을 안전자산으로 몰아낼 만큼 큰지 판정합니다. 기준을 넘으면 거부권이 발동합니다." },
+  { title: "글로벌 환경", desc: "뉴스·정책 리스크가 자본을 안전자산으로 몰아낼 만큼 큰지 판정합니다.\n기준을 넘으면 거부권이 발동합니다." },
   { title: "자본의 유동성", desc: "Fed 대차대조표·M2·RRP·TGA 등 7개 지표로 시중에 풀린 돈의 양과 방향을 확인합니다." },
   { title: "캐리 트레이드", desc: "美·日 10년물 금리차와 CFTC 엔화 포지션을 대조해 캐리 자금의 유입과 청산을 포착합니다." },
   { title: "환율·금·유가", desc: "금과 실질금리 조합으로 안전자산과 위험자산 사이의 이동을 판별합니다." },
@@ -61,6 +71,7 @@ export default async function LandingPage() {
   const fearGreed = fearGreedValue !== null ? fearGreedLabel(fearGreedValue) : null;
 
   const news = [...worldEconomyNews, ...domesticEconomyNews]
+    .filter((n) => isHomeNewsRelevant(n.title))
     .sort((a, b) => {
       const at = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
       const bt = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
