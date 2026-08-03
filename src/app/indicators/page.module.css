@@ -4,7 +4,12 @@
    문제가 없다. */
 
 .tickerWrap {
-  overflow: hidden;
+  /* 예전엔 overflow:hidden이라 1200px 폭으로 고정된 티커테이프가 좁은 화면(특히 모바일)에서
+     그냥 잘려나가고 나머지는 아예 볼 방법이 없었다(실사용 확인 — "간격이 안 맞다"는 지적의
+     실제 원인) — 가로 스크롤로 전체를 다 볼 수 있게 바꾼다. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-raised);
