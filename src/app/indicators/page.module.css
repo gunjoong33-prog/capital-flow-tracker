@@ -1,0 +1,127 @@
+/* TradingView 위젯(티커테이프·히트맵·환율 미니차트)은 서드파티 iframe이라 내부 색상은
+   colorTheme:"dark"로 고정돼 있다 — 이 페이지의 라이트/다크 토글은 카드 테두리·배경·팁 등
+   주변 크롬에만 적용되고, 위젯 내부는 항상 다크로 보인다(TradingView 임베드 자체 제약). */
+
+.tickerWrap {
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  margin-bottom: 1rem;
+}
+.tickerInner {
+  min-width: 1200px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: 68fr 32fr;
+  }
+}
+.sideStack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.widget {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  padding: 0.75rem;
+}
+.widget__head {
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.widget__title {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+.widget__tip {
+  display: flex;
+  height: 1rem;
+  width: 1rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.625rem;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+.widget__tip:hover {
+  border-color: var(--accent-strong);
+  color: var(--ink);
+}
+.tipCheckbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.widget__tipBox {
+  display: none;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+.tipCheckbox:checked ~ .widget__tipBox {
+  display: block;
+}
+.tipCheckbox:checked ~ .widget__head .widget__tip {
+  border-color: var(--accent-strong);
+  color: var(--ink);
+}
+.widget__tipBox p {
+  margin: 0 0 0.35rem;
+}
+.widget__tipBox p:last-child {
+  margin-bottom: 0;
+}
+.tipLineHighlight {
+  padding-top: 0.25rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.heatmap {
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+}
+.heatmap__body {
+  flex: 1;
+}
+.fx {
+  height: 200px;
+}
+.fx__body {
+  height: calc(100% - 1.5rem);
+}
+.cnn {
+  height: 210px;
+}
+.cnn__body {
+  height: calc(100% - 1.5rem);
+}
+
+.caption {
+  margin-top: -0.5rem;
+  text-align: center;
+  font-size: 0.6875rem;
+  color: var(--ink-faint);
+  padding-bottom: 1.5rem;
+}

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import styles from "@/app/page.module.css";
+import styles from "@/styles/site.module.css";
 
 const STORAGE_KEY = "home-theme";
 
-/** 홈페이지 전용 다크·라이트 토글 — <html data-theme>를 직접 건드린다(다른 페이지는 이 속성을 안 봐서 영향 없음). */
+/** 새 디자인 시스템 페이지 전용 다크·라이트 토글 — <html data-home-theme>를 직접 건드린다
+ * (기존 zinc 다크 고정 페이지는 이 속성을 안 봐서 영향 없음). */
 export function HomeThemeToggle() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 

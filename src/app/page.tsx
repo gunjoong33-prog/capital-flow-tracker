@@ -2,19 +2,12 @@ import Link from "next/link";
 import { getLatestMetric, getMetricHistory, getMetricHistoryByCount } from "@/lib/metrics";
 import { getNewsPageCategory } from "@/lib/news-page";
 import { METRICS } from "@/lib/sources/types";
-import { HomeThemeToggle } from "@/components/HomeThemeToggle";
-import { ibmPlexMono, mrsSaintDelafield } from "@/app/home-fonts";
+import { SiteHeader } from "@/components/SiteHeader";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
+import siteStyles from "@/styles/site.module.css";
 import styles from "@/app/page.module.css";
 
 export const dynamic = "force-dynamic"; // 환율·공포탐욕지수·뉴스를 매 요청 시 최신값으로 조회
-
-const NAV_ITEMS = [
-  { href: "/indicators", label: "지표", current: false },
-  { href: "/news", label: "뉴스", current: false },
-  { href: "/report", label: "오늘의 리포트", current: false },
-  { href: "/calendar", label: "캘린더", current: false },
-  { href: "/reports/weekly", label: "주기별 리포트", current: false },
-];
 
 const STEPS = [
   { title: "글로벌 환경", desc: "뉴스·정책 리스크가 자본을 안전자산으로 몰아낼 만큼 큰지 판정합니다. 기준을 넘으면 거부권이 발동합니다." },
@@ -77,10 +70,10 @@ export default async function LandingPage() {
 
   return (
     <div
-      className={`${styles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
       style={{
-        // Gothic A1 · IBM Plex Sans KR(한글 포함)은 next/font가 아니라 아래 <link>로 불러온
-        // Google Fonts CSS를 그대로 참조한다 — home-fonts.ts 주석 참고.
+        // Gothic A1 · IBM Plex Sans KR(한글 포함)은 next/font가 아니라 SiteHeader의 <link>로
+        // 불러온 Google Fonts CSS를 그대로 참조한다 — lib/site-fonts.ts 주석 참고.
         ["--font-gothic" as string]: "'Gothic A1', sans-serif",
         ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
       }}
@@ -91,19 +84,9 @@ export default async function LandingPage() {
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
       />
-      <header className={styles.header}>
-        <span className={styles.brand__logo}>Macroeconomic Analysis</span>
-        <nav className={styles.nav}>
-          {NAV_ITEMS.map((item) => (
-            <Link key={item.href} href={item.href} className={item.current ? styles.navCurrent : undefined}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <HomeThemeToggle />
-      </header>
+      <SiteHeader current="home" />
 
-      <div className={styles.wrap}>
+      <div className={siteStyles.wrap}>
         <section className={styles.hero}>
           <span className={styles.hero__eyebrow}>매일 아침 9시, 자본이 움직이는 흐름을 점검합니다</span>
           <h1 className={styles.hero__title}>
@@ -125,9 +108,9 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section className={styles.section}>
+        <section className={siteStyles.section}>
           <div className={styles.widgetGrid}>
-            <div className={styles.card}>
+            <div className={siteStyles.card}>
               <div className={styles.fxCard__head}>환율 · 원/달러 (USD/KRW)</div>
               <div className={styles.fxCard__value}>
                 <b>{latestFx ? latestFx.value.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "확인 못함"}</b>
@@ -157,7 +140,7 @@ export default async function LandingPage() {
               )}
             </div>
 
-            <div className={styles.card}>
+            <div className={siteStyles.card}>
               <div className={styles.fgCard__head}>CNN 공포 · 탐욕 지수</div>
               <div className={styles.fgCard__value}>
                 <b>{fearGreedValue !== null ? Math.round(fearGreedValue) : "확인 못함"}</b>
@@ -184,11 +167,11 @@ export default async function LandingPage() {
         </section>
 
         {news.length > 0 && (
-          <section className={styles.section}>
-            <div className={styles.card} style={{ padding: "1.5rem clamp(1.25rem,3vw,2rem)" }}>
-              <div className={styles.section__head}>
-                <h2 className={styles.section__title}>실시간 뉴스 · 속보</h2>
-                <Link className={styles.section__more} href="/news">
+          <section className={siteStyles.section}>
+            <div className={siteStyles.card} style={{ padding: "1.5rem clamp(1.25rem,3vw,2rem)" }}>
+              <div className={siteStyles.section__head}>
+                <h2 className={siteStyles.section__title}>실시간 뉴스 · 속보</h2>
+                <Link className={siteStyles.section__more} href="/news">
                   더보기 →
                 </Link>
               </div>
@@ -207,9 +190,9 @@ export default async function LandingPage() {
           </section>
         )}
 
-        <section className={styles.section}>
-          <div className={styles.section__head}>
-            <h2 className={styles.section__title}>우리는 이렇게 분석합니다 — 여덟 개의 점검 단계</h2>
+        <section className={siteStyles.section}>
+          <div className={siteStyles.section__head}>
+            <h2 className={siteStyles.section__title}>우리는 이렇게 분석합니다 — 여덟 개의 점검 단계</h2>
           </div>
           <div className={styles.stepGrid}>
             {STEPS.map((step, i) => (
@@ -222,7 +205,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <footer className={styles.footer}>
+        <footer className={siteStyles.footer}>
           결정론적 규칙과 실시간 시장 데이터로만 계산합니다 · 투자 조언이 아닙니다 · © 2026 Macroeconomic Analysis
         </footer>
       </div>

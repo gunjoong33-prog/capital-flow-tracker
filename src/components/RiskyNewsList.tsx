@@ -24,10 +24,10 @@ const SEVERITY_STYLE: Record<Severity, { box: string; text: string; badge: strin
     label: "중간",
   },
   low: {
-    box: "bg-zinc-500/10",
-    text: "text-zinc-400",
-    badge: "bg-zinc-500/30 text-zinc-300",
-    link: "text-zinc-400 hover:text-zinc-300",
+    box: "bg-[var(--ink-faint)]/10",
+    text: "text-[var(--ink-dim)]",
+    badge: "bg-[var(--ink-faint)]/30 text-[var(--ink)]",
+    link: "text-[var(--ink-dim)] hover:text-[var(--ink)]",
     label: "경미 · 누적형",
   },
 };
@@ -70,8 +70,8 @@ export function RiskyNewsList({ riskyNews }: { riskyNews: RiskyNewsItem[] }) {
             className={
               "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors " +
               (filter === t.key
-                ? "border-zinc-100 bg-zinc-100 text-zinc-900"
-                : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200")
+                ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--bg)]"
+                : "border-[var(--border)] text-[var(--ink-dim)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)]")
             }
           >
             {t.label} ({t.count})

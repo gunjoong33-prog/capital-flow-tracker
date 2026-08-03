@@ -58,7 +58,7 @@ export function CnnFearGreedGauge({ value }: { value: number | null }) {
             x={p.x}
             y={p.y}
             textAnchor={anchor}
-            fill="#71717a"
+            fill="var(--ink-faint, #71717a)"
             style={{ fontSize: 10.5 }}
           >
             {b.label}
@@ -67,11 +67,11 @@ export function CnnFearGreedGauge({ value }: { value: number | null }) {
       })}
       {value !== null && (
         <>
-          <line x1={cx} y1={cy} x2={needleTip.x} y2={needleTip.y} stroke="white" strokeWidth={3} strokeLinecap="round" />
-          <circle cx={cx} cy={cy} r={6} fill="white" />
+          <line x1={cx} y1={cy} x2={needleTip.x} y2={needleTip.y} stroke="var(--ink, white)" strokeWidth={3} strokeLinecap="round" />
+          <circle cx={cx} cy={cy} r={6} fill="var(--ink, white)" />
         </>
       )}
-      <text x={cx} y={cy + 42} textAnchor="middle" fill="#f4f4f5" style={{ fontSize: 32, fontWeight: 600 }}>
+      <text x={cx} y={cy + 42} textAnchor="middle" fill="var(--ink, #f4f4f5)" style={{ fontSize: 32, fontWeight: 600 }}>
         {value !== null ? value.toFixed(0) : "-"}
       </text>
       <text x={cx} y={cy + 65} textAnchor="middle" fill={rating ? rating.color : "#71717a"} style={{ fontSize: 15, fontWeight: 500 }}>

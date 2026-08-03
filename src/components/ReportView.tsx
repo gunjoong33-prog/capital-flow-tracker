@@ -39,7 +39,7 @@ export function ReportView({
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-        <p className="text-sm text-zinc-500">{dateLabel} · 자본 흐름 체크리스트</p>
+        <p className="text-sm text-[var(--ink-faint)]">{dateLabel} · 자본 흐름 체크리스트</p>
         <div className="flex flex-wrap items-center gap-3">
           <DecisionBadge decision={step8.finalDecision} />
           <ScoreBadge score={step8.macroTrendScore} label="투자 적합도 점수" />
@@ -49,7 +49,7 @@ export function ReportView({
             </span>
           )}
           {step8.positionSizePct !== null && (
-            <span className="text-sm text-zinc-400">권장 매수 비중 {step8.positionSizePct}%</span>
+            <span className="text-sm text-[var(--ink-dim)]">권장 매수 비중 {step8.positionSizePct}%</span>
           )}
         </div>
       </header>
@@ -59,17 +59,17 @@ export function ReportView({
           <input type="checkbox" id="comprehensive-report-toggle" className="peer hidden" />
           <label
             htmlFor="comprehensive-report-toggle"
-            className="flex cursor-pointer select-none items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800 peer-checked:hidden"
+            className="flex cursor-pointer select-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 text-sm font-medium text-[var(--ink)] hover:border-[var(--accent-strong)] peer-checked:hidden"
           >
             종합 보고서 보기
           </label>
           <label
             htmlFor="comprehensive-report-toggle"
-            className="hidden cursor-pointer select-none items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800 peer-checked:flex"
+            className="hidden cursor-pointer select-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 text-sm font-medium text-[var(--ink)] hover:border-[var(--accent-strong)] peer-checked:flex"
           >
             종합 보고서 접기
           </label>
-          <div className="mt-3 hidden whitespace-pre-line [word-break:keep-all] rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300 peer-checked:block">
+          <div className="mt-3 hidden whitespace-pre-line [word-break:keep-all] rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-5 text-sm leading-relaxed text-[var(--ink-dim)] peer-checked:block">
             {details.comprehensiveReport}
           </div>
         </div>
@@ -94,7 +94,7 @@ export function ReportView({
           </div>
         )}
         {step1.upcomingEvents && step1.upcomingEvents.length > 0 && (
-          <p className="mt-2 text-xs text-zinc-500">
+          <p className="mt-2 text-xs text-[var(--ink-faint)]">
             14일 내 예정된 이벤트: {step1.upcomingEvents.map((e) => `${e.name}(${slashDate(e.date)})`).join(", ")}
           </p>
         )}
@@ -102,7 +102,7 @@ export function ReportView({
 
       <StepCard step={2} title="자본의 유동성" score={step2.finalScore} details={details?.step2} auxDetails={details?.step2Aux} tip={STEP_TIPS[2]} summary={details?.step2Summary}>
         <Field label="해외 지표 충족" value={`${step2.overseasQualifyingCount} / ${step2.overseasTotalCount}`} />
-        <p className="-mt-1 mb-1.5 text-xs text-zinc-500">
+        <p className="-mt-1 mb-1.5 text-xs text-[var(--ink-faint)]">
           Fed 대차대조표·M2 통화량·기준잔액·역레포·TGA·실질금리·크레딧 스프레드 7개 지표 중 "유동성 우호적" 방향으로
           움직인 게 몇 개인지 센 값이다(아래 상세 보기에서 지표별 충족 여부 확인 가능). 이 비율이 2단계 점수의 기반이 된다.
         </p>
@@ -150,7 +150,7 @@ export function ReportView({
             href="https://finviz.com/map.ashx"
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--ink-dim)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)]"
           >
             S&P500 히트맵(Finviz) →
           </a>
@@ -158,7 +158,7 @@ export function ReportView({
             href="https://www.trendforce.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--ink-dim)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)]"
           >
             산업 트렌드(TrendForce) →
           </a>
@@ -188,7 +188,7 @@ export function ReportView({
         </StepCard>
       )}
 
-      <p className="pt-4 text-center text-xs text-zinc-600">
+      <p className="pt-4 text-center text-xs text-[var(--ink-faint)]">
         이 체크리스트는 검증된 필승 투자법이 아니라 조사를 도와주는 도구다. 투자 손실은 본인 책임이다.
       </p>
     </div>

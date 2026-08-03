@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
 import {
   NEWS_PAGE_CATEGORIES,
   type NewsPageCategoryKey,
 } from "@/lib/sources/news-feeds";
 import { getNewsPageCategory } from "@/lib/news-page";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
+import siteStyles from "@/styles/site.module.css";
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -33,56 +36,51 @@ export default async function NewsPage({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-4">
-        <SiteNav active="news" />
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="news" />
 
-        <header className="space-y-3">
-          <p className="text-sm text-zinc-500">주제별 뉴스</p>
-          <nav className="flex flex-wrap gap-2">
-            {NEWS_PAGE_CATEGORIES.map((c) => (
-              <Link
-                key={c.key}
-                href={`/news?category=${c.key}`}
-                className={
-                  "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors " +
-                  (c.key === active.key
-                    ? "border-zinc-100 bg-zinc-100 text-zinc-900"
-                    : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200")
-                }
-              >
-                {c.label}
-              </Link>
-            ))}
-          </nav>
-        </header>
-
-        <div className="space-y-2">
-          {error && (
-            <p className="[word-break:keep-all] rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-              뉴스를 불러오지 못했습니다 — {error}
-            </p>
-          )}
-          {!error && headlines.length === 0 && (
-            <p className="text-sm text-zinc-500">표시할 뉴스가 없습니다.</p>
-          )}
-          {headlines.map((h, i) => (
-            <a
-              key={i}
-              href={h.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
+      <div className={siteStyles.wrap}>
+        <div className={styles.pageHead}>
+          <span className={styles.pageHead__eyebrow}>주제별 뉴스</span>
+        </div>
+        <nav className={styles.tabs}>
+          {NEWS_PAGE_CATEGORIES.map((c) => (
+            <Link
+              key={c.key}
+              href={`/news?category=${c.key}`}
+              className={`${styles.tab} ${c.key === active.key ? styles.tabActive : ""}`}
             >
-              <p className="[word-break:keep-all] text-sm leading-relaxed text-zinc-200">{h.title}</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              {c.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className={styles.list}>
+          {error && <p className={styles.errorBox}>뉴스를 불러오지 못했습니다 — {error}</p>}
+          {!error && headlines.length === 0 && <p className={styles.empty}>표시할 뉴스가 없습니다.</p>}
+          {headlines.map((h, i) => (
+            <a key={i} href={h.url} target="_blank" rel="noopener noreferrer" className={styles.item}>
+              <p className={styles.item__title}>{h.title}</p>
+              <p className={styles.item__meta}>
                 {h.source}
                 {h.publishedAt && ` · ${formatPubDate(h.publishedAt)}`}
               </p>
             </a>
           ))}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

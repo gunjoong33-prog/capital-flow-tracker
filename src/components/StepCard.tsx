@@ -42,13 +42,13 @@ function DetailTable({
 
   /** 충족/결과 열 내용 — 표·카드 레이아웃에서 공통으로 쓴다. */
   function MetCell({ row }: { row: StepDetailRow }) {
-    if (row.result !== undefined) return <span className="text-zinc-300">{row.result}</span>;
-    if (row.met === null) return <span className="text-zinc-600">-</span>;
+    if (row.result !== undefined) return <span className="text-[var(--ink-dim)]">{row.result}</span>;
+    if (row.met === null) return <span className="text-[var(--ink-faint)]">-</span>;
     return row.met ? <span className="text-emerald-400">✓</span> : <span className="text-rose-400">✕</span>;
   }
 
   return (
-    <div className="mt-2 rounded-lg border border-zinc-800">
+    <div className="mt-2 rounded-lg border border-[var(--border)]">
       {/* 데스크톱(md 이상): 기존 4~5열 표 그대로 유지. */}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full table-fixed text-xs">
@@ -60,7 +60,7 @@ function DetailTable({
             {linkMode && <col className="w-[12%]" />}
           </colgroup>
           <thead>
-            <tr className="border-b border-zinc-800 bg-zinc-950/60 text-left text-zinc-500">
+            <tr className="border-b border-[var(--border)] bg-[var(--bg)] text-left text-[var(--ink-faint)]">
               <th className="px-3 py-2 font-normal">지표</th>
               <th className="px-3 py-2 font-normal">기준</th>
               <th className="px-3 py-2 font-normal">실제값</th>
@@ -73,15 +73,15 @@ function DetailTable({
               // (예: 5단계 빅테크는 마감가 / 전일 대비 변동 / 등락 원인 3줄로 나뉜다).
               const { mainValue, noteParts, labelMain, labelCode } = parseRow(row);
               return (
-                <tr key={i} className="border-b border-zinc-800/60 align-top last:border-0">
+                <tr key={i} className="border-b border-[var(--border)] align-top last:border-0">
                   <td className="px-3 py-2.5">
                     {/* [word-break:keep-all]: 좁은 열에서 한글 단어가 음절 중간에 끊겨 다음 줄로
                         넘어가는 걸 막는다(예: "신규매수"가 "신"/"규매수"로 갈라지는 문제) — 단어
                         전체가 통째로 다음 줄로 내려가게 한다. */}
-                    <div className="[word-break:keep-all] text-zinc-300">{labelMain}</div>
-                    {labelCode && <div className="mt-0.5 text-[10px] text-zinc-600">{labelCode}</div>}
+                    <div className="[word-break:keep-all] text-[var(--ink-dim)]">{labelMain}</div>
+                    {labelCode && <div className="mt-0.5 text-[10px] text-[var(--ink-faint)]">{labelCode}</div>}
                   </td>
-                  <td className="whitespace-pre-line [word-break:keep-all] px-3 py-2.5 leading-relaxed text-zinc-500">{row.criterion}</td>
+                  <td className="whitespace-pre-line [word-break:keep-all] px-3 py-2.5 leading-relaxed text-[var(--ink-faint)]">{row.criterion}</td>
                   <td className="px-3 py-2.5">
                     {/* whitespace-pre-line: run.ts가 한 부가설명 안에 "\n"으로 여러 항목을 이어붙이는
                         경우(예: 7단계 기관·내부자 매집의 매매 목록)가 있다 — 기본 white-space:normal은
@@ -91,9 +91,9 @@ function DetailTable({
                         word-break:keep-all: 기본값은 한글 음절 사이 어디서나 줄바꿈을
                         허용해서 "신규매수"가 "신" / "규매수"로 갈라지는 식으로 잘린다 — 공백이 있는
                         지점에서만 줄바꿈되게 막는다. */}
-                    <div className="whitespace-pre-line [word-break:keep-all] font-medium text-zinc-200">{mainValue}</div>
+                    <div className="whitespace-pre-line [word-break:keep-all] font-medium text-[var(--ink)]">{mainValue}</div>
                     {noteParts.map((part, j) => (
-                      <div key={j} className="mt-0.5 whitespace-pre-line [word-break:keep-all] leading-snug text-zinc-500">{part}</div>
+                      <div key={j} className="mt-0.5 whitespace-pre-line [word-break:keep-all] leading-snug text-[var(--ink-faint)]">{part}</div>
                     ))}
                   </td>
                   {!hideMetColumn && (
@@ -108,12 +108,12 @@ function DetailTable({
                           href={row.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-zinc-400 underline hover:text-zinc-200"
+                          className="text-[var(--ink-dim)] underline hover:text-[var(--ink)]"
                         >
                           확인 →
                         </a>
                       ) : (
-                        <span className="text-zinc-600">-</span>
+                        <span className="text-[var(--ink-faint)]">-</span>
                       )}
                     </td>
                   )}
@@ -126,29 +126,29 @@ function DetailTable({
 
       {/* 모바일(md 미만): 4~5열을 억지로 욱여넣으면 한 칸에 몇 글자씩만 들어가 읽기 어렵다 —
           같은 데이터를 행별 카드로 세로 배치해서 각 항목에 전체 너비를 준다. */}
-      <div className="divide-y divide-zinc-800 md:hidden">
+      <div className="divide-y divide-[var(--border)] md:hidden">
         {rows.map((row, i) => {
           const { mainValue, noteParts, labelMain, labelCode } = parseRow(row);
           return (
             <div key={i} className="p-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="[word-break:keep-all] text-sm text-zinc-300">
+                <div className="[word-break:keep-all] text-sm text-[var(--ink-dim)]">
                   {labelMain}
-                  {labelCode && <span className="ml-1 text-[11px] text-zinc-600">{labelCode}</span>}
+                  {labelCode && <span className="ml-1 text-[11px] text-[var(--ink-faint)]">{labelCode}</span>}
                 </div>
                 {!hideMetColumn && <div className="shrink-0 pt-0.5 text-sm"><MetCell row={row} /></div>}
               </div>
-              <div className="[word-break:keep-all] mt-1 text-xs leading-relaxed text-zinc-500">{row.criterion}</div>
-              <div className="whitespace-pre-line [word-break:keep-all] mt-1.5 text-sm font-medium text-zinc-200">{mainValue}</div>
+              <div className="[word-break:keep-all] mt-1 text-xs leading-relaxed text-[var(--ink-faint)]">{row.criterion}</div>
+              <div className="whitespace-pre-line [word-break:keep-all] mt-1.5 text-sm font-medium text-[var(--ink)]">{mainValue}</div>
               {noteParts.map((part, j) => (
-                <div key={j} className="whitespace-pre-line [word-break:keep-all] mt-0.5 text-xs leading-snug text-zinc-500">{part}</div>
+                <div key={j} className="whitespace-pre-line [word-break:keep-all] mt-0.5 text-xs leading-snug text-[var(--ink-faint)]">{part}</div>
               ))}
               {linkMode && row.url && (
                 <a
                   href={row.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1.5 inline-block text-xs text-zinc-400 underline hover:text-zinc-200"
+                  className="mt-1.5 inline-block text-xs text-[var(--ink-dim)] underline hover:text-[var(--ink)]"
                 >
                   바로가기 →
                 </a>
@@ -202,20 +202,20 @@ function TipBlock({ block }: { block: string }) {
   }
 
   if (items.length === 0) {
-    return <p className="[word-break:keep-all] leading-relaxed text-zinc-400">{heading}</p>;
+    return <p className="[word-break:keep-all] leading-relaxed text-[var(--ink-dim)]">{heading}</p>;
   }
 
   return (
     <div>
-      {heading && <p className="[word-break:keep-all] mb-1.5 leading-relaxed text-zinc-300">{heading}</p>}
+      {heading && <p className="[word-break:keep-all] mb-1.5 leading-relaxed text-[var(--ink-dim)]">{heading}</p>}
       <ul className="space-y-2">
         {items.map((item, idx) => (
           <li key={idx} className="flex gap-2 leading-relaxed">
-            <span className="shrink-0 text-zinc-600">{item.marker}</span>
-            <span className="[word-break:keep-all] text-zinc-400">
+            <span className="shrink-0 text-[var(--ink-faint)]">{item.marker}</span>
+            <span className="[word-break:keep-all] text-[var(--ink-dim)]">
               {item.text}
               {item.sub.map((s, j) => (
-                <span key={j} className="[word-break:keep-all] mt-0.5 block text-[11px] leading-snug text-zinc-600">
+                <span key={j} className="[word-break:keep-all] mt-0.5 block text-[11px] leading-snug text-[var(--ink-faint)]">
                   {s}
                 </span>
               ))}
@@ -275,37 +275,37 @@ export function StepCard({
 }) {
   const tipId = `tip-${step}`;
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-5">
       {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-400">
+          <h2 className="text-sm font-medium text-[var(--ink-dim)]">
             {step}단계 · {title}
           </h2>
           {tip && (
             <label
               htmlFor={tipId}
-              className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-zinc-700 text-[10px] leading-none text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 peer-checked:border-zinc-400 peer-checked:text-zinc-200"
+              className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-[var(--border)] text-[10px] leading-none text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)] peer-checked:border-[var(--accent-strong)] peer-checked:text-[var(--ink)]"
             >
               ?
             </label>
           )}
         </div>
         {score !== undefined && (
-          <span className="text-xs text-zinc-500">점수 {score.toFixed(1)}</span>
+          <span className="text-xs text-[var(--ink-faint)]">점수 {score.toFixed(1)}</span>
         )}
       </div>
       {tip && (
-        <div className="mb-3 hidden rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs peer-checked:block">
+        <div className="mb-3 hidden rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs peer-checked:block">
           <TipContent text={tip} />
         </div>
       )}
-      <div className="text-sm text-zinc-200">{children}</div>
+      <div className="text-sm text-[var(--ink)]">{children}</div>
 
       {summary && (
-        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">종합판단</p>
-          <p className="whitespace-pre-line [word-break:keep-all] text-xs leading-relaxed text-zinc-300">{summary}</p>
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">종합판단</p>
+          <p className="whitespace-pre-line [word-break:keep-all] text-xs leading-relaxed text-[var(--ink-dim)]">{summary}</p>
         </div>
       )}
 
@@ -313,7 +313,7 @@ export function StepCard({
         <div className="mt-3 space-y-2">
           {details && details.length > 0 && (
             <details>
-              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
                 분석 기준·지표 상세 보기 ({details.length}개)
               </summary>
               <DetailTable rows={details} wideCriterion={detailsWideCriterion} hideMetColumn={detailsHideMetColumn} />
@@ -321,7 +321,7 @@ export function StepCard({
           )}
           {auxDetails && auxDetails.length > 0 && (
             <details>
-              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
                 {auxLabel} 보기 ({auxDetails.length}개, 집계 제외)
               </summary>
               <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} narrowCriterion={auxNarrowCriterion} />
@@ -329,7 +329,7 @@ export function StepCard({
           )}
           {aux2Details && aux2Details.length > 0 && (
             <details>
-              <summary className="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">
+              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
                 {aux2Label} 보기 ({aux2Details.length}개, 집계 제외)
               </summary>
               <DetailTable rows={aux2Details} hideMetColumn={aux2HideMetColumn} />
@@ -346,9 +346,9 @@ export function Field({ label, value }: { label: string; value: ReactNode }) {
     // 모바일에서 값이 긴 문장(예: 1단계 "사유")이면 라벨까지 같이 눌려서 "사"/"유"처럼 음절이
     // 갈라졌다 — 라벨은 shrink-0으로 항상 온전히 보이게 하고, 좁은 화면에서는 라벨/값을
     // 가로 배치 대신 세로로 쌓아서 각자 전체 너비를 쓰게 한다(데스크톱은 기존 가로 배치 그대로).
-    <div className="flex items-baseline justify-between gap-3 border-b border-zinc-800/60 py-1.5 last:border-0 max-sm:flex-col max-sm:items-start max-sm:gap-0.5">
-      <span className="shrink-0 text-zinc-500">{label}</span>
-      <span className="font-medium text-zinc-100">{value}</span>
+    <div className="flex items-baseline justify-between gap-3 border-b border-[var(--border)] py-1.5 last:border-0 max-sm:flex-col max-sm:items-start max-sm:gap-0.5">
+      <span className="shrink-0 text-[var(--ink-faint)]">{label}</span>
+      <span className="font-medium text-[var(--ink)]">{value}</span>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
 import { ReportView, type ReportViewData } from "@/components/ReportView";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import type { StepDetails } from "@/lib/scoring/types";
 import { notFound } from "next/navigation";
+import siteStyles from "@/styles/site.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -35,15 +37,27 @@ export default async function CalendarDayPage({
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-4">
-        <SiteNav active="calendar" />
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="calendar" />
+      <div className={siteStyles.wrap} style={{ maxWidth: "52rem", paddingBlock: "1.6rem 3rem" }}>
         <ReportView
           dateLabel={dateLabel}
           report={reportData}
           details={report.details as unknown as StepDetails | null}
         />
-      </main>
+      </div>
     </div>
   );
 }

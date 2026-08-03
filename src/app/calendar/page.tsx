@@ -1,9 +1,12 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
 import { DateJumpForm } from "@/components/DateJumpForm";
 import { getMajorEventsInRange } from "@/lib/major-events";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import type { Step8Result } from "@/lib/scoring/types";
+import siteStyles from "@/styles/site.module.css";
+import styles from "./page.module.css";
 
 const EVENT_LABEL: Record<string, string> = {
   "FOMC 회의 결과 발표": "FOMC",
@@ -16,10 +19,10 @@ const EVENT_LABEL: Record<string, string> = {
 
 export const dynamic = "force-dynamic";
 
-const DECISION_COLOR: Record<string, string> = {
-  매수: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  지켜보기: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  현금비중늘리기: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+const DECISION_CLASS: Record<string, string> = {
+  매수: styles["decisionBadge--buy"],
+  지켜보기: styles["decisionBadge--watch"],
+  현금비중늘리기: styles["decisionBadge--cash"],
 };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -80,31 +83,45 @@ export default async function CalendarPage({
   const todayKey = toDateKey(now);
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-4xl space-y-6">
-        <SiteNav active="calendar" />
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="calendar" />
 
-        <DateJumpForm defaultYear={now.getUTCFullYear()} defaultMonth={now.getUTCMonth() + 1} defaultDay={now.getUTCDate()} />
+      <div className={siteStyles.wrap}>
+        <div className={styles.topRow}>
+          <DateJumpForm defaultYear={now.getUTCFullYear()} defaultMonth={now.getUTCMonth() + 1} defaultDay={now.getUTCDate()} />
+        </div>
 
-        <div className="flex items-center justify-between">
+        <div className={styles.navRow}>
           <Link
             href={`/calendar?month=${prevMonth.getUTCFullYear()}-${String(prevMonth.getUTCMonth() + 1).padStart(2, "0")}`}
-            className="rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900"
+            className={styles.navBtn}
           >
             ← 이전달
           </Link>
-          <h1 className="text-lg font-medium">{year}년 {mon}월</h1>
+          <h1 className={styles.navTitle}>{year}년 {mon}월</h1>
           <Link
             href={`/calendar?month=${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, "0")}`}
-            className="rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900"
+            className={styles.navBtn}
           >
             다음달 →
           </Link>
         </div>
 
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800">
+        <div className={styles.grid}>
           {WEEKDAYS.map((w) => (
-            <div key={w} className="bg-zinc-900 py-2 text-center text-xs text-zinc-500">
+            <div key={w} className={styles.weekday}>
               {w}
             </div>
           ))}
@@ -123,22 +140,20 @@ export default async function CalendarPage({
 
             const dayContent = (
               <>
-                <div className="text-xs text-zinc-500">{d.getUTCDate()}</div>
+                <div className={styles.dayNum}>{d.getUTCDate()}</div>
                 {step8 && (
-                  <span
-                    className={`mt-1 inline-block rounded-full border px-1.5 py-0.5 text-[10px] max-sm:px-1 ${DECISION_COLOR[step8.finalDecision] ?? ""}`}
-                  >
+                  <span className={`${styles.decisionBadge} ${DECISION_CLASS[step8.finalDecision] ?? ""}`}>
                     {/* 좁은 모바일 화면(7열 그리드)에서는 "현금비중늘리기 3.6" 같은 긴 텍스트가
                         칸 안에 안 들어가서, 점수만 남기고 결론 텍스트는 데스크톱에서만 보여준다
                         (배지 색으로도 매수/지켜보기/현금비중늘리기 구분은 계속 가능). */}
-                    <span className="max-sm:hidden">{step8.finalDecision} </span>
+                    <span className={styles.fullLabel}>{step8.finalDecision} </span>
                     {step8.macroTrendScore.toFixed(1)}
                   </span>
                 )}
                 {events.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
+                  <div className={styles.eventTags}>
                     {events.map((ev, i) => (
-                      <span key={i} className="rounded border border-sky-500/30 bg-sky-500/10 px-1 py-0.5 text-[9px] max-sm:px-0.5 text-sky-400">
+                      <span key={i} className={styles.eventTag}>
                         {ev}
                       </span>
                     ))}
@@ -153,21 +168,18 @@ export default async function CalendarPage({
             return (
               <div
                 key={key}
-                className={`min-h-24 max-sm:min-h-14 bg-zinc-950 ${inMonth ? "" : "opacity-30"} ${isToday ? "ring-1 ring-inset ring-zinc-500" : ""}`}
+                className={`${styles.day} ${inMonth ? "" : styles.isDim} ${isToday ? styles.isToday : ""}`}
               >
                 {step8 ? (
-                  <Link href={`/calendar/${key}`} className="block p-2 max-sm:p-1 hover:bg-zinc-900/60">
+                  <Link href={`/calendar/${key}`} className={styles.dayInner}>
                     {dayContent}
                   </Link>
                 ) : (
-                  <div className="p-2 max-sm:p-1">{dayContent}</div>
+                  <div className={styles.dayInner}>{dayContent}</div>
                 )}
                 {hasWeeklyReport && (
-                  <div className="px-2 pb-2 max-sm:px-1 max-sm:pb-1">
-                    <Link
-                      href={`/reports/weekly/${weekStartKey}`}
-                      className="inline-block rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] max-sm:px-0.5 text-violet-400"
-                    >
+                  <div className={styles.weeklyTagWrap}>
+                    <Link href={`/reports/weekly/${weekStartKey}`} className={styles.weeklyTag}>
                       주간 리포트
                     </Link>
                   </div>
@@ -176,7 +188,7 @@ export default async function CalendarPage({
             );
           })}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

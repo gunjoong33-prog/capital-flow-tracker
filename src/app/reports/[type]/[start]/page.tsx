@@ -1,7 +1,10 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import { RATE_TYPE_METRICS, type PeriodType } from "@/lib/period-report";
+import siteStyles from "@/styles/site.module.css";
+import styles from "../../reports.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -47,63 +50,71 @@ export default async function ReportDetailPage({
   const summary = report.summary as unknown as PeriodSummary;
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-6">
-        <SiteNav active="reports" />
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="reports" />
 
-        <header className="space-y-2">
-          <p className="text-sm text-zinc-500">
+      <div className={siteStyles.wrap} style={{ maxWidth: "52rem" }}>
+        <div className={styles.detailHead}>
+          <p className={styles.detailHead__meta}>
             {LABEL[type]} 리포트 · {start} ~ {report.periodEnd.toISOString().slice(0, 10)}
           </p>
-          <div className="flex items-center gap-3">
+          <div className={styles.detailHead__row}>
             {summary.avgMacroTrendScore !== null && (
-              <span className="rounded-full border border-zinc-700 px-3 py-1 text-sm">
+              <span className={`${siteStyles.pill} ${siteStyles["pill--neutral"]}`}>
                 평균 투자 적합도 점수 {summary.avgMacroTrendScore}
               </span>
             )}
-            <span className="text-xs text-zinc-500">데이터 있는 날 {summary.daysWithData}일</span>
+            <span className={styles.detailHead__days}>데이터 있는 날 {summary.daysWithData}일</span>
           </div>
-        </header>
+        </div>
 
-        {report.narrative && (
-          <p className="whitespace-pre-line rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-sm leading-relaxed text-zinc-300">
-            {report.narrative}
-          </p>
-        )}
+        {report.narrative && <p className={styles.narrative}>{report.narrative}</p>}
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-          <h2 className="mb-3 text-sm font-medium text-zinc-400">결론 분포</h2>
-          <div className="flex gap-4 text-sm">
+        <section className={styles.card}>
+          <h2 className={styles.card__title}>결론 분포</h2>
+          <div className={styles.decisionRow}>
             {Object.entries(summary.decisionCounts ?? {}).map(([decision, count]) => (
-              <span key={decision} className="text-zinc-200">{decision} <span className="text-zinc-500">{count}일</span></span>
+              <span key={decision}>
+                {decision} <b>{count}일</b>
+              </span>
             ))}
           </div>
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-          <h2 className="mb-3 text-sm font-medium text-zinc-400">기간 내 주요 지표 변화</h2>
+        <section className={styles.card}>
+          <h2 className={styles.card__title}>기간 내 주요 지표 변화</h2>
           {/* 크레딧 스프레드·실질금리·국채금리·VIX는 원자료가 이미 %(포인트) 단위라, "%가 몇 %
               움직였는지"(상대 변화율)를 그대로 보여주면 실제보다 훨씬 크게 움직인 것처럼 보인다
               (281bp→284bp가 "+1.07%"로 표시되던 문제, 사용자 지적) — 이 5개는 bp/포인트
               절대 변화폭을 대신 보여준다. */}
-          <div className="space-y-1.5 text-sm">
-            {Object.entries(summary.metricChangesPct ?? {}).map(([metric, pct]) => {
-              const isRateType = RATE_TYPE_METRICS.has(metric);
-              const bp = summary.metricPointChangesBp?.[metric] ?? null;
-              const value = isRateType ? bp : pct;
-              const unit = isRateType ? (metric === "VIX" ? "pt" : "bp") : "%";
-              return (
-                <div key={metric} className="flex items-baseline justify-between border-b border-zinc-800/60 py-1 last:border-0">
-                  <span className="text-zinc-500">{METRIC_LABEL[metric] ?? metric}</span>
-                  <span className={value === null ? "text-zinc-600" : value >= 0 ? "text-emerald-400" : "text-rose-400"}>
-                    {value === null ? "확인 못함" : `${value > 0 ? "+" : ""}${value}${unit}`}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {Object.entries(summary.metricChangesPct ?? {}).map(([metric, pct]) => {
+            const isRateType = RATE_TYPE_METRICS.has(metric);
+            const bp = summary.metricPointChangesBp?.[metric] ?? null;
+            const value = isRateType ? bp : pct;
+            const unit = isRateType ? (metric === "VIX" ? "pt" : "bp") : "%";
+            return (
+              <div key={metric} className={styles.metricRow}>
+                <span className={styles.metricRow__label}>{METRIC_LABEL[metric] ?? metric}</span>
+                <span style={{ color: value === null ? "var(--ink-faint)" : value >= 0 ? "var(--pos)" : "var(--neg)" }}>
+                  {value === null ? "확인 못함" : `${value > 0 ? "+" : ""}${value}${unit}`}
+                </span>
+              </div>
+            );
+          })}
         </section>
-      </main>
+      </div>
     </div>
   );
 }

@@ -1,14 +1,18 @@
 import type { ReactNode } from "react";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
 import { TradingViewWidget } from "@/components/TradingViewWidget";
 import { CnnFearGreedGauge } from "@/components/CnnFearGreedGauge";
 import { getLatestMetric } from "@/lib/metrics";
 import { METRICS } from "@/lib/sources/types";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
+import siteStyles from "@/styles/site.module.css";
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic"; // CNN 공포탐욕지수를 매 요청 시 DB에서 최신값으로 조회
 
 // 노션 대시보드 페이지의 트레이딩뷰 위젯 구성(티커테이프 + 히트맵 + 환율 + 기술적분석)을
-// 그대로 옮긴 홈 화면 — 사이트 디자인 테마(zinc 다크)에 맞춰 껍데기만 새로 입혔다.
+// 그대로 옮긴 지표 화면 — 위젯 내부는 TradingView가 그리는 iframe이라 dark로 고정돼 있고,
+// 카드 테두리·배경 등 주변 크롬만 새 디자인 토큰을 따른다.
 const TICKER_TAPE_CONFIG = {
   symbols: [
     { proName: "FOREXCOM:SPXUSD", title: "S&P500" },
@@ -64,54 +68,47 @@ const FX_CONFIG = {
 function TipText({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="space-y-1.5">
-      {lines.map((line, i) =>
-        line.startsWith("→") ? (
-          <p key={i} className="[word-break:keep-all] pt-1 font-medium text-zinc-200">
-            {line}
-          </p>
-        ) : (
-          <p key={i} className="[word-break:keep-all]">
-            {line}
-          </p>
-        )
-      )}
-    </div>
+    <>
+      {lines.map((line, i) => (
+        <p key={i} className={line.startsWith("→") ? styles.tipLineHighlight : undefined}>
+          {line}
+        </p>
+      ))}
+    </>
   );
 }
 
 function WidgetCard({
   title,
-  height,
+  heightClass,
+  bodyClass,
   tip,
   children,
 }: {
   title: string;
-  height: string;
+  heightClass: string;
+  bodyClass: string;
   tip?: string;
   children: ReactNode;
 }) {
-  const tipId = tip ? `home-tip-${title}` : undefined;
+  const tipId = tip ? `indicators-tip-${title}` : undefined;
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
-      <div className="mb-2 flex items-center gap-1.5">
-        <p className="text-xs text-zinc-500">{title}</p>
+    <div className={`${styles.widget} ${heightClass}`}>
+      {tip && <input type="checkbox" id={tipId} className={styles.tipCheckbox} />}
+      <div className={styles.widget__head}>
+        <span className={styles.widget__title}>{title}</span>
         {tip && (
-          <label
-            htmlFor={tipId}
-            className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-zinc-700 text-[10px] leading-none text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
-          >
+          <label htmlFor={tipId} className={styles.widget__tip}>
             ?
           </label>
         )}
       </div>
       {tip && (
-        <div className="peer-checked:block mb-2 hidden rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
+        <div className={styles.widget__tipBox}>
           <TipText text={tip} />
         </div>
       )}
-      <div className={height}>{children}</div>
+      <div className={bodyClass}>{children}</div>
     </div>
   );
 }
@@ -144,15 +141,27 @@ export default async function IndicatorsPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-6xl space-y-4">
-        <SiteNav active="landing" />
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="indicators" />
 
-        <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/40">
+      <div className={siteStyles.wrap} style={{ paddingTop: "1.5rem" }}>
+        <div className={styles.tickerWrap}>
           {/* 심볼 10개 기준 트레이딩뷰 티커테이프의 adaptive 모드는 컨테이너가 ~1200px보다 좁으면
               가격·변동액·변동률 텍스트를 모두 버리고 +/- 기호만 남기므로, 모바일 폭에서도 항상
               전체 텍스트로 렌더링되도록 내부 폭을 고정하고 바깥 박스에서만 화면 폭에 맞게 잘라낸다. */}
-          <div className="min-w-[1200px]">
+          <div className={styles.tickerInner}>
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js"
               config={TICKER_TAPE_CONFIG}
@@ -160,30 +169,30 @@ export default async function IndicatorsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[68fr_32fr]">
-          <WidgetCard title="히트맵 — S&P 500" height="h-[560px]" tip={HEATMAP_TIP}>
+        <div className={styles.grid}>
+          <WidgetCard title="히트맵 — S&P 500" heightClass={styles.heatmap} bodyClass={styles.heatmap__body} tip={HEATMAP_TIP}>
             <TradingViewWidget
               src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js"
               config={HEATMAP_CONFIG}
             />
           </WidgetCard>
 
-          <div className="space-y-4">
-            <WidgetCard title="환율 — 원·달러(USD/KRW)" height="h-[200px]" tip={FX_TIP}>
+          <div className={styles.sideStack}>
+            <WidgetCard title="환율 — 원·달러(USD/KRW)" heightClass={styles.fx} bodyClass={styles.fx__body} tip={FX_TIP}>
               <TradingViewWidget
                 src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js"
                 config={FX_CONFIG}
               />
             </WidgetCard>
-            <WidgetCard title="CNN 공포와 탐욕 지수" height="h-[210px]" tip={CNN_FEARGREED_TIP}>
+            <WidgetCard title="CNN 공포와 탐욕 지수" heightClass={styles.cnn} bodyClass={styles.cnn__body} tip={CNN_FEARGREED_TIP}>
               <CnnFearGreedGauge value={fearGreedValue} />
             </WidgetCard>
-            <p className="-mt-2 text-center text-[11px] text-zinc-600">
+            <p className={styles.caption}>
               {fearGreedDateLabel ? `${fearGreedDateLabel} 기준` : "확인 못함"} · 매일 오전 9시(한국시간) 갱신
             </p>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

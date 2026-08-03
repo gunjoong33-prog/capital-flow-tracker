@@ -1,0 +1,182 @@
+/* 홈 화면(page.module.css)에서 승인된 디자인 토큰·헤더를 모든 페이지가 공유하도록 뽑아낸 것.
+   다크 기본, 라이트는 완전한 흰색 — 자세한 배경은 src/app/page.module.css 상단 주석 참고. */
+.page {
+  --bg: #0a1211;
+  --bg-raised: #101c19;
+  --border: #1c2d28;
+  --ink: #eef4f1;
+  --ink-dim: #8fa39c;
+  --ink-faint: #5e716b;
+  --accent: #5b9bf0;
+  --accent-strong: #86b6f5;
+  --accent-ink: #05101f;
+  --pos: #4fbf82;
+  --neg: #ef8b8b;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans), sans-serif;
+}
+:global(html[data-home-theme="light"]) .page {
+  --bg: #ffffff;
+  --bg-raised: #ffffff;
+  --border: #e2e5e4;
+  --ink: #12191a;
+  --ink-dim: #565f5c;
+  --ink-faint: #878e8b;
+  --accent: #2f6fd6;
+  --accent-strong: #1d54ad;
+  --accent-ink: #ffffff;
+  --pos: #1f9d5c;
+  --neg: #d5453f;
+}
+
+.wrap {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding-inline: clamp(1.25rem, 4vw, 3rem);
+}
+
+/* ---------- Header (모든 페이지 공통) ---------- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.15rem clamp(1.25rem, 4vw, 3rem);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.brandLink {
+  text-decoration: none;
+}
+.brand__logo {
+  font-family: var(--font-script), cursive;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--accent);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 2vw, 1.7rem);
+  flex-wrap: wrap;
+}
+.nav a {
+  font-size: 0.86rem;
+  color: var(--ink-dim);
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+.nav a:hover {
+  color: var(--ink);
+}
+.navCurrent {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.themeSwitch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.themeSwitch__label {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.themeSwitch__track {
+  position: relative;
+  width: 2.6rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+.themeSwitch__track[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.themeSwitch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.themeSwitch__track[aria-checked="true"] .themeSwitch__thumb {
+  transform: translateX(1.1rem);
+}
+
+/* ---------- 공통 카드 / 필 ---------- */
+.card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 1.4rem 1.5rem;
+}
+.section {
+  padding: clamp(2rem, 4vw, 2.8rem) 0;
+}
+.section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.3rem;
+}
+.section__title {
+  font-family: var(--font-gothic), sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+.section__more {
+  font-size: 0.82rem;
+  color: var(--accent-strong);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.pill--buy {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.pill--watch {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.pill--cash {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+.pill--neutral {
+  background: rgba(94, 113, 107, 0.15);
+  color: var(--ink-dim);
+  border: 1px solid var(--border);
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 1.4rem 0 2.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}

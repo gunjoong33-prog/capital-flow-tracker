@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import { db } from "@/lib/db";
 import { ReportView, type ReportViewData } from "@/components/ReportView";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
 import { kstToday } from "@/lib/date";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import type { StepDetails } from "@/lib/scoring/types";
+import siteStyles from "@/styles/site.module.css";
 
 // 예전엔 접속마다 runDailyAnalysis()·fetchAllSectors()(Yahoo 10회)를 실시간으로 다시 돌렸다 —
 // 그 결과 화면 점수·노션 기록·주간 리포트 숫자가 서로 다른 "정답 3개" 문제가 있었고(외부 감사
@@ -25,17 +28,37 @@ async function getReportRow() {
   return db.dailyReport.findFirst({ orderBy: { date: "desc" } });
 }
 
+function PageShell({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="report" />
+      <div className={siteStyles.wrap} style={{ maxWidth: "52rem", paddingBlock: "1.6rem 3rem" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default async function ReportPage() {
   const reportRow = await getReportRow();
 
   if (!reportRow) {
     return (
-      <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-        <main className="mx-auto max-w-3xl space-y-4">
-          <SiteNav active="report" />
-          <p className="text-sm text-zinc-400">아직 생성된 리포트가 없습니다.</p>
-        </main>
-      </div>
+      <PageShell>
+        <p className="text-sm text-[var(--ink-dim)]">아직 생성된 리포트가 없습니다.</p>
+      </PageShell>
     );
   }
 
@@ -63,11 +86,8 @@ export default async function ReportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-4">
-        <SiteNav active="report" />
-        <ReportView dateLabel={dateLabel} report={reportData} details={reportRow.details as unknown as StepDetails | null} />
-      </main>
-    </div>
+    <PageShell>
+      <ReportView dateLabel={dateLabel} report={reportData} details={reportRow.details as unknown as StepDetails | null} />
+    </PageShell>
   );
 }

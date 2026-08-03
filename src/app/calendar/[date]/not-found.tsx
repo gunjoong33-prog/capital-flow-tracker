@@ -1,22 +1,39 @@
 import Link from "next/link";
-import { SiteNav } from "@/components/SiteNav";
+import { SiteHeader } from "@/components/SiteHeader";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
+import siteStyles from "@/styles/site.module.css";
 
 export default function DailyReportNotFound() {
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-100">
-      <main className="mx-auto max-w-3xl space-y-6">
-        <SiteNav active="calendar" />
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-10 text-center">
-          <p className="text-lg font-medium text-zinc-200">존재하지 않습니다.</p>
-          <p className="mt-2 text-sm text-zinc-500">해당 날짜의 리포트를 찾을 수 없습니다.</p>
+    <div
+      className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}
+      style={{
+        ["--font-gothic" as string]: "'Gothic A1', sans-serif",
+        ["--font-sans" as string]: "'IBM Plex Sans KR', sans-serif",
+      }}
+    >
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap"
+      />
+      <SiteHeader current="calendar" />
+      <div className={siteStyles.wrap} style={{ maxWidth: "52rem", paddingBlock: "1.6rem 3rem" }}>
+        <div className={siteStyles.card} style={{ padding: "2.5rem", textAlign: "center" }}>
+          <p style={{ fontSize: "1.125rem", fontWeight: 500, color: "var(--ink)" }}>존재하지 않습니다.</p>
+          <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "var(--ink-faint)" }}>
+            해당 날짜의 리포트를 찾을 수 없습니다.
+          </p>
           <Link
             href="/calendar"
-            className="mt-6 inline-block rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
+            className={`${siteStyles.pill} ${siteStyles["pill--neutral"]}`}
+            style={{ marginTop: "1.5rem", display: "inline-flex" }}
           >
             캘린더로 돌아가기
           </Link>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
