@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "@/styles/site.module.css";
+import { SITE_THEME_EVENT } from "@/lib/useSiteTheme";
 
 const STORAGE_KEY = "home-theme";
 
@@ -23,6 +24,9 @@ export function HomeThemeToggle() {
     setTheme(next);
     window.localStorage.setItem(STORAGE_KEY, next);
     document.documentElement.setAttribute("data-home-theme", next);
+    // TradingView 위젯처럼 CSS 변수로는 못 바꾸고 colorTheme을 직접 넘겨야 하는 서드파티
+    // 임베드가 실시간으로 반응하도록 알린다 — useSiteTheme.ts 참고.
+    window.dispatchEvent(new CustomEvent(SITE_THEME_EVENT, { detail: next }));
   }
 
   return (
