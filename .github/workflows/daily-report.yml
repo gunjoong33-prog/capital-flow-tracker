@@ -1,0 +1,44 @@
+# 매일 아침 리포트 생성 크론.
+#
+# 원래 vercel.json의 Vercel Cron("0 0 * * *")을 썼지만, Hobby 플랜 크론은 정시 실행이
+# 보장되지 않아 실제로 40분~4시간씩 지연됐고 8/4에는 9시 반이 넘도록 아예 발동하지
+# 않았다. GitHub Actions 스케줄로 이전하고 vercel.json 크론은 제거했다 — 파이프라인이
+# 하루 두 번 돌면 Notion 기록(writeDailyChecklistToNotion)이 날짜 중복 체크 없이
+# 행을 추가해서 중복 기록되기 때문에, 스케줄러는 반드시 하나만 둬야 한다.
+#
+# 23:50 UTC = 08:50 KST. GitHub 스케줄도 몇 분 지연될 수 있어 10분 버퍼를 뒀다.
+# kstToday()는 이 시각(KST 새벽 아님)에 이미 당일 날짜를 반환하므로 날짜 계산은 안전하다.
+name: Daily Report
+
+on:
+  schedule:
+    - cron: "50 23 * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call daily pipeline endpoint
+        run: |
+          # 파이프라인은 평소 1~3분, maxDuration 300초까지 걸릴 수 있다.
+          # 5xx나 네트워크 오류면 2분 간격으로 최대 2회 재시도한다.
+          for attempt in 1 2 3; do
+            status=$(curl -s -o /tmp/body.json -w "%{http_code}" \
+              --max-time 320 \
+              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+              "https://capital-flow-tracker.vercel.app/api/cron/daily" || echo "000")
+            echo "attempt $attempt: HTTP $status"
+            cat /tmp/body.json 2>/dev/null || true
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            # 401은 시크릿 불일치라 재시도해도 소용없다 — 즉시 실패시켜 알림을 받는다.
+            if [ "$status" = "401" ]; then
+              echo "CRON_SECRET mismatch between GitHub secret and Vercel env" >&2
+              exit 1
+            fi
+            [ "$attempt" -lt 3 ] && sleep 120
+          done
+          echo "daily pipeline failed after 3 attempts" >&2
+          exit 1
