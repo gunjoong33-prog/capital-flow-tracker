@@ -6,13 +6,15 @@
 # 하루 두 번 돌면 Notion 기록(writeDailyChecklistToNotion)이 날짜 중복 체크 없이
 # 행을 추가해서 중복 기록되기 때문에, 스케줄러는 반드시 하나만 둬야 한다.
 #
-# 23:50 UTC = 08:50 KST. GitHub 스케줄도 몇 분 지연될 수 있어 10분 버퍼를 뒀다.
+# 23:50 UTC = 08:50 KST를 노렸지만, 2026년 들어 GitHub Actions의 schedule 트리거 자체가 전역적으로
+# 심하게 지연되는 문제가 있다(GitHub 공식 인정 이슈, https://github.com/orgs/community/discussions/196910).
+# 실측 결과 실제 발동이 목표보다 6~10시간씩 늦어져서(8/5~8/7 연속 관측), 스케줄은 cron-job.org(외부
+# 크론 서비스)가 이 엔드포인트를 직접 08:50 KST에 호출하도록 옮겼다. 이 워크플로는 수동 재실행/디버깅용
+# workflow_dispatch만 남긴다.
 # kstToday()는 이 시각(KST 새벽 아님)에 이미 당일 날짜를 반환하므로 날짜 계산은 안전하다.
 name: Daily Report
 
 on:
-  schedule:
-    - cron: "50 23 * * *"
   workflow_dispatch:
 
 jobs:
