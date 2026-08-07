@@ -82,6 +82,19 @@ export default async function ReportDetailPage({
 
         {report.narrative && <p className={styles.narrative}>{report.narrative}</p>}
 
+        {report.comprehensiveReport && (
+          <div>
+            <input type="checkbox" id="comprehensive-toggle" className={styles.comprehensiveCheckbox} />
+            <label htmlFor="comprehensive-toggle" className={`${styles.comprehensiveToggle} ${styles.comprehensiveToggleOpen}`}>
+              종합 보고서 보기
+            </label>
+            <label htmlFor="comprehensive-toggle" className={`${styles.comprehensiveToggle} ${styles.comprehensiveToggleClose}`}>
+              종합 보고서 접기
+            </label>
+            <div className={styles.comprehensiveBody}>{report.comprehensiveReport}</div>
+          </div>
+        )}
+
         <section className={styles.card}>
           <h2 className={styles.card__title}>결론 분포</h2>
           <div className={styles.decisionRow}>

@@ -54,7 +54,8 @@ model PeriodReport {
   periodStart DateTime @db.Date
   periodEnd   DateTime @db.Date
   summary     Json // 기간 내 주요 지표 변화 요약
-  narrative   String?
+  narrative   String? // 한 줄에 한 문장씩(아카이브 목록용 짧은 요약)
+  comprehensiveReport String? // 일간 종합보고서와 같은 문단체 5단 구조 심층 분석
   createdAt   DateTime @default(now())
 
   @@unique([periodType, periodStart])

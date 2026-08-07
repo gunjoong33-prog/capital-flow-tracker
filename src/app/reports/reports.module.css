@@ -104,6 +104,55 @@
   margin: 1.2rem 0;
 }
 
+.comprehensiveToggle {
+  display: flex;
+  cursor: pointer;
+  user-select: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 0.85rem 1rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 1.2rem 0;
+}
+.comprehensiveToggle:hover {
+  border-color: var(--accent-strong);
+}
+.comprehensiveCheckbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.comprehensiveCheckbox:checked ~ .comprehensiveToggleOpen {
+  display: none;
+}
+.comprehensiveToggleClose {
+  display: none;
+}
+.comprehensiveCheckbox:checked ~ .comprehensiveToggleClose {
+  display: flex;
+}
+.comprehensiveCheckbox:checked ~ .comprehensiveBody {
+  display: block;
+}
+.comprehensiveBody {
+  display: none;
+  white-space: pre-line;
+  word-break: keep-all;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 1.3rem 1.4rem;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--ink-dim);
+  margin: -0.6rem 0 1.2rem;
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: 14px;
