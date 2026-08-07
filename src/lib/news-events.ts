@@ -135,6 +135,13 @@ ${list}`;
   // 같은 안전망 원리).
   const deduped = dedupBySimilarTitle(judged, (j) => j.title);
 
+  // dedupBySimilarTitle은 제목 토큰 겹침(Jaccard)으로 판단하는데, 같은 사건이라도 백악관 공식
+  // 발표문 제목("Adjusting Imports of Polysilicon...")과 그걸 보도한 언론 헤드라인("Trump
+  // imposes 15% tariff on key chip material to counter China")은 어휘가 거의 안 겹쳐서
+  // (실측 Jaccard=0) 그대로 통과해버린다 — 결국 같은 사건이 서로 다른 심각도(medium/high)로
+  // 두 번 남는 사례가 실제로 발생했다(8/7 폴리실리콘 관세). 어휘가 아니라 의미로 한 번 더 걸러낸다.
+  const crossSourceDeduped = await mergeCrossSourceDuplicates(deduped);
+
   // 프롬프트에서 "high는 드물어야 한다"고 지시해도 모델이 지키지 않을 수 있다(외부 감사 지적 —
   // 실제로 7일 창에서 high 16건이 나온 사례 확인) — 거부권 규칙2(hasSevereNewsInWindow)는 high
   // 단 1건만으로도 즉시 발동하므로, 남발되면 거부권이 상시 켜져 사실상 무의미해진다. 방어선으로
@@ -142,11 +149,79 @@ ${list}`;
   // FOMC 정기회의 상한(capScheduledPolicyMeetingSeverity)과 같은 원리의 안전장치.
   const MAX_HIGH_PER_BATCH = 2;
   let highCount = 0;
-  return deduped.map((j) => {
+  return crossSourceDeduped.map((j) => {
     if (j.severity !== "high") return j;
     highCount++;
     return highCount <= MAX_HIGH_PER_BATCH ? j : { ...j, severity: "medium" as const };
   });
+}
+
+/**
+ * dedupBySimilarTitle이 놓치는 "같은 사건, 다른 어휘" 중복(대표 사례: 백악관 공식 발표문 vs 그걸
+ * 보도한 언론 헤드라인)을 잡는 2차 세이프넷. 전체 목록을 LLM에 한 번만 보여줘서 비용을 낮게
+ * 유지하면서(하루 judged 항목은 보통 10~30건), 과병합을 막기 위해 downgradeUnsupportedHigh와
+ * 같은 원리로 "구체적 근거 없는 병합은 무시" 규칙을 둔다. 대표 선택은 LLM에 맡기지 않고 코드가
+ * CATEGORY_PRIORITY(official > power-network > general)로 결정론적으로 고른다 — 백악관 공식
+ * 발표(medium)가 언론의 과장된 헤드라인(high)을 흡수하게 해서, 이 케이스의 근본 원인(더 자극적인
+ * 프레이밍이 별도 항목으로 살아남아 심각도를 부풀리는 것)을 직접 차단한다.
+ */
+export async function mergeCrossSourceDuplicates(items: JudgedItem[]): Promise<JudgedItem[]> {
+  if (!process.env.MISTRAL_API_KEY || items.length < 2) return items;
+
+  const list = items
+    .map((it, i) => `${i + 1}. [${it.category}] ${it.title}\n   요약: ${it.summary}`)
+    .join("\n");
+
+  const prompt = `아래는 오늘 리스크 뉴스로 판정된 항목 목록이다. 이 중 서로 다른 매체·출처가
+같은 실제 사건(같은 조치, 같은 발표, 같은 사건)을 다룬 것들을 찾아라 — 제목이나 문체가 완전히
+달라도(예: 백악관 공식 발표문 제목과 그걸 보도한 뉴스 헤드라인) 가리키는 실제 사건이 동일하면
+같은 클러스터다.
+
+단순히 주제만 비슷하거나(예: 둘 다 "관세" 관련이라는 것만 같음) 같은 정책의 서로 다른 진행
+단계(예: "관세 검토 중"과 "관세 실제 부과"는 단계가 달라 별개 사건)인 경우는 절대 묶지 마라 —
+정말로 동일한 사건·동일한 조치를 가리킬 때만 묶어라. 애매하면 묶지 마라.
+
+클러스터로 묶을 때마다 evidence 필드에 두 항목이 같은 사건이라는 구체적 근거(공유하는 조치
+내용·수치·대상)를 한 문장으로 적어라. 구체적 근거를 못 대면 그 클러스터는 아예 답에서 빼라.
+
+아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라. 묶을 게 없으면 빈 배열 []만 답해라:
+[{"indices": [번호, 번호], "evidence": "두 항목이 같은 사건이라는 근거"}]
+
+목록:
+${list}`;
+
+  const text = await callMistral(prompt, 2048);
+  const clusters = extractJsonArray<{ indices: number[]; evidence?: string }>(text);
+  if (!clusters) return items;
+
+  const drop = new Set<number>();
+  for (const cluster of clusters) {
+    if (!Array.isArray(cluster.indices) || cluster.indices.length < 2) continue;
+    // downgradeUnsupportedHigh와 동일한 최소 근거 길이 기준 — 근거 없는 병합은 무시.
+    if (!cluster.evidence || cluster.evidence.trim().length < 8) continue;
+
+    const validIndices = cluster.indices.filter(
+      (i) => Number.isInteger(i) && items[i - 1] !== undefined && !drop.has(i)
+    );
+    if (validIndices.length < 2) continue;
+
+    const representative = validIndices.reduce((best, cur) => {
+      const bestItem = items[best - 1];
+      const curItem = items[cur - 1];
+      const bestPriority = CATEGORY_PRIORITY[bestItem.category];
+      const curPriority = CATEGORY_PRIORITY[curItem.category];
+      if (curPriority < bestPriority) return cur;
+      if (curPriority > bestPriority) return best;
+      return curItem.summary.length > bestItem.summary.length ? cur : best;
+    });
+
+    for (const i of validIndices) {
+      if (i !== representative) drop.add(i);
+    }
+  }
+
+  if (drop.size === 0) return items;
+  return items.filter((_, idx) => !drop.has(idx + 1));
 }
 
 /** high인데 evidence가 구체적 사실 없이 비어있거나 짧으면(전망·우려 수준일 가능성) medium으로 강등. */
