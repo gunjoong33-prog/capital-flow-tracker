@@ -137,7 +137,29 @@ describe("scoreStep7", () => {
   it("VIX·공포탐욕 둘 다 과열이면 포지션 배수 0.7", () => {
     const result = scoreStep7({ vix: 12, fearGreed: 80 });
     expect(result.bothOverheated).toBe(true);
+    expect(result.oneOverheated).toBe(false);
     expect(result.positionSizeMultiplier).toBe(0.7);
+  });
+
+  it("과열 신호 1개(VIX만)면 포지션 배수 0.85", () => {
+    const result = scoreStep7({ vix: 12, fearGreed: 50 });
+    expect(result.bothOverheated).toBe(false);
+    expect(result.oneOverheated).toBe(true);
+    expect(result.positionSizeMultiplier).toBe(0.85);
+  });
+
+  it("과열 신호 1개(공포탐욕만)면 포지션 배수 0.85", () => {
+    const result = scoreStep7({ vix: 20, fearGreed: 80 });
+    expect(result.bothOverheated).toBe(false);
+    expect(result.oneOverheated).toBe(true);
+    expect(result.positionSizeMultiplier).toBe(0.85);
+  });
+
+  it("과열 신호 없으면 포지션 배수 1.0", () => {
+    const result = scoreStep7({ vix: 20, fearGreed: 50 });
+    expect(result.bothOverheated).toBe(false);
+    expect(result.oneOverheated).toBe(false);
+    expect(result.positionSizeMultiplier).toBe(1.0);
   });
 });
 

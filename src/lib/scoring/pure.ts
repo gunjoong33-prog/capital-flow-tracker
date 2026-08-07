@@ -205,11 +205,18 @@ export function scoreStep7(input: Step7Input): Step7Result {
     (input.vix !== null && input.vix > 25) ||
     (input.fearGreed !== null && input.fearGreed < 25);
 
+  // 과열 신호 2개(VIX<15 AND F&G>75) 동시 발동은 기존 0.7배 그대로 두고, 1개만 뜬 경우(oneOverheated
+  // — 계산은 해뒀지만 그동안 버려지던 신호)에 0.85배 중간 단계를 추가했다. 두 앵커값(0.7, 1.0)은
+  // 그대로라 기존 계산과 하위호환된다. fearZone(VIX>25 또는 F&G<25, "공포 국면")은 저가매수 기회로
+  // 볼지 패닉으로 볼지 실무에서도 갈리고 이 프로젝트엔 검증할 데이터가 없어 방향을 정하지 않고
+  // 사이징에서 제외했다 — 나중에 데이터가 쌓이면 재검토.
+  const positionSizeMultiplier = bothOverheated ? 0.7 : oneOverheated ? 0.85 : 1.0;
+
   return {
     bothOverheated,
     oneOverheated,
     fearZone,
-    positionSizeMultiplier: bothOverheated ? 0.7 : 1.0,
+    positionSizeMultiplier,
   };
 }
 
