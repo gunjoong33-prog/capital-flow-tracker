@@ -30,8 +30,20 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (all variants ignored; only the template is safe to commit)
+.env
+.env.*
+!.env.example
+
+# secrets / credentials (API keys, tokens, service account files, DB dumps)
+*.key
+*.pem
+*.p12
+*secret*
+*credential*
+*serviceaccount*
+*.sqlite
+*.dump
 
 # vercel
 .vercel
@@ -47,6 +59,3 @@ next-env.d.ts
 /.claude
 /.windsurf
 skills-lock.json
-
-.vercel
-.env*
