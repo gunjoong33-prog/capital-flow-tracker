@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import { db } from "@/lib/db";
 import { PptSlideDeck } from "@/components/PptSlideDeck";
+import { DateJumpForm } from "@/components/DateJumpForm";
 import type { StepDetails } from "@/lib/scoring/types";
 import siteStyles from "@/styles/site.module.css";
 import styles from "@/app/page.module.css";
@@ -51,7 +52,16 @@ function relativeTime(date: Date | null): string {
   return `${Math.round(diffHour / 24)}일 전`;
 }
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  // PPT 카드의 "날짜로 이동"(DateJumpForm, asQuery) 전용 — 홈은 날짜별 페이지가 따로 없어 쿼리
+  // 파라미터로 날짜를 받는다. 이 값은 PPT 카드에만 영향을 주고, 환율·공포탐욕·뉴스는 항상 "지금"
+  // 최신값을 그대로 보여준다(그 위젯들의 기존 동작·약속은 안 건드린다).
+  searchParams: Promise<{ date?: string }>;
+}) {
+  const { date: dateParam } = await searchParams;
+
   const [usdkrwRecent, usdkrwYear, fearGreedMetric, worldEconomyNews, domesticEconomyNews] = await Promise.all([
     getMetricHistoryByCount(METRICS.USDKRW, 15),
     getMetricHistory(METRICS.USDKRW, 365),
@@ -60,8 +70,14 @@ export default async function LandingPage() {
     getNewsPageCategory("domestic-economy", 4),
   ]);
 
-  const latestReport = await db.dailyReport.findFirst({ orderBy: { date: "desc" } });
-  const pptSlides = (latestReport?.details as unknown as StepDetails | null)?.pptSlides ?? [];
+  const isValidDateParam = dateParam !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(dateParam);
+  const pptReport = isValidDateParam
+    ? await db.dailyReport.findUnique({ where: { date: new Date(dateParam) } })
+    : await db.dailyReport.findFirst({ orderBy: { date: "desc" } });
+  const pptSlides = (pptReport?.details as unknown as StepDetails | null)?.pptSlides ?? [];
+  // DateJumpForm 팝업을 열었을 때 년/월/일 기본 선택값 — 지금 보고 있는 PPT 카드의 날짜(쿼리로 골랐으면
+  // 그 날짜, 아니면 최신 리포트 날짜)를 기준으로 삼는다. 리포트가 아예 없으면 오늘 날짜로 대체.
+  const pptDateForPicker = pptReport?.date ?? new Date();
 
   const latestFx = usdkrwRecent.at(-1) ?? null;
   const prevFx = usdkrwRecent.length >= 2 ? usdkrwRecent.at(-2)! : null;
@@ -126,11 +142,23 @@ export default async function LandingPage() {
                 </Link>
               </div>
             </div>
-            {pptSlides.length > 0 && (
-              <div className={styles.heroRight}>
-                <PptSlideDeck slides={pptSlides} />
+            <div className={styles.heroRight}>
+              <div className={styles.pptDateJump}>
+                <DateJumpForm
+                  defaultYear={pptDateForPicker.getUTCFullYear()}
+                  defaultMonth={pptDateForPicker.getUTCMonth() + 1}
+                  defaultDay={pptDateForPicker.getUTCDate()}
+                  basePath="/"
+                  asQuery
+                  compact
+                />
               </div>
-            )}
+              {pptSlides.length > 0 ? (
+                <PptSlideDeck slides={pptSlides} />
+              ) : (
+                <div className={styles.pptEmpty}>해당 날짜의 리포트가 없습니다.</div>
+              )}
+            </div>
           </div>
         </section>
 

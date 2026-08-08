@@ -27,6 +27,23 @@
   flex-direction: column;
   justify-content: center;
 }
+.pptDateJump {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.4rem;
+}
+.pptEmpty {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 1.4rem 1.5rem;
+  min-height: 230px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
 .hero__eyebrow {
   display: inline-flex;
   align-items: center;
