@@ -68,6 +68,48 @@ async function fetchFredSeries(
   return data.observations.filter((o) => o.value !== ".");
 }
 
+/** 우리 내부 지표 ID → FRED 시리즈 ID. event-outcomes.ts가 vintage 조회 시 재사용한다. */
+export function getFredSeriesId(metric: string): string | undefined {
+  return FRED_SERIES[metric];
+}
+
+/**
+ * "그 시점에 실제로 알려졌던 값"(ALFRED vintage)을 가져온다 — realtime_start=realtime_end=asOf로
+ * 고정하면 그 날짜 하루 동안 FRED가 서빙하던 스냅샷을 그대로 돌려준다.
+ *
+ * CPI·PPI·NFP·PCE 같은 지표는 발표 이후에도 다음 달 발표 때 직전 달 값이 조용히 개정된다(예: 2026년
+ * 7월 고용보고서가 발표되며 5·6월 수치를 합산 -103,000 하향 수정) — 우리 DB(MetricValue)는 그냥
+ * (지표, 관측월) 하나에 값 하나만 미러링해서, 나중에 재수집하면 그 개정치로 조용히 덮어써지거나
+ * (반대로) 개정 전 값이 그대로 남아있게 된다. 두 경우 모두 "이번 달 신규 발표치"와 "직전 달 개정분"의
+ * 시점이 어긋난 값끼리 비교하게 되어 변화량이 실제 헤드라인과 다르게 계산된다(실측: 2026년 7월
+ * -23,000명이 맞는데 DB 값으로 단순 diff하면 -126,000명이 나옴 — 두 관측치가 서로 다른 vintage였기
+ * 때문). 이 함수로 두 값을 반드시 "같은 realtime 날짜" 기준으로 같이 가져와야 그 날 발표문이 실제로
+ * 말한 숫자와 일치한다.
+ */
+export async function fetchFredSeriesAsOf(
+  seriesId: string,
+  apiKey: string,
+  asOf: Date,
+  limit: number
+): Promise<FredObservation[]> {
+  const asOfStr = asOf.toISOString().slice(0, 10);
+  const params = new URLSearchParams({
+    series_id: seriesId,
+    api_key: apiKey,
+    file_type: "json",
+    sort_order: "desc",
+    limit: String(limit),
+    realtime_start: asOfStr,
+    realtime_end: asOfStr,
+  });
+  const res = await fetch(`https://api.stlouisfed.org/fred/series/observations?${params}`);
+  if (!res.ok) {
+    throw new Error(`FRED ${seriesId} (asOf ${asOfStr}) 요청 실패: ${res.status} ${res.statusText}`);
+  }
+  const data = (await res.json()) as FredResponse;
+  return data.observations.filter((o) => o.value !== ".").reverse(); // desc로 받은 걸 오래된 순으로
+}
+
 export async function fetchFredMetric(
   metric: string,
   apiKey: string,

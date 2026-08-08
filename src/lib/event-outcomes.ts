@@ -1,6 +1,33 @@
 import { getMetricHistory, getMetricHistoryByCount } from "@/lib/metrics";
 import { METRICS } from "@/lib/sources/types";
 import { getMajorEventsInRange } from "@/lib/major-events";
+import { fetchFredSeriesAsOf, getFredSeriesId } from "@/lib/sources/fred";
+
+/**
+ * CPI·PPI·NFP·PCE처럼 다음 달 발표 때 직전 달 값이 조용히 개정되는 지표는, 우리 DB(MetricValue)에
+ * 미러링된 "그때그때 마지막으로 저장된 값"을 그냥 diff하면 서로 다른 시점(vintage)의 값끼리 비교하게
+ * 될 위험이 있다(실측: 2026년 7월 고용보고서가 6월 수치를 하향 개정하면서, DB에 남아있던 개정 전
+ * 6월 값과 새 7월 값을 단순 diff하면 실제 헤드라인(-23,000명)과 다른 -126,000명이 나왔다). FRED의
+ * realtime_start=realtime_end=asOf 파라미터로 "그 날짜에 실제로 알려졌던 값"을 매번 다시 가져오면
+ * 두 값이 항상 같은 vintage라 정확한 헤드라인 변화량과 일치한다. FRED_API_KEY가 없거나 조회에
+ * 실패하면 null을 돌려주고 호출부가 "판정불가"로 처리한다(데이터 정직성 원칙 — 실패를 조용히
+ * DB 미러값으로 우회하지 않는다).
+ */
+async function fetchVintageAccurate(
+  metric: string,
+  count: number,
+  asOf: Date
+): Promise<{ date: Date; value: number }[] | null> {
+  const apiKey = process.env.FRED_API_KEY;
+  const seriesId = getFredSeriesId(metric);
+  if (!apiKey || !seriesId) return null;
+  try {
+    const obs = await fetchFredSeriesAsOf(seriesId, apiKey, asOf, count);
+    return obs.map((o) => ({ date: new Date(o.date), value: parseFloat(o.value) }));
+  } catch {
+    return null;
+  }
+}
 
 export interface EventOutcome {
   name: string;
@@ -37,7 +64,7 @@ async function zScoreSurprise(
   // 최종 단위(명)까지 미리 환산해 옮겨적기만 하면 되게 한다 — 계산을 LLM에 맡기지 않는다.
   formatChange: (change: number) => string = (v) => v.toFixed(1)
 ): Promise<{ risky: boolean | null; detail: string }> {
-  const recent = await getMetricHistoryByCount(metric, periods + 1, asOf);
+  const recent = (await fetchVintageAccurate(metric, periods + 1, asOf)) ?? (await getMetricHistoryByCount(metric, periods + 1, asOf));
   if (recent.length < periods + 1) return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
   const changes: number[] = [];
   for (let i = 1; i < recent.length; i++) changes.push(recent[i].value - recent[i - 1].value);
@@ -64,7 +91,10 @@ async function corePceDetail(
   asOf: Date = new Date()
 ): Promise<{ risky: boolean | null; detail: string; url: string }> {
   const url = "https://www.bea.gov/data/personal-consumption-expenditures-price-index";
-  const history = await getMetricHistoryByCount(METRICS.US_PCE_CORE, periods + 2, asOf); // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
+  // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
+  const history =
+    (await fetchVintageAccurate(METRICS.US_PCE_CORE, periods + 2, asOf)) ??
+    (await getMetricHistoryByCount(METRICS.US_PCE_CORE, periods + 2, asOf));
   if (history.length < periods + 2) {
     return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가", url };
   }
@@ -161,22 +191,36 @@ async function fedRateChanged(
  * FOMC·CPI·고용지표를 다 캘린더에 넣으면 거의 매일 뭔가 예정돼 있어 거부권이 상시 발동하는 문제를 피한다.
  */
 export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date = new Date()): Promise<EventOutcome[]> {
-  const today = new Date(asOf);
-  today.setUTCHours(0, 0, 0, 0);
+  // "오늘"을 UTC로 자르면 KST 00~09시(=UTC 15~24시, 전날 UTC 날짜) 실행 시 하루 어긋난다 —
+  // date.ts의 kstToday() 주석과 같은 문제. 리포트는 KST 기준 "오늘 아침"에 생성되므로 KST 달력
+  // 날짜로 today를 계산해야 한다(처음엔 UTC로 잘랐다가, 8/8 리포트(생성 시각 UTC 23:52=KST 08:52,
+  // 즉 KST로는 이미 8/8)에서 전날(8/7 KST, 이미 발표된) 고용지표까지 통째로 빠지는 걸 실측하고 수정).
+  const todayKstStr = asOf.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const today = new Date(`${todayKstStr}T00:00:00.000Z`);
+  // 종료 경계를 "오늘"이 아니라 "어제"까지로 잡는다 — 예전엔 오늘 날짜인 이벤트(예: 그날 저녁 발표될
+  // 고용지표)를 asOf의 실제 시각과 무관하게 무조건 "이미 지난 결과"로 취급해, 아직 발표 전인데도
+  // "실제 결과"란에 무의미한 값이 찍히는 사례가 실제로 있었다(8/7 리포트, 생성 시각이 발표 시각보다
+  // 12시간 이상 앞섰는데도 결과가 표시됨). 이 앱이 다루는 이벤트는 전부 리포트 생성 시각(한국 아침
+  // 9시)보다 늦게 발표되므로, "오늘은 항상 제외"로 안전하게 하루 늦춘다.
+  const end = new Date(today);
+  end.setUTCDate(end.getUTCDate() - 1);
   const start = new Date(today);
   start.setUTCDate(start.getUTCDate() - daysBack);
-  const events = await getMajorEventsInRange(start, today);
+  const events = await getMajorEventsInRange(start, end);
 
   const outcomes: EventOutcome[] = [];
   for (const e of events) {
     let result: { risky: boolean | null; detail: string; url?: string };
-    if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true, asOf);
+    // vintage 정확도가 중요한 네 지표(CPI·NFP·PPI·PCE)는 report asOf가 아니라 이벤트가 실제로 발표된
+    // 그 날짜(e.date)를 기준으로 FRED에 그 시점 스냅샷을 물어봐야 한다 — report asOf를 쓰면 리포트
+    // 생성이 발표일보다 며칠 늦게 재구성되는 경우(백필 등) 그사이 또 다른 개정이 끼어들 수 있다.
+    if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true, e.date);
     // US_NFP(FRED PAYEMS)는 "천 명" 단위 레벨값이라 전월 대비 변화량도 천 명 단위다 — 위
     // zScoreSurprise 주석 참고. ×1,000 해서 실제 "명" 단위로 미리 환산해 넘긴다.
     else if (e.name.includes("고용지표"))
-      result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, asOf, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
-    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true, asOf);
-    else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5, asOf);
+      result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, e.date, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
+    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true, e.date);
+    else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5, e.date);
     else if (e.name.includes("FOMC")) result = await fedRateChanged(e.date, asOf);
     else continue;
 
