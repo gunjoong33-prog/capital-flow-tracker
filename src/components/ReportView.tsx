@@ -2,6 +2,7 @@ import { StepCard, Field } from "@/components/StepCard";
 import { ScoreBadge, DecisionBadge } from "@/components/ScoreBadge";
 import { RiskyNewsList } from "@/components/RiskyNewsList";
 import { STEP_TIPS } from "@/lib/scoring/tips";
+import { decisionFromScore } from "@/lib/scoring/pure";
 import type {
   Step1Result, Step2Result, Step3Result, Step4Result,
   Step5Result, Step6Result, Step7Result, Step8Result,
@@ -35,6 +36,11 @@ export function ReportView({
   details?: StepDetails | null;
 }) {
   const { step1, step2, step3, step4, step5, step6, step7, step8 } = report;
+  // 거부권이 실제로 결론을 바꿨는지 원점수 기준 결론과 비교해서 보여준다 — 이미 최하단(현금비중늘리기)
+  // 이던 날은 거부권이 발동돼도 결론이 그대로라, 예전처럼 항상 "한 단계 하향 조정됨"이라고만 쓰면
+  // 실제로는 아무 영향이 없었던 날도 결론이 바뀐 것처럼 보인다(외부 감사 지적, 실제 확인).
+  const preVetoDecision = decisionFromScore(step8.macroTrendScore);
+  const vetoChangedDecision = step8.vetoApplied && preVetoDecision !== step8.finalDecision;
 
   return (
     <div className="space-y-6">
@@ -45,7 +51,9 @@ export function ReportView({
           <ScoreBadge score={step8.macroTrendScore} label="투자 적합도 점수" />
           {step8.vetoApplied && (
             <span className="[word-break:keep-all] rounded-full border border-rose-500/30 bg-rose-500/15 px-3 py-1 text-xs text-rose-400">
-              1단계 거부권 발동 — 한 단계 하향 조정됨
+              {vetoChangedDecision
+                ? `1단계 거부권 발동 — 결론이 "${preVetoDecision}"에서 "${step8.finalDecision}"로 하향 조정됨`
+                : `1단계 거부권 발동 — 원점수 기준으로도 이미 "${step8.finalDecision}"라 결론 변화 없음`}
             </span>
           )}
           {step8.positionSizePct !== null && (

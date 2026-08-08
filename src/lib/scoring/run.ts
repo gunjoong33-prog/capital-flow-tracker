@@ -129,7 +129,11 @@ function summarizeStep2(
     : ratio >= 3 / 7
       ? "신호가 엇갈리는 혼조 국면"
       : "대체로 위축된 국면";
-  const lines = [`해외 유동성 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(1)}/10).`];
+  // 8단계 가중치 계산표(아래 details.step8)가 이 점수를 소수점 둘째 자리(.toFixed(2))로 다시 보여주며
+  // 실제 곱셈("3.33 × 2.5 = 8.33")을 검산할 수 있게 하는데, 여기 종합판단 요약이 소수점 첫째 자리만
+  // 보여주면("3.3") 같은 값이 페이지 안에서 두 가지로 보여 스스로 검산하려는 사용자를 헷갈리게 한다
+  // (외부 감사 지적, 실제 확인). 두 자리로 맞춘다.
+  const lines = [`해외 유동성 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(2)}/10).`];
 
   if (creditSpreadBp !== null) {
     lines.push(`크레딧 스프레드는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}"입니다.`);
@@ -1350,7 +1354,10 @@ export async function runDailyAnalysis(
     { label: `4단계 환율·금·유가 (가중치 ${WEIGHTS.step4})`, criterion: "가중 반영", value: `${step4.score.toFixed(2)} × ${WEIGHTS.step4} = ${(step4.score * WEIGHTS.step4).toFixed(2)}`, met: null },
     { label: `5단계 자금 도착 (가중치 ${WEIGHTS.step5})`, criterion: "가중 반영", value: `${step5.score.toFixed(2)} × ${WEIGHTS.step5} = ${(step5.score * WEIGHTS.step5).toFixed(2)}`, met: null },
     { label: `6단계 섹터 (가중치 ${WEIGHTS.step6})`, criterion: "가중 반영", value: `${step6.score.toFixed(2)} × ${WEIGHTS.step6} = ${(step6.score * WEIGHTS.step6).toFixed(2)}`, met: null },
-    { label: "투자 적합도 점수", criterion: `가중합 / ${TOTAL_WEIGHT}`, value: step8.macroTrendScore.toFixed(3), met: null },
+    // 페이지 다른 곳(ScoreBadge, forwardSignals.scoreToWatchMargin 등)은 전부 소수점 둘째 자리까지만
+    // 보여주는데 여기만 셋째 자리("2.951")까지 보여줘 근거 없는 허위 정밀도로 보인다는 지적이 있었다
+    // (외부 감사 지적) — 계산 자체(가중합/7.5)는 그대로 두고 표시만 둘째 자리로 맞춘다.
+    { label: "투자 적합도 점수", criterion: `가중합 / ${TOTAL_WEIGHT}`, value: step8.macroTrendScore.toFixed(2), met: null },
     { label: "1단계 거부권 적용", criterion: "발동 시 한 단계 하향", value: step8.vetoApplied ? "적용됨" : "미적용", met: !step8.vetoApplied },
     { label: "최종 결론", criterion: "≥7.0 매수\n≥5.0 지켜보기\n미만 현금비중늘리기", value: step8.finalDecision, met: null },
   ];

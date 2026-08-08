@@ -228,6 +228,20 @@ export function scoreStep7(input: Step7Input): Step7Result {
 export const WEIGHTS = { step2: 2.5, step3: 1.5, step4: 1.5, step5: 1.5, step6: 0.5 };
 export const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((a, b) => a + b, 0); // 7.5
 
+/**
+ * macroTrendScore(가중평균, 거부권 적용 전) 하나만으로 몇 단계 임계값에 해당하는지 판정한다.
+ * scoreStep8() 내부에서도 이 함수를 쓰고, UI(ReportView.tsx)에서도 "거부권이 실제로 결론을
+ * 바꿨는지"(원점수 기준 결론과 최종 결론이 다른지)를 보여주려고 별도로 재사용한다 — 이미 최하단
+ * (현금비중늘리기)인 날은 거부권이 발동돼도 결론이 안 바뀌는데, 예전엔 배지가 항상 "한 단계 하향
+ * 조정됨"이라고만 표시해 실제로 바뀌었는지 알 수 없었다(외부 감사 지적, 실제 확인 — 관찰된 13일
+ * 전부 이미 최하단이라 거부권이 결론을 바꾼 날이 하루도 없었을 가능성이 높았다).
+ */
+export function decisionFromScore(score: number): Step8Result["finalDecision"] {
+  if (score >= 7.0) return "매수";
+  if (score >= 5.0) return "지켜보기";
+  return "현금비중늘리기";
+}
+
 export function scoreStep8(input: Step8Input): Step8Result {
   const weighted =
     input.step2.finalScore * WEIGHTS.step2 +
@@ -237,10 +251,7 @@ export function scoreStep8(input: Step8Input): Step8Result {
     input.step6.score * WEIGHTS.step6;
   const macroTrendScore = weighted / TOTAL_WEIGHT;
 
-  let finalDecision: Step8Result["finalDecision"];
-  if (macroTrendScore >= 7.0) finalDecision = "매수";
-  else if (macroTrendScore >= 5.0) finalDecision = "지켜보기";
-  else finalDecision = "현금비중늘리기";
+  let finalDecision = decisionFromScore(macroTrendScore);
 
   // 1단계 거부권: 한 단계 다운그레이드
   const vetoApplied = input.step1.vetoTriggered;
