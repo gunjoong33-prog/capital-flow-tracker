@@ -70,6 +70,7 @@ export const METRICS = {
   CNN_FEAR_GREED: "CNN_FEAR_GREED", // CNN 비공식 데이터 엔드포인트(cnn-feargreed.ts)로 자동 수집
   BTC_ETF_FLOW: "BTC_ETF_FLOW", // 수동 입력
   PUT_CALL_RATIO_SPY: "PUT_CALL_RATIO_SPY", // Alpha Vantage REALTIME_PUT_CALL_RATIO, 참고 정보(미채점)
+  KRX_SHORT_BALANCE_RATIO: "KRX_SHORT_BALANCE_RATIO", // KOSPI 전종목 시가총액가중 공매도 잔고비중(%), 참고 정보(미채점)
 } as const;
 
 export type MetricId = (typeof METRICS)[keyof typeof METRICS];
@@ -123,7 +124,7 @@ export interface FetchedPoint {
   metric: string;
   date: string; // YYYY-MM-DD
   value: number;
-  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual" | "alphavantage";
+  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual" | "alphavantage" | "krx";
 }
 
 export interface SourceFetchResult {

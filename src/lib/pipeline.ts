@@ -26,6 +26,7 @@ import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, METRICS, SECTOR_ETFS, type FetchedPoint } from "@/lib/sources/types";
 import { getLatestMetric } from "@/lib/metrics";
 import { fetchIndexFallback, fetchSectorFallback, fetchPutCallRatio, alphaVantagePace } from "@/lib/sources/alphavantage";
+import { fetchKrxShortBalanceSummary } from "@/lib/sources/krx-short";
 
 export interface DailyPipelineResult {
   date: string;
@@ -251,12 +252,32 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       }
     }
 
+    // KRX 공매도 잔고비중(KOSPI, 시가총액가중) — 공식 API엔 이 데이터가 없어서 실제 KRX 개인회원
+    // 로그인 세션으로 조회한다(krx-short.ts 주석 참고). 로그인 자격증명이 없으면 조용히 건너뛴다.
+    let krxShortBalance: { date: string; ratio: number } | null = null;
+    const krxId = process.env.KRX_ID;
+    const krxPw = process.env.KRX_PW;
+    if (krxId && krxPw) {
+      try {
+        const summary = await fetchKrxShortBalanceSummary(krxId, krxPw);
+        if (summary) {
+          krxShortBalance = { date: summary.date, ratio: summary.marketWeightedRatio };
+          await saveMetricPoints([
+            { metric: METRICS.KRX_SHORT_BALANCE_RATIO, date: summary.date, value: summary.marketWeightedRatio, source: "krx" },
+          ]);
+        }
+      } catch (err) {
+        sourceErrors.push({ source: "KRX 공매도 잔고비중", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     const report = await runDailyAnalysis({
       sectors,
       missingSectorLabels,
       bigTechReasons,
       institutionalSignals,
       putCallRatio,
+      krxShortBalance,
     });
 
     if (putCallRatio !== null) {

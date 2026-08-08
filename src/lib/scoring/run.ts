@@ -745,6 +745,7 @@ export async function runDailyAnalysis(
     bigTechReasons?: Record<string, string>;
     institutionalSignals?: InstitutionalSignals;
     putCallRatio?: number | null; // SPY 옵션 put/call 거래량 비율(Alpha Vantage). 임계값 미검증 — 참고 정보로만 노출
+    krxShortBalance?: { date: string; ratio: number } | null; // KOSPI 시가총액가중 공매도 잔고비중(%, KRX). 임계값 미검증 — 참고 정보로만 노출
   },
   // 과거 특정 날짜(예: 지난주 어느 날) 기준으로 2~8단계를 정확히 재구성할 때 쓴다 — 생략하면
   // 기존과 동일하게 "지금 이 순간"을 기준으로 계산한다(일일 배치의 정상 동작은 무수정).
@@ -1331,6 +1332,14 @@ export async function runDailyAnalysis(
     { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
     { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null, url: OPENINSIDER_URL },
     { label: "빅테크 공매도 거래비중(FINRA)", criterion: "거래대금 중 공매도 비율, T+1 지연", value: institutional?.shortVolumeSummary ?? "확인 못함", met: null },
+    {
+      label: "KOSPI 공매도 잔고비중(KRX)",
+      criterion: "시가총액가중 평균, T+2 지연",
+      value: manualInputs.krxShortBalance
+        ? `${manualInputs.krxShortBalance.ratio.toFixed(2)}%(${manualInputs.krxShortBalance.date} 기준)`
+        : "확인 못함",
+      met: null,
+    },
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
   ];
   details.step7 = [
