@@ -9,6 +9,10 @@
 .trigger:hover {
   border-color: var(--accent-strong);
 }
+.triggerCompact {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+}
 
 .overlay {
   position: fixed;

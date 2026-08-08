@@ -4,15 +4,26 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import styles from "./DateJumpForm.module.css";
 
-/** 캘린더 상단 버튼 — 클릭하면 화면 중앙에 작은 팝업이 뜨고, 년/월/일 선택 후 해당 날짜 리포트로 이동한다. */
+/**
+ * 캘린더 상단 버튼 — 클릭하면 화면 중앙에 작은 팝업이 뜨고, 년/월/일 선택 후 해당 날짜 리포트로 이동한다.
+ * 홈 화면 PPT 카드에서도 재사용한다 — 그쪽은 날짜별 페이지가 따로 없이 "/"에 쿼리 파라미터로 날짜를
+ * 넘기는 구조라(page.tsx가 searchParams.date를 읽어 그날 리포트를 조회) asQuery로 목적지 형식을 바꾼다.
+ * compact는 "칸 위에 작은 버튼"으로 써야 하는 자리(홈 화면 PPT 카드)에서 트리거 버튼을 더 작게 만든다.
+ */
 export function DateJumpForm({
   defaultYear,
   defaultMonth,
   defaultDay,
+  basePath = "/calendar",
+  asQuery = false,
+  compact = false,
 }: {
   defaultYear: number;
   defaultMonth: number;
   defaultDay: number;
+  basePath?: string;
+  asQuery?: boolean;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,13 +50,14 @@ export function DateJumpForm({
   function goToDate() {
     const mm = String(month).padStart(2, "0");
     const dd = String(selectedDay).padStart(2, "0");
-    router.push(`/calendar/${year}-${mm}-${dd}`);
+    const dateStr = `${year}-${mm}-${dd}`;
+    router.push(asQuery ? `${basePath}?date=${dateStr}` : `${basePath}/${dateStr}`);
     setOpen(false);
   }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className={styles.trigger}>
+      <button onClick={() => setOpen(true)} className={compact ? `${styles.trigger} ${styles.triggerCompact}` : styles.trigger}>
         날짜로 이동
       </button>
 
