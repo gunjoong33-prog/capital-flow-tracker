@@ -206,4 +206,34 @@ export type StepDetails = {
     };
     institutionalDirection: string | null;
   };
+  pptSlides?: PptSlide[];
 };
+
+// 홈 화면 PPT 슬라이드 카드(9장: 1~8단계 + 종합 결론). 숫자·사실은 ppt-slides.ts가 결정론적으로
+// 채우고, headline만 ppt-headlines.ts가 LLM으로 채운다(초기값은 kicker와 동일 — 실패 시 폴백 겸함).
+export interface PptSlide {
+  step: number; // 1~8, 9(종합 결론)
+  kicker: string;
+  headline: string;
+  body: string;
+  visual: PptSlideVisual;
+}
+
+export type PptSlideVisual =
+  | { type: "stat-pair"; left: PptStat; right: PptStat }
+  | { type: "bar-pair"; left: PptBar; right: PptBar }
+  | { type: "ratio-bar"; qualifying: number; total: number; label: string }
+  | { type: "weight-bars"; rows: { label: string; score: number; weight: number }[] }
+  | { type: "none" };
+
+export interface PptStat {
+  value: string;
+  label: string;
+  tone?: "pos" | "neg" | "accent";
+}
+
+export interface PptBar {
+  value: string;
+  label: string;
+  heightPct: number; // 0~100
+}
