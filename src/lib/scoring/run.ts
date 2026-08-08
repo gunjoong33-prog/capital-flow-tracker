@@ -18,6 +18,7 @@ import {
 } from "./pure";
 import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
 import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
+import { buildPptSlides } from "./ppt-slides";
 
 /**
  * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
@@ -1400,6 +1401,20 @@ export async function runDailyAnalysis(
     },
     institutionalDirection: institutionalFlowRow?.value ?? null,
   };
+
+  details.pptSlides = buildPptSlides({
+    step1, step2, step3, step4, step5, step6, step7, step8,
+    step2Summary: details.step2Summary ?? "",
+    step3Summary: details.step3Summary ?? "",
+    step4Summary: details.step4Summary ?? "",
+    step5Summary: details.step5Summary ?? "",
+    step6Summary: details.step6Summary ?? "",
+    step7Summary: details.step7Summary ?? "",
+    vix,
+    fearGreed,
+    sectors: manualInputs.sectors,
+    bigTechMovers: bigTechMovers.map((m) => ({ ticker: m.ticker, label: m.label, changePct: m.change.changePct, reason: m.reason })),
+  });
 
   return { step1, step2, step3, step4, step5, step6, step7, step8, details };
 }
