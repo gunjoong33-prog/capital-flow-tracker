@@ -25,7 +25,7 @@ import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, METRICS, SECTOR_ETFS, type FetchedPoint } from "@/lib/sources/types";
 import { getLatestMetric } from "@/lib/metrics";
-import { fetchIndexFallback, fetchSectorFallback, alphaVantagePace } from "@/lib/sources/alphavantage";
+import { fetchIndexFallback, fetchSectorFallback, fetchPutCallRatio, alphaVantagePace } from "@/lib/sources/alphavantage";
 
 export interface DailyPipelineResult {
   date: string;
@@ -236,14 +236,32 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
     const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
     if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
-    const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals();
-    if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider)", error: institutionalErrors.join("; ") });
+    const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(BIG_TECH_TICKERS);
+    if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider/FINRA)", error: institutionalErrors.join("; ") });
+
+    // Put/Call 비율(SPY) — 무료 티어 REALTIME_PUT_CALL_RATIO(실제 호출 검증됨). 절대 임계값이
+    // 아직 검증 안 됐으므로 점수화하지 않고 7단계에 참고 정보로만 노출한다(institutionalSignals와
+    // 같은 원칙 — 근거 없는 met 판정을 달지 않는다).
+    let putCallRatio: number | null = null;
+    if (avApiKey) {
+      try {
+        putCallRatio = await fetchPutCallRatio(avApiKey);
+      } catch (err) {
+        sourceErrors.push({ source: "Put/Call 비율(Alpha Vantage)", error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     const report = await runDailyAnalysis({
       sectors,
       missingSectorLabels,
       bigTechReasons,
       institutionalSignals,
+      putCallRatio,
     });
+
+    if (putCallRatio !== null) {
+      await saveMetricPoints([{ metric: METRICS.PUT_CALL_RATIO_SPY, date: today, value: putCallRatio, source: "alphavantage" }]);
+    }
     finalDecision = report.step8.finalDecision;
     macroTrendScore = report.step8.macroTrendScore;
 

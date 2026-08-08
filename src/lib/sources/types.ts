@@ -69,6 +69,7 @@ export const METRICS = {
   VIX: "VIX",
   CNN_FEAR_GREED: "CNN_FEAR_GREED", // CNN 비공식 데이터 엔드포인트(cnn-feargreed.ts)로 자동 수집
   BTC_ETF_FLOW: "BTC_ETF_FLOW", // 수동 입력
+  PUT_CALL_RATIO_SPY: "PUT_CALL_RATIO_SPY", // Alpha Vantage REALTIME_PUT_CALL_RATIO, 참고 정보(미채점)
 } as const;
 
 export type MetricId = (typeof METRICS)[keyof typeof METRICS];

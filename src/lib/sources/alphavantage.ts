@@ -112,3 +112,26 @@ export async function fetchSectorFallback(
 export function alphaVantagePace(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 13_000));
 }
+
+interface PutCallRatioResponse {
+  symbol?: string;
+  put_call_ratio_full_chain?: string;
+  Information?: string;
+  Note?: string;
+}
+
+/** SPY 전체 옵션 체인 put/call 거래량 비율 — 무료 티어에 포함된 REALTIME_PUT_CALL_RATIO 사용.
+ * HISTORICAL_OPTIONS(과거 체인 원자료)는 프리미엄 전용이라 못 쓰지만, 이 비율 자체는 무료다
+ * (실제 호출해서 확인함, 2026-08-09). 1.0 위/아래 절대 임계값은 아직 검증 안 됐으므로 8단계
+ * 채점에는 안 쓰고 7단계 심리필터에 참고 정보로만 노출한다. */
+export async function fetchPutCallRatio(apiKey: string, symbol = "SPY"): Promise<number> {
+  const res = await fetch(
+    `https://www.alphavantage.co/query?function=REALTIME_PUT_CALL_RATIO&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`
+  );
+  if (!res.ok) throw new Error(`Alpha Vantage Put/Call ${symbol} 요청 실패: ${res.status}`);
+  const data = (await res.json()) as PutCallRatioResponse;
+  if (data.Information || data.Note) throw new Error(`Alpha Vantage Put/Call ${symbol}: ${data.Information ?? data.Note}`);
+  const ratio = data.put_call_ratio_full_chain ? parseFloat(data.put_call_ratio_full_chain) : NaN;
+  if (Number.isNaN(ratio)) throw new Error(`Alpha Vantage Put/Call ${symbol}: 응답 파싱 실패`);
+  return ratio;
+}

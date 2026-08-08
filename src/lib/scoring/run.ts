@@ -744,6 +744,7 @@ export async function runDailyAnalysis(
     missingSectorLabels?: string[]; // fetchAllSectors에서 개별적으로 실패한 섹터 이름("라벨(티커)") — 확인 못함으로 명시
     bigTechReasons?: Record<string, string>;
     institutionalSignals?: InstitutionalSignals;
+    putCallRatio?: number | null; // SPY 옵션 put/call 거래량 비율(Alpha Vantage). 임계값 미검증 — 참고 정보로만 노출
   },
   // 과거 특정 날짜(예: 지난주 어느 날) 기준으로 2~8단계를 정확히 재구성할 때 쓴다 — 생략하면
   // 기존과 동일하게 "지금 이 순간"을 기준으로 계산한다(일일 배치의 정상 동작은 무수정).
@@ -1329,6 +1330,7 @@ export async function runDailyAnalysis(
     { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
     { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
     { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null, url: OPENINSIDER_URL },
+    { label: "빅테크 공매도 거래비중(FINRA)", criterion: "거래대금 중 공매도 비율, T+1 지연", value: institutional?.shortVolumeSummary ?? "확인 못함", met: null },
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
   ];
   details.step7 = [
@@ -1349,6 +1351,12 @@ export async function runDailyAnalysis(
       ].join("\n"),
       value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
       met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
+    },
+    {
+      label: "Put/Call 비율(SPY)",
+      criterion: "1.0 위=풋 우위(공포), 아래=콜 우위(탐욕) — 참고용, 임계값 미검증이라 미채점",
+      value: manualInputs.putCallRatio != null ? manualInputs.putCallRatio.toFixed(2) : "확인 못함",
+      met: null,
     },
     { label: "양쪽 동시 과열", criterion: "매수 크기 30% 축소", value: step7.bothOverheated ? "예" : "아니오", met: !step7.bothOverheated },
     // "공포 구간"은 위 행과 달리 페널티가 없다 — "예"는 경고가 아니라 역발상 매수 기회 참고용 신호라

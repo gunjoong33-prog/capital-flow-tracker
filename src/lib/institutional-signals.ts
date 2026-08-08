@@ -4,13 +4,15 @@
 // docs/superpowers/specs/2026-07-26-step7-institutional-signals-design.md 참고.
 import { fetchSuperInvestorActivity, type SuperInvestorMove } from "@/lib/sources/dataroma";
 import { fetchInsiderTrades, type InsiderTrade } from "@/lib/sources/openinsider";
-import { SECTOR_ETFS, SECTOR_LABELS } from "@/lib/sources/types";
+import { fetchShortVolumeRatios, type ShortVolumeRow } from "@/lib/sources/finra";
+import { BIG_TECH_LABELS, SECTOR_ETFS, SECTOR_LABELS } from "@/lib/sources/types";
 
 export interface InstitutionalSignals {
   superInvestorSummary: string;
   stockConsensusSummary: string;
   sectorFlowSummary: string;
   insiderTradeSummary: string;
+  shortVolumeSummary: string;
   activityTickers: string[]; // 매수 쪽 유니크 티커 — 5단계 빅테크 7과 비교용
   topSectorLabel: string | null; // "항공우주(ITA)" 형태 — 6단계 qualifying과 직접 문자열 비교
 }
@@ -184,18 +186,36 @@ async function summarizeSectorFlow(
   };
 }
 
-/** Dataroma·OpenInsider를 병렬로 가져와 7단계용 5개 요약을 만든다. 하루 1회(파이프라인)만 호출한다. */
-export async function computeInstitutionalSignals(): Promise<{ signals: InstitutionalSignals; errors: string[] }> {
+/** FINRA 공매도거래량 파일에서 빅테크 7 종목만 골라 비중을 요약한다. 순수 다크풀 비중이 아니라
+ * "그날 체결된 거래 중 공매도로 표시된 비중"이다 — 잔고가 아니라 거래 흐름 지표라는 점을 라벨에
+ * 명시해서 KRX 공매도 잔고비중(별도 지표, 미구현)과 혼동되지 않게 한다. */
+function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: string | null): string {
+  if (rows.size === 0) return "확인 못함";
+  const sorted = [...rows.values()].sort((a, b) => b.ratio - a.ratio);
+  const dateLabel = fileDate ? `${fileDate.slice(0, 4)}-${fileDate.slice(4, 6)}-${fileDate.slice(6, 8)}` : "확인 못함";
+  const lines = sorted.map((r) => {
+    const label = BIG_TECH_LABELS[r.ticker] ? `${BIG_TECH_LABELS[r.ticker]}(${r.ticker})` : r.ticker;
+    return `${label}: ${(r.ratio * 100).toFixed(1)}%`;
+  });
+  return `${dateLabel} 거래대금 중 공매도 비중(FINRA, 거래일 T+1 지연):\n${lines.join("\n")}`;
+}
+
+/** Dataroma·OpenInsider·FINRA를 병렬로 가져와 7단계용 요약을 만든다. 하루 1회(파이프라인)만 호출한다. */
+export async function computeInstitutionalSignals(
+  bigTechTickers: readonly string[] = []
+): Promise<{ signals: InstitutionalSignals; errors: string[] }> {
   const errors: string[] = [];
-  const [{ moves, errors: dataromaErrors }, { trades, errors: openinsiderErrors }] = await Promise.all([
+  const [{ moves, errors: dataromaErrors }, { trades, errors: openinsiderErrors }, shortVolResult] = await Promise.all([
     fetchSuperInvestorActivity(),
     fetchInsiderTrades(),
+    bigTechTickers.length > 0 ? fetchShortVolumeRatios(bigTechTickers) : Promise.resolve({ rows: new Map<string, ShortVolumeRow>(), fileDate: null, errors: [] }),
   ]);
-  errors.push(...dataromaErrors, ...openinsiderErrors);
+  errors.push(...dataromaErrors, ...openinsiderErrors, ...shortVolResult.errors);
 
   const superInvestorSummary = summarizeSuperInvestors(moves);
   const stockConsensusSummary = summarizeStockConsensus(moves);
   const insiderTradeSummary = summarizeInsiderTrades(trades);
+  const shortVolumeSummary = summarizeShortVolume(shortVolResult.rows, shortVolResult.fileDate);
   const { summary: sectorFlowSummary, topSectorKey } = await summarizeSectorFlow(moves, trades);
 
   const activityTickers = [
@@ -211,6 +231,7 @@ export async function computeInstitutionalSignals(): Promise<{ signals: Institut
       stockConsensusSummary,
       sectorFlowSummary,
       insiderTradeSummary,
+      shortVolumeSummary,
       activityTickers,
       topSectorLabel: topSectorKey ? `${SECTOR_LABELS[topSectorKey]}(${SECTOR_ETFS[topSectorKey]})` : null,
     },
