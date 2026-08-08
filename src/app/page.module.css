@@ -6,6 +6,27 @@
   padding-top: clamp(2.4rem, 5vw, 3.4rem);
   padding-bottom: clamp(1.6rem, 3vw, 2.2rem);
 }
+/* widgetGrid(아래)와 같은 1.2fr/1fr + 1.25rem gap을 써서, 오른쪽 컬럼 폭이 CNN 공포탐욕 카드와
+   자동으로 맞는다(물리적으로 같은 grid는 아니지만 같은 비율이라 픽셀 폭이 일치한다). */
+.heroGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+@media (max-width: 780px) {
+  .heroGrid {
+    grid-template-columns: 1fr;
+  }
+}
+.heroLeft {
+  padding-bottom: 0.4rem;
+}
+.heroRight {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 .hero__eyebrow {
   display: inline-flex;
   align-items: center;

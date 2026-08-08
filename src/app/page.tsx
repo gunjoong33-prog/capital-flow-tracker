@@ -4,6 +4,9 @@ import { getNewsPageCategory } from "@/lib/news-page";
 import { METRICS } from "@/lib/sources/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
+import { db } from "@/lib/db";
+import { PptSlideDeck } from "@/components/PptSlideDeck";
+import type { StepDetails } from "@/lib/scoring/types";
 import siteStyles from "@/styles/site.module.css";
 import styles from "@/app/page.module.css";
 
@@ -57,6 +60,9 @@ export default async function LandingPage() {
     getNewsPageCategory("domestic-economy", 4),
   ]);
 
+  const latestReport = await db.dailyReport.findFirst({ orderBy: { date: "desc" } });
+  const pptSlides = (latestReport?.details as unknown as StepDetails | null)?.pptSlides ?? [];
+
   const latestFx = usdkrwRecent.at(-1) ?? null;
   const prevFx = usdkrwRecent.length >= 2 ? usdkrwRecent.at(-2)! : null;
   const fxChange = latestFx && prevFx ? latestFx.value - prevFx.value : null;
@@ -99,23 +105,32 @@ export default async function LandingPage() {
 
       <div className={siteStyles.wrap}>
         <section className={styles.hero}>
-          <span className={styles.hero__eyebrow}>매일 아침 9시, 자본이 움직이는 흐름을 점검합니다</span>
-          <h1 className={styles.hero__title}>
-            데이터로 확인하는
-            <br />
-            오늘의 자본 흐름
-          </h1>
-          <p className={styles.hero__desc}>
-            <span>뉴스·유동성·환율·자금 흐름을 여덟 개의 단계로 순차 점검합니다.</span>
-            <span>감정을 배제한 결정론적 규칙과 실제 시장 데이터로만 판단합니다.</span>
-          </p>
-          <div className={styles.hero__ctaRow}>
-            <Link className={`${styles.btn} ${styles["btn--primary"]}`} href="/report">
-              오늘의 리포트 읽기
-            </Link>
-            <Link className={`${styles.btn} ${styles["btn--ghost"]}`} href="/calendar">
-              캘린더 보기
-            </Link>
+          <div className={styles.heroGrid}>
+            <div className={styles.heroLeft}>
+              <span className={styles.hero__eyebrow}>매일 아침 9시, 자본이 움직이는 흐름을 점검합니다</span>
+              <h1 className={styles.hero__title}>
+                데이터로 확인하는
+                <br />
+                오늘의 자본 흐름
+              </h1>
+              <p className={styles.hero__desc}>
+                <span>뉴스·유동성·환율·자금 흐름을 여덟 개의 단계로 순차 점검합니다.</span>
+                <span>감정을 배제한 결정론적 규칙과 실제 시장 데이터로만 판단합니다.</span>
+              </p>
+              <div className={styles.hero__ctaRow}>
+                <Link className={`${styles.btn} ${styles["btn--primary"]}`} href="/report">
+                  오늘의 리포트 읽기
+                </Link>
+                <Link className={`${styles.btn} ${styles["btn--ghost"]}`} href="/calendar">
+                  캘린더 보기
+                </Link>
+              </div>
+            </div>
+            {pptSlides.length > 0 && (
+              <div className={styles.heroRight}>
+                <PptSlideDeck slides={pptSlides} />
+              </div>
+            )}
           </div>
         </section>
 
