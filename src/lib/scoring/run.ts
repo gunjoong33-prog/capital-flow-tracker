@@ -54,6 +54,35 @@ function attachRo(word: string): string {
   return `${word}${hasBatchim ? "으로" : "로"}`;
 }
 
+/**
+ * 종합 보고서 "앞으로 자본이 이동할 곳" 문단용 — 금 또는 실질금리 축 하나만 반대로 뒤집었을 때
+ * 실제로 어느 사분면·점수로 이동하는지 scoreStep4를 다시 돌려 정확히 계산한다.
+ * 예전엔 이 문구가 "현재 사분면 = 금↓실질금리↑"를 가정한 고정 텍스트라, 실제 현재 사분면이 다르면
+ * (예: 금↑실질금리↑) 앞뒤가 안 맞았다 — LLM이 그 모순을 메우려다 존재하지 않는 점수를 지어낸 사례가
+ * 실제로 있었다(외부 감사 지적). flat(보합)은 "위/아래 어느 쪽으로도 아직 안 정해짐"이라 뒤집을
+ * 기준 방향이 없으므로 up으로 뒤집는다(더 널리 쓰이는 관례적 기본값).
+ */
+function describeQuadrantFlip(
+  axis: "gold" | "rate",
+  goldDir: Direction,
+  realRateDir: Direction,
+  dollarDir: Direction,
+  us30yPercentile: number | null
+): string {
+  const flip = (d: Direction): Direction => (d === "down" ? "up" : "down");
+  const flippedGold = axis === "gold" ? flip(goldDir) : goldDir;
+  const flippedRate = axis === "rate" ? flip(realRateDir) : realRateDir;
+  const result = scoreStep4({
+    goldDirection: flippedGold,
+    realRateDirection: flippedRate,
+    dollarDirection: dollarDir,
+    us30yPercentile,
+  });
+  const axisLabel = axis === "gold" ? "금이" : "실질금리가";
+  const directionLabel = axis === "gold" ? (flippedGold === "up" ? "상승" : "하락") : flippedRate === "up" ? "상승" : "하락";
+  return `${axisLabel} ${directionLabel} 전환하면 '${result.quadrant}'(${result.score}/10)로 이동`;
+}
+
 // 표 열 너비가 좁아 줄바꿈이 자주 일어나는데, 일반 공백이면 "0~24 극단적공포"처럼 한 덩어리로
 // 읽혀야 할 구간이 숫자와 라벨 사이에서 끊겨 다음 줄로 넘어가 버린다. 줄바꿈 후보인 공백을
 // 줄바꿈 없는 공백(NBSP)으로 바꿔서 이 단위가 항상 붙어 다니게 한다(institutional-signals.ts와 같은 패턴).
@@ -735,6 +764,9 @@ export async function runDailyAnalysis(
       hasRecentEventSurprise: hasEventSurprise,
       hasSevereNewsInWindow: hasSevereNews,
     }),
+    // 종합 보고서 LLM이 riskyNews 배열(많으면 100건 이상)을 직접 세다가 자릿수를 틀린 사례가
+    // 실제로 있었다(148건을 39건으로 서술) — 미리 센 값을 별도 필드로 줘서 옮겨적기만 하면 되게 한다.
+    riskyNewsCount: riskyNews.length,
     riskyNews: riskyNews.map((n) => ({
       title: n.title, url: n.url, summary: n.summary, date: n.date.toISOString().slice(0, 10),
       severity:
@@ -1336,17 +1368,35 @@ export async function runDailyAnalysis(
           : "스프레드가 정상 구간 — 추가 확대 여부가 다음 관문",
     },
     upcomingEvents: upcomingEventsRow && upcomingEventsRow.value !== "없음" ? upcomingEventsRow.value : null,
+    // 예전엔 이 두 문장이 "현재 사분면이 금↓실질금리↑"라고 가정한 고정 텍스트였다 — 실제 현재 사분면이
+    // 그게 아닐 때(예: 금↑실질금리↑)도 항상 같은 문구가 나가서 LLM이 앞뒤를 맞추려다 존재하지 않는
+    // "1/10" 점수를 지어내고 방향까지 거꾸로 서술한 사례가 실제로 있었다(외부 감사 지적). 반대 방향
+    // 축을 실제로 뒤집어 scoreStep4를 다시 돌려서, 어떤 사분면에서 시작하든 항상 실제 도착 사분면·
+    // 점수를 정확히 계산해 넣는다.
     quadrantExit: {
-      current: step4.quadrant,
-      ifGoldFlips: "금이 상승 전환하면 '금↑ 실질금리↑'(최저점 2/10)로 이동",
-      ifRateFlips: "실질금리가 하락 전환하면 '금↓ 실질금리↓'(3/10)로 이동",
+      current: `${step4.quadrant} — 점수 ${step4.score}/10`,
+      ifGoldFlips: describeQuadrantFlip("gold", goldDir, realRateDir, dollarDir, us30yPercentile),
+      ifRateFlips: describeQuadrantFlip("rate", goldDir, realRateDir, dollarDir, us30yPercentile),
+    },
+    // 사분면 점수를 임의로 만들어내지 못하게 기본 점수표(텀프리미엄 조정 전)를 그대로 실어 보낸다 —
+    // 프롬프트에서 "이 표에 없는 사분면 점수는 언급하지 마라"고 강제한다.
+    quadrantScoreTable: {
+      "금↑ 실질금리↑": 2,
+      "금↑ 실질금리↓/보합": 5,
+      "금↓ 실질금리↑": 10,
+      "금↓ 실질금리↓/보합": 3,
     },
     distanceToThresholds: {
-      carrySpreadBp: step3.spreadBp,
-      carrySafeGapBp: Number((350 - step3.spreadBp).toFixed(0)),
-      vixFearGapPt: vix !== null ? Number((25 - vix).toFixed(2)) : null,
-      creditNormalGapBp: creditSpreadBp !== null ? Number((300 - creditSpreadBp).toFixed(0)) : null,
-      scoreToWatchGap: Number((5.0 - step8.macroTrendScore).toFixed(2)),
+      // 예전엔 raw bp 숫자만 줘서 LLM이 "현재값 대비 목표까지 거리"를 스스로 계산하다 틀리는 사례가
+      // 있었다(예: 168bp 남은 걸 168bp를 목표치로 오인) — 문장으로 미리 완성해 옮겨적기만 하면 되게
+      // 한다(JPY_VOL_NOTE와 같은 원칙: 판단·계산을 LLM에 맡기지 않는다).
+      carrySafeMargin: `현재 ${step3.spreadBp}bp, 안전 마진 350bp까지 ${(350 - step3.spreadBp).toFixed(0)}bp 남음`,
+      vixFearMargin: vix !== null ? `현재 ${vix.toFixed(2)}, 공포 구간 25까지 ${(25 - vix).toFixed(2)}pt 남음` : "확인 못함",
+      creditNormalMargin:
+        creditSpreadBp !== null
+          ? `현재 ${creditSpreadBp}bp, 정상 수준 300bp까지 ${(300 - creditSpreadBp).toFixed(0)}bp 남음`
+          : "확인 못함",
+      scoreToWatchMargin: `현재 ${step8.macroTrendScore.toFixed(2)}점, 지켜보기 기준 5.0점까지 ${(5.0 - step8.macroTrendScore).toFixed(2)}점 모자람`,
     },
     institutionalDirection: institutionalFlowRow?.value ?? null,
   };

@@ -30,7 +30,12 @@ async function zScoreSurprise(
   periods: number,
   thresholdZ: number,
   onlyHotSurprise: boolean,
-  asOf: Date = new Date()
+  asOf: Date = new Date(),
+  // 종합 보고서 LLM이 이 detail 문자열을 그대로 인용하는데, 원래는 단위 없이 raw 숫자만 줘서
+  // NFP(FRED PAYEMS, 실제로는 "천 명" 단위)를 LLM이 이미 "명" 단위인 것처럼 잘못 해석해 엉뚱한
+  // 배율로 서술한 사례가 실제로 있었다(-23.0(천 명) → "-126,000명"으로 서술). 지표별로 사람이 읽는
+  // 최종 단위(명)까지 미리 환산해 옮겨적기만 하면 되게 한다 — 계산을 LLM에 맡기지 않는다.
+  formatChange: (change: number) => string = (v) => v.toFixed(1)
 ): Promise<{ risky: boolean | null; detail: string }> {
   const recent = await getMetricHistoryByCount(metric, periods + 1, asOf);
   if (recent.length < periods + 1) return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
@@ -43,7 +48,7 @@ async function zScoreSurprise(
   const std = Math.sqrt(variance);
   const z = std > 0 ? (latestChange - mean) / std : 0;
   const risky = onlyHotSurprise ? z > thresholdZ : Math.abs(z) > thresholdZ;
-  return { risky, detail: `변화량 ${latestChange.toFixed(1)} (최근 ${periods}개월 대비 z=${z.toFixed(2)})` };
+  return { risky, detail: `변화량 ${formatChange(latestChange)} (최근 ${periods}개월 대비 z=${z.toFixed(2)})` };
 }
 
 /**
@@ -166,7 +171,10 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
   for (const e of events) {
     let result: { risky: boolean | null; detail: string; url?: string };
     if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true, asOf);
-    else if (e.name.includes("고용지표")) result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, asOf);
+    // US_NFP(FRED PAYEMS)는 "천 명" 단위 레벨값이라 전월 대비 변화량도 천 명 단위다 — 위
+    // zScoreSurprise 주석 참고. ×1,000 해서 실제 "명" 단위로 미리 환산해 넘긴다.
+    else if (e.name.includes("고용지표"))
+      result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, asOf, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
     else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true, asOf);
     else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5, asOf);
     else if (e.name.includes("FOMC")) result = await fedRateChanged(e.date, asOf);

@@ -194,12 +194,15 @@ export type StepDetails = {
     };
     upcomingEvents: string | null;
     quadrantExit: { current: string; ifGoldFlips: string; ifRateFlips: string };
+    // LLM이 사분면 점수를 임의로 지어내지 못하게 기본 점수표(텀프리미엄 조정 전)를 그대로 실어 보낸다.
+    quadrantScoreTable: Record<string, number>;
+    // 예전엔 raw bp/pt 숫자만 줬는데, LLM이 "목표까지 남은 거리"를 스스로 계산하다 틀리는 사례가
+    // 있었다 — 문장으로 미리 완성해 옮겨적기만 하면 되게 한다.
     distanceToThresholds: {
-      carrySpreadBp: number;
-      carrySafeGapBp: number;
-      vixFearGapPt: number | null;
-      creditNormalGapBp: number | null;
-      scoreToWatchGap: number;
+      carrySafeMargin: string;
+      vixFearMargin: string;
+      creditNormalMargin: string;
+      scoreToWatchMargin: string;
     };
     institutionalDirection: string | null;
   };
