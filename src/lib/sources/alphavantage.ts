@@ -135,3 +135,17 @@ export async function fetchPutCallRatio(apiKey: string, symbol = "SPY"): Promise
   if (Number.isNaN(ratio)) throw new Error(`Alpha Vantage Put/Call ${symbol}: 응답 파싱 실패`);
   return ratio;
 }
+
+/** 과거 특정 날짜의 Put/Call 비율 — 백필 전용(실 파이프라인은 항상 REALTIME만 쓴다). 휴장일은
+ * put_call_ratio_full_chain이 null로 와서 정상적으로 null을 반환한다(에러 아님). */
+export async function fetchHistoricalPutCallRatio(apiKey: string, date: string, symbol = "SPY"): Promise<number | null> {
+  const res = await fetch(
+    `https://www.alphavantage.co/query?function=HISTORICAL_PUT_CALL_RATIO&symbol=${encodeURIComponent(symbol)}&date=${date}&apikey=${apiKey}`
+  );
+  if (!res.ok) throw new Error(`Alpha Vantage Historical Put/Call ${symbol} ${date} 요청 실패: ${res.status}`);
+  const data = (await res.json()) as PutCallRatioResponse;
+  if (data.Information || data.Note) throw new Error(`Alpha Vantage Historical Put/Call ${symbol} ${date}: ${data.Information ?? data.Note}`);
+  if (!data.put_call_ratio_full_chain) return null;
+  const ratio = parseFloat(data.put_call_ratio_full_chain);
+  return Number.isNaN(ratio) ? null : ratio;
+}

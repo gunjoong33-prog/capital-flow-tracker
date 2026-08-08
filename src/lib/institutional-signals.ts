@@ -191,7 +191,8 @@ async function summarizeSectorFlow(
 /** FINRA 공매도거래량 파일에서 빅테크 7 종목만 골라 비중을 요약한다. 순수 다크풀 비중이 아니라
  * "그날 체결된 거래 중 공매도로 표시된 비중"이다 — 잔고가 아니라 거래 흐름 지표라는 점을 라벨에
  * 명시해서 KRX 공매도 잔고비중(별도 지표, 미구현)과 혼동되지 않게 한다. */
-function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: string | null): string {
+/** 백필 스크립트에서 과거 날짜 데이터로 재사용할 수 있게 export한다(로직 중복 방지). */
+export function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: string | null): string {
   if (rows.size === 0) return "확인 못함";
   const sorted = [...rows.values()].sort((a, b) => b.ratio - a.ratio);
   const dateLabel = fileDate ? `${fileDate.slice(0, 4)}-${fileDate.slice(4, 6)}-${fileDate.slice(6, 8)}` : "확인 못함";
@@ -203,7 +204,8 @@ function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: strin
 }
 
 /** DART 지분공시(대량보유·임원소유) 요약 — 절대값 변동폭이 큰 순서로 최대 4건. */
-function summarizeDomesticFilings(filings: DartFiling[]): string {
+/** 백필 스크립트에서 과거 날짜 데이터로 재사용할 수 있게 export한다(로직 중복 방지). */
+export function summarizeDomesticFilings(filings: DartFiling[]): string {
   if (filings.length === 0) return "확인 못함";
 
   // 같은 회사가 대량보유·임원소유 두 보고서 타입으로 동시에 올라오면(같은 필자의 같은 지분
