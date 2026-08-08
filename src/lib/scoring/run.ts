@@ -1331,7 +1331,12 @@ export async function runDailyAnalysis(
     { label: "종목별 기관 지분 분석", criterion: "종목 중심의 스마트머니 추적", value: institutional?.stockConsensusSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
     { label: "섹터 및 자금 흐름", criterion: "자금 유입/유출 동향", value: institutional?.sectorFlowSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
     { label: "내부자 거래", criterion: "기업 임원/대주주 매매 기록", value: institutional?.insiderTradeSummary ?? "확인 못함", met: null, url: OPENINSIDER_URL },
-    { label: "빅테크 공매도 거래비중(FINRA)", criterion: "거래대금 중 공매도 비율, T+1 지연", value: institutional?.shortVolumeSummary ?? "확인 못함", met: null },
+    {
+      label: "빅테크 공매도 거래비중(FINRA)",
+      criterion: "거래대금 중 공매도 비율, T+1 지연 — 대형주는 마켓메이커 유동성공급 때문에 40~50%대가 정상 범위(방향성 약세 신호 아님)",
+      value: institutional?.shortVolumeSummary ?? "확인 못함",
+      met: null,
+    },
     { label: "국내 지분공시(DART)", criterion: "대량보유·임원소유 변동, 당일", value: institutional?.domesticFilingSummary ?? "확인 못함", met: null },
     {
       label: "KOSPI 공매도 잔고비중(KRX)",

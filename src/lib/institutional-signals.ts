@@ -205,7 +205,20 @@ function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: strin
 /** DART 지분공시(대량보유·임원소유) 요약 — 절대값 변동폭이 큰 순서로 최대 4건. */
 function summarizeDomesticFilings(filings: DartFiling[]): string {
   if (filings.length === 0) return "확인 못함";
-  const notable = [...filings]
+
+  // 같은 회사가 대량보유·임원소유 두 보고서 타입으로 동시에 올라오면(같은 필자의 같은 지분
+  // 변동을 두 번 신고하는 경우 포함) 회사 하나가 top4를 독점해 다른 회사 공시가 전부 밀려난다
+  // (실제 확인 — 2026-08-07 "더테크놀로지"가 4자리 전부 차지). Dataroma 요약의 "매니저당
+  // 1건"과 같은 원칙으로, 회사당 변동폭 제일 큰 1건만 후보로 남긴다.
+  const byCompany = new Map<string, DartFiling>();
+  for (const f of filings) {
+    const existing = byCompany.get(f.corpName);
+    if (!existing || Math.abs(f.stakePctChange ?? 0) > Math.abs(existing.stakePctChange ?? 0)) {
+      byCompany.set(f.corpName, f);
+    }
+  }
+
+  const notable = [...byCompany.values()]
     .sort((a, b) => Math.abs(b.stakePctChange ?? 0) - Math.abs(a.stakePctChange ?? 0))
     .slice(0, 4);
   const lines = notable.map((f) => {
