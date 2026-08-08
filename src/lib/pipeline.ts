@@ -14,6 +14,7 @@ import { fetchForeignNetBuyKospi } from "@/lib/sources/korea-investment";
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { generateComprehensiveReport } from "@/lib/comprehensive-report";
+import { generatePptHeadlines } from "@/lib/ppt-headlines";
 import { sleep } from "@/lib/llm-clients";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
@@ -270,6 +271,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       report.details.comprehensiveReport = await generateComprehensiveReport(report);
     } catch (err) {
       report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
+    }
+
+    if (report.details.pptSlides && report.details.pptSlides.length > 0) {
+      const headlines = await generatePptHeadlines(report.details.pptSlides);
+      report.details.pptSlides = report.details.pptSlides.map((s) => ({ ...s, headline: headlines[s.step] ?? s.kicker }));
     }
 
     // 4) DB 저장
