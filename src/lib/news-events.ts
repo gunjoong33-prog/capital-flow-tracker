@@ -313,3 +313,27 @@ export async function getRecentRiskyNews(days: number, asOf: Date = new Date()) 
   }
   return deduped;
 }
+
+/**
+ * 오늘 뉴스 위험점수(newsRiskScore)가 최근 기록 대비 얼마나 이례적인지 참고 정보로 보여준다.
+ * 거부권 임계값(20점)은 그대로 절대값으로 둔다 — 외부 감사가 "표본이 쌓이면 백분위 기준으로 전환할
+ * 계획"이라고 짚었지만, 아직 표본이 10~20일 안팎이라 임계값 자체를 지금 백분위로 바꾸기엔 이르다.
+ * 대신 판정에는 전혀 관여하지 않는 참고 정보만 옆에 병기해서 "지금 200점대가 평소 수준인지 이례적인지"
+ * 사용자가 스스로 판단할 수 있게 한다(met:null 정보성 행으로만 details.step1에 추가됨).
+ */
+export async function getNewsRiskScorePercentile(
+  currentScore: number,
+  asOf: Date = new Date()
+): Promise<{ percentile: number; sampleSize: number } | null> {
+  const rows = await db.dailyReport.findMany({
+    where: { date: { lte: asOf } },
+    select: { step1: true },
+  });
+  const scores = rows
+    .map((r) => (r.step1 as { newsRiskScore?: number } | null)?.newsRiskScore)
+    .filter((v): v is number => typeof v === "number");
+  if (scores.length < 3) return null; // 표본이 3일 미만이면 백분위 자체가 의미 없다
+  const atOrBelow = scores.filter((s) => s <= currentScore).length;
+  const percentile = Math.round((atOrBelow / scores.length) * 100);
+  return { percentile, sampleSize: scores.length };
+}

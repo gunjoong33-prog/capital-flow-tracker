@@ -1,5 +1,5 @@
 import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculatePercentileByCount, calculateCumulativeReturn } from "@/lib/metrics";
-import { getRecentRiskyNews, newsItemWeight } from "@/lib/news-events";
+import { getRecentRiskyNews, newsItemWeight, getNewsRiskScorePercentile } from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
 import { METRICS, SECTOR_ETFS, BIG_TECH_TICKERS, BIG_TECH_LABELS } from "@/lib/sources/types";
@@ -781,6 +781,10 @@ export async function runDailyAnalysis(
     recentEventOutcomes: recentOutcomes,
     newsRiskScore,
   };
+  // 뉴스 위험점수(newsRiskScore)가 20점이라는 절대 임계값 대비 몇 배인지만 보여주면, 그게 평소
+  // 수준인지 이례적인지 알 방법이 없다(외부 감사 지적) — 판정에는 관여하지 않는 참고 정보로만
+  // 최근 기록 대비 백분위를 병기한다. 표본이 3일 미만이면 null(정보 없음)로 조용히 생략.
+  const newsRiskPercentile = await getNewsRiskScorePercentile(newsRiskScore, asOf);
   details.step1 = [
     {
       label: "최근 7일 리스크 뉴스 가중점수",
@@ -788,6 +792,16 @@ export async function runDailyAnalysis(
       value: `${newsRiskScore.toFixed(1)}점(${riskyNews.length}건)`,
       met: newsRiskScore < NEWS_RISK_SCORE_THRESHOLD,
     },
+    ...(newsRiskPercentile
+      ? [
+          {
+            label: "최근 기록 대비 참고 맥락",
+            criterion: "판정에 관여하지 않는 정보성 지표",
+            value: `최근 ${newsRiskPercentile.sampleSize}일 중 상위 ${100 - newsRiskPercentile.percentile}% 수준`,
+            met: null,
+          },
+        ]
+      : []),
     {
       label: "단독 즉시발동 수준 뉴스(심각도 high)",
       criterion: "없음",
