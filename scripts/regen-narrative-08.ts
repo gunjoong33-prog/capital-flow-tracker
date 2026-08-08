@@ -59,7 +59,7 @@ function describeFlip(axis: "gold" | "rate", gold: Direction, rate: Direction): 
   const score = QUADRANT_SCORE_TABLE[label];
   const axisLabel = axis === "gold" ? "금이" : "실질금리가";
   const directionLabel = axis === "gold" ? (newGold === "up" ? "상승" : "하락") : newRate === "up" ? "상승" : "하락";
-  return `${axisLabel} ${directionLabel} 전환하면 '${label}'(${score}/10)로 이동`;
+  return `${axisLabel} ${directionLabel} 전환하면 '${label}'(${score}/10)로 이동합니다`;
 }
 
 async function main() {

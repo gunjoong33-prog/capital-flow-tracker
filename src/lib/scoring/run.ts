@@ -80,7 +80,7 @@ function describeQuadrantFlip(
   });
   const axisLabel = axis === "gold" ? "금이" : "실질금리가";
   const directionLabel = axis === "gold" ? (flippedGold === "up" ? "상승" : "하락") : flippedRate === "up" ? "상승" : "하락";
-  return `${axisLabel} ${directionLabel} 전환하면 '${result.quadrant}'(${result.score}/10)로 이동`;
+  return `${axisLabel} ${directionLabel} 전환하면 '${result.quadrant}'(${result.score}/10)로 이동합니다`;
 }
 
 // 표 열 너비가 좁아 줄바꿈이 자주 일어나는데, 일반 공백이면 "0~24 극단적공포"처럼 한 덩어리로
