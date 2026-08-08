@@ -233,17 +233,21 @@ export function summarizeDomesticFilings(filings: DartFiling[]): string {
   return `오늘 지분공시 중 변동폭 큰 순서(DART):\n${lines.join("\n")}`;
 }
 
-/** Dataroma·OpenInsider·FINRA·DART를 병렬로 가져와 7단계용 요약을 만든다. 하루 1회(파이프라인)만 호출한다. */
+/** Dataroma·OpenInsider·FINRA·DART를 병렬로 가져와 7단계용 요약을 만든다. 하루 1회(파이프라인)만 호출한다.
+ * asOfDate: FINRA·DART 조회 앵커. 안 주면 "지금"인데, 리포트는 실제로 marketDate(직전 미국장
+ * 거래일)를 다루므로 반드시 marketDate를 넘겨야 한다 — 안 그러면 파이프라인 실행 시각(KST 오늘)
+ * 기준으로 조회돼 리포트가 다루는 날과 하루 어긋난다(실제 발견된 버그, 8/4~8/8 백필 검증 중 확인). */
 export async function computeInstitutionalSignals(
   bigTechTickers: readonly string[] = [],
-  dartApiKey?: string
+  dartApiKey?: string,
+  asOfDate: Date = new Date()
 ): Promise<{ signals: InstitutionalSignals; errors: string[] }> {
   const errors: string[] = [];
   const [{ moves, errors: dataromaErrors }, { trades, errors: openinsiderErrors }, shortVolResult, dartResult] = await Promise.all([
     fetchSuperInvestorActivity(),
     fetchInsiderTrades(),
-    bigTechTickers.length > 0 ? fetchShortVolumeRatios(bigTechTickers) : Promise.resolve({ rows: new Map<string, ShortVolumeRow>(), fileDate: null, errors: [] }),
-    dartApiKey ? fetchEquityDisclosures(dartApiKey) : Promise.resolve({ filings: [] as DartFiling[], errors: [] as string[] }),
+    bigTechTickers.length > 0 ? fetchShortVolumeRatios(bigTechTickers, asOfDate) : Promise.resolve({ rows: new Map<string, ShortVolumeRow>(), fileDate: null, errors: [] }),
+    dartApiKey ? fetchEquityDisclosures(dartApiKey, asOfDate) : Promise.resolve({ filings: [] as DartFiling[], errors: [] as string[] }),
   ]);
   errors.push(...dataromaErrors, ...openinsiderErrors, ...shortVolResult.errors, ...dartResult.errors);
 

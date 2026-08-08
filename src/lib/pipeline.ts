@@ -25,7 +25,7 @@ import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, METRICS, SECTOR_ETFS, type FetchedPoint } from "@/lib/sources/types";
 import { getLatestMetric } from "@/lib/metrics";
-import { fetchIndexFallback, fetchSectorFallback, fetchPutCallRatio, alphaVantagePace } from "@/lib/sources/alphavantage";
+import { fetchIndexFallback, fetchSectorFallback, fetchHistoricalPutCallRatio, alphaVantagePace } from "@/lib/sources/alphavantage";
 import { fetchKrxShortBalanceSummary } from "@/lib/sources/krx-short";
 
 export interface DailyPipelineResult {
@@ -237,19 +237,28 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
     const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
     if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
+    // FINRA·DART·Put/Call·KRX 전부 리포트가 실제로 다루는 거래일(marketDate) 기준으로 조회해야
+    // 한다 — "지금"(파이프라인 실행 시각, KST 오늘)으로 조회하면 리포트가 다루는 날과 하루
+    // 어긋난다(실제 발견된 버그: date=8/8 리포트의 marketDate는 8/7인데 8/8로 조회해 다 "확인
+    // 못함"이 뜬 사례로 발견, 더 심각하게는 8/4~8/7도 조용히 하루 밀린 값을 보여주고 있었음).
+    const marketDateAnchor = new Date(`${marketDate}T12:00:00Z`);
+
     const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(
       BIG_TECH_TICKERS,
-      process.env.DART_API_KEY
+      process.env.DART_API_KEY,
+      marketDateAnchor
     );
     if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider/FINRA/DART)", error: institutionalErrors.join("; ") });
 
-    // Put/Call 비율(SPY) — 무료 티어 REALTIME_PUT_CALL_RATIO(실제 호출 검증됨). 절대 임계값이
-    // 아직 검증 안 됐으므로 점수화하지 않고 7단계에 참고 정보로만 노출한다(institutionalSignals와
+    // Put/Call 비율(SPY) — HISTORICAL_PUT_CALL_RATIO를 marketDate로 앵커해서 조회한다(REALTIME이
+    // 아니라 이걸 쓰는 이유: VIX·공포탐욕지수 등 7단계의 다른 모든 지표가 marketDate 기준인데
+    // REALTIME만 "지금"을 보면 같은 표 안에서 기준일이 서로 달라진다). 절대 임계값이 아직
+    // 검증 안 됐으므로 점수화하지 않고 7단계에 참고 정보로만 노출한다(institutionalSignals와
     // 같은 원칙 — 근거 없는 met 판정을 달지 않는다).
     let putCallRatio: number | null = null;
     if (avApiKey) {
       try {
-        putCallRatio = await fetchPutCallRatio(avApiKey);
+        putCallRatio = await fetchHistoricalPutCallRatio(avApiKey, marketDate);
       } catch (err) {
         sourceErrors.push({ source: "Put/Call 비율(Alpha Vantage)", error: err instanceof Error ? err.message : String(err) });
       }
@@ -262,7 +271,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     const krxPw = process.env.KRX_PW;
     if (krxId && krxPw) {
       try {
-        const summary = await fetchKrxShortBalanceSummary(krxId, krxPw);
+        const summary = await fetchKrxShortBalanceSummary(krxId, krxPw, marketDateAnchor);
         if (summary) {
           krxShortBalance = { date: summary.date, ratio: summary.marketWeightedRatio };
           await saveMetricPoints([
