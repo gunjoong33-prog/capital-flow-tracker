@@ -237,8 +237,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
     const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
     if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
-    const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(BIG_TECH_TICKERS);
-    if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider/FINRA)", error: institutionalErrors.join("; ") });
+    const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(
+      BIG_TECH_TICKERS,
+      process.env.DART_API_KEY
+    );
+    if (institutionalErrors.length) sourceErrors.push({ source: "기관·내부자 매집(Dataroma/OpenInsider/FINRA/DART)", error: institutionalErrors.join("; ") });
 
     // Put/Call 비율(SPY) — 무료 티어 REALTIME_PUT_CALL_RATIO(실제 호출 검증됨). 절대 임계값이
     // 아직 검증 안 됐으므로 점수화하지 않고 7단계에 참고 정보로만 노출한다(institutionalSignals와

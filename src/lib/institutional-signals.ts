@@ -5,6 +5,7 @@
 import { fetchSuperInvestorActivity, type SuperInvestorMove } from "@/lib/sources/dataroma";
 import { fetchInsiderTrades, type InsiderTrade } from "@/lib/sources/openinsider";
 import { fetchShortVolumeRatios, type ShortVolumeRow } from "@/lib/sources/finra";
+import { fetchEquityDisclosures, type DartFiling } from "@/lib/sources/dart";
 import { BIG_TECH_LABELS, SECTOR_ETFS, SECTOR_LABELS } from "@/lib/sources/types";
 
 export interface InstitutionalSignals {
@@ -13,6 +14,7 @@ export interface InstitutionalSignals {
   sectorFlowSummary: string;
   insiderTradeSummary: string;
   shortVolumeSummary: string;
+  domesticFilingSummary: string;
   activityTickers: string[]; // 매수 쪽 유니크 티커 — 5단계 빅테크 7과 비교용
   topSectorLabel: string | null; // "항공우주(ITA)" 형태 — 6단계 qualifying과 직접 문자열 비교
 }
@@ -200,22 +202,41 @@ function summarizeShortVolume(rows: Map<string, ShortVolumeRow>, fileDate: strin
   return `${dateLabel} 거래대금 중 공매도 비중(FINRA, 거래일 T+1 지연):\n${lines.join("\n")}`;
 }
 
-/** Dataroma·OpenInsider·FINRA를 병렬로 가져와 7단계용 요약을 만든다. 하루 1회(파이프라인)만 호출한다. */
+/** DART 지분공시(대량보유·임원소유) 요약 — 절대값 변동폭이 큰 순서로 최대 4건. */
+function summarizeDomesticFilings(filings: DartFiling[]): string {
+  if (filings.length === 0) return "확인 못함";
+  const notable = [...filings]
+    .sort((a, b) => Math.abs(b.stakePctChange ?? 0) - Math.abs(a.stakePctChange ?? 0))
+    .slice(0, 4);
+  const lines = notable.map((f) => {
+    const typeKo = f.type === "major" ? "대량보유" : "임원·주요주주";
+    const pct = f.stakePct !== null ? `${f.stakePct.toFixed(2)}%` : "확인 못함";
+    const change =
+      f.stakePctChange !== null ? `(${f.stakePctChange >= 0 ? "+" : ""}${f.stakePctChange.toFixed(2)}%p)` : "";
+    return `${nbsp(f.corpName)}(${typeKo}): ${nbsp(f.filerName)} 지분 ${pct}${change}`;
+  });
+  return `오늘 지분공시 중 변동폭 큰 순서(DART):\n${lines.join("\n")}`;
+}
+
+/** Dataroma·OpenInsider·FINRA·DART를 병렬로 가져와 7단계용 요약을 만든다. 하루 1회(파이프라인)만 호출한다. */
 export async function computeInstitutionalSignals(
-  bigTechTickers: readonly string[] = []
+  bigTechTickers: readonly string[] = [],
+  dartApiKey?: string
 ): Promise<{ signals: InstitutionalSignals; errors: string[] }> {
   const errors: string[] = [];
-  const [{ moves, errors: dataromaErrors }, { trades, errors: openinsiderErrors }, shortVolResult] = await Promise.all([
+  const [{ moves, errors: dataromaErrors }, { trades, errors: openinsiderErrors }, shortVolResult, dartResult] = await Promise.all([
     fetchSuperInvestorActivity(),
     fetchInsiderTrades(),
     bigTechTickers.length > 0 ? fetchShortVolumeRatios(bigTechTickers) : Promise.resolve({ rows: new Map<string, ShortVolumeRow>(), fileDate: null, errors: [] }),
+    dartApiKey ? fetchEquityDisclosures(dartApiKey) : Promise.resolve({ filings: [] as DartFiling[], errors: [] as string[] }),
   ]);
-  errors.push(...dataromaErrors, ...openinsiderErrors, ...shortVolResult.errors);
+  errors.push(...dataromaErrors, ...openinsiderErrors, ...shortVolResult.errors, ...dartResult.errors);
 
   const superInvestorSummary = summarizeSuperInvestors(moves);
   const stockConsensusSummary = summarizeStockConsensus(moves);
   const insiderTradeSummary = summarizeInsiderTrades(trades);
   const shortVolumeSummary = summarizeShortVolume(shortVolResult.rows, shortVolResult.fileDate);
+  const domesticFilingSummary = summarizeDomesticFilings(dartResult.filings);
   const { summary: sectorFlowSummary, topSectorKey } = await summarizeSectorFlow(moves, trades);
 
   const activityTickers = [
@@ -232,6 +253,7 @@ export async function computeInstitutionalSignals(
       sectorFlowSummary,
       insiderTradeSummary,
       shortVolumeSummary,
+      domesticFilingSummary,
       activityTickers,
       topSectorLabel: topSectorKey ? `${SECTOR_LABELS[topSectorKey]}(${SECTOR_ETFS[topSectorKey]})` : null,
     },
