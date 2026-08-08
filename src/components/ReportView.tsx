@@ -60,6 +60,14 @@ export function ReportView({
             <span className="text-sm text-[var(--ink-dim)]">권장 매수 비중 {step8.positionSizePct}%</span>
           )}
         </div>
+        {/* 결론 배지 바로 옆에 상시 노출 — 아직 표본이 적어(2026-07-27부터 운영 시작) "매수/지켜보기/
+            현금비중늘리기" 결론이 실제로 얼마나 맞았는지 추적한 트랙레코드가 없다는 걸 명시한다.
+            사용자가 결론만 보고 투자 신호처럼 쓰지 않도록 하는 게 목적(외부 감사 지적, 실제로 백테스트
+            페이지가 없는 것도 확인). 나중에 트랙레코드 페이지가 생기면 이 문구를 그 페이지 링크로
+            바꾸거나 조건부로(표본이 쌓이면) 없앤다. */}
+        <p className="[word-break:keep-all] text-xs text-[var(--ink-faint)]">
+          ⚠ 이 결론의 과거 적중률은 아직 추적되지 않았습니다(2026년 7월 27일부터 운영 시작, 표본 부족) — 투자 신호가 아니라 참고 자료로만 활용하세요.
+        </p>
       </header>
 
       {details?.comprehensiveReport && (
