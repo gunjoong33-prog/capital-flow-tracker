@@ -1,0 +1,59 @@
+.card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 1.1rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 230px;
+}
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .8rem; }
+.kicker { font-size: .68rem; font-weight: 700; letter-spacing: .03em; color: var(--accent-strong); }
+.pageLabel { font-size: .68rem; color: var(--ink-faint); }
+
+.body { display: flex; flex-direction: column; gap: .8rem; flex: 1; justify-content: center; }
+.headline {
+  font-family: var(--font-sans), sans-serif;
+  font-size: 1.02rem; font-weight: 700; line-height: 1.32; color: var(--ink);
+  word-break: keep-all; margin: 0 0 .4rem;
+}
+.sub { font-size: .74rem; color: var(--ink-dim); line-height: 1.5; word-break: keep-all; }
+
+.statPair { display: flex; gap: 8px; }
+.stat { flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 10px; padding: .55rem .3rem; }
+.statValue { font-size: .98rem; font-weight: 700; color: var(--ink); }
+.statLabel { font-size: .6rem; color: var(--ink-faint); margin-top: .2rem; }
+
+.barChart { display: flex; align-items: flex-end; gap: 20px; height: 70px; justify-content: center; margin-top: .4rem; }
+.barCol { display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+.barValue { font-size: .74rem; font-weight: 700; color: var(--ink); }
+.bar { width: 28px; border-radius: 4px 4px 0 0; }
+.barLabel { font-size: .62rem; color: var(--ink-faint); text-align: center; }
+
+.ratioWrap { display: flex; flex-direction: column; gap: .4rem; margin-top: .4rem; }
+.ratioTrack { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.ratioFill { height: 100%; background: var(--accent-strong); border-radius: 999px; }
+.ratioLabel { font-size: .7rem; color: var(--ink-dim); }
+
+.weightBars { display: flex; flex-direction: column; gap: 6px; margin-top: .3rem; }
+.weightRow { display: flex; align-items: center; gap: 6px; font-size: .64rem; color: var(--ink-dim); }
+.weightLabel { width: 60px; flex-shrink: 0; }
+.weightTrack { flex: 1; height: 5px; background: var(--border); border-radius: 999px; overflow: hidden; }
+.weightFill { height: 100%; background: var(--accent-strong); border-radius: 999px; }
+.weightScore { width: 26px; text-align: right; flex-shrink: 0; }
+
+.tonePos { color: var(--pos); }
+.toneNeg { color: var(--neg); }
+.toneAccent { color: var(--accent-strong); }
+
+.bottom { display: flex; align-items: center; justify-content: space-between; margin-top: .9rem; }
+.dots { display: flex; gap: 5px; }
+.dot { width: 5px; height: 5px; padding: 0; border: none; border-radius: 999px; background: var(--border); cursor: pointer; transform-origin: left center; }
+.dotActive { background: var(--accent-strong); width: 14px; }
+.nav { display: flex; gap: 6px; }
+.navBtn {
+  width: 26px; height: 26px; border-radius: 999px; border: 1px solid var(--border); background: transparent;
+  color: var(--ink-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px;
+  padding: 0;
+}
+.navBtn:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
