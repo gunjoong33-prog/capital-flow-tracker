@@ -12,3 +12,12 @@ export function kstToday(): string {
 export function kstDateString(d: Date): string {
   return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 }
+
+/** "YYYYMMDD"(구분자 없음) — FINRA·DART·KRX 등 외부 API가 이 포맷을 요구하는 곳에서 공용으로
+ * 쓴다(예전엔 파일마다 똑같은 함수를 복붙해서 셋이 따로 존재했다). 호출부가 이미 정오(UTC) 앵커로
+ * 만든 Date를 넘기는 걸 전제로 한다 — 그 자체가 KST 경계를 피하려는 의도라 여기서 KST 변환을
+ * 다시 하면 안 된다(korea-investment.ts의 fmtDateParam은 반대로 이런 앵커링 없이 raw "지금"을
+ * 받는 별개 상황이라 kstDateString을 직접 쓰고 이 함수와는 분리해뒀다). */
+export function toYYYYMMDDCompact(d: Date): string {
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}

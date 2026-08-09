@@ -62,17 +62,28 @@ async function upsertFile(repoPath: string, content: string): Promise<"created" 
   return putRes.ok ? (sha ? "updated" : "created") : "error";
 }
 
+// 매일 전체 리포트를 다시 조회·비교하면(과거 것까지 전부 GET 요청 1번씩) 리포트가 쌓일수록
+// 60초 제한 안에 못 끝나게 된다(unchanged라도 GitHub에 존재 확인 GET은 매번 나간다 — 코드
+// 감사로 발견). 평상시 크론은 최근 것만 보면 충분하니 기본은 최근 구간으로 좁히고, 과거 리포트를
+// 통째로 다시 밀어야 할 때만 ?full=1로 명시적으로 넓힌다.
+const DEFAULT_DAILY_LOOKBACK_DAYS = 60;
+const DEFAULT_PERIOD_LOOKBACK_COUNT = 12;
+
 export async function GET(request: Request) {
   const unauthorized = requireCronAuth(request);
   if (unauthorized) return unauthorized;
   if (!process.env.GITHUB_EXPORT_TOKEN) {
     return NextResponse.json({ error: "GITHUB_EXPORT_TOKEN 환경변수 없음" }, { status: 500 });
   }
+  const full = new URL(request.url).searchParams.get("full") === "1";
 
   const results: Record<string, string> = {};
   const errors: string[] = [];
 
-  const dailyRows = await db.dailyReport.findMany({ orderBy: { date: "asc" } });
+  const dailyRows = await db.dailyReport.findMany({
+    orderBy: { date: "asc" },
+    ...(full ? {} : { where: { date: { gte: new Date(Date.now() - DEFAULT_DAILY_LOOKBACK_DAYS * 86_400_000) } } }),
+  });
   for (const row of dailyRows) {
     const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
     const status = await upsertFile(repoPath, buildDailyReportMarkdown(row));
@@ -80,7 +91,10 @@ export async function GET(request: Request) {
     if (status === "error") errors.push(repoPath);
   }
 
-  const periodRows = await db.periodReport.findMany({ orderBy: { periodStart: "asc" } });
+  const periodRows = await db.periodReport.findMany({
+    orderBy: { periodStart: "desc" },
+    ...(full ? {} : { take: DEFAULT_PERIOD_LOOKBACK_COUNT }),
+  });
   for (const row of periodRows) {
     const repoPath = `obsidian-export/주기별 리포트/${periodReportFileName(row)}`;
     const status = await upsertFile(repoPath, buildPeriodReportMarkdown(row));

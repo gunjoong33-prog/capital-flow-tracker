@@ -7,6 +7,8 @@
 // 것이므로, data.krx.co.kr의 세션 발급 흐름(warmup 2회 GET → 로그인 POST → 중복로그인
 // 시 skipDup 재시도)을 그대로 재현해야 쓸 수 있다. 사용자가 위험을 인지하고 승인함
 // (openapi.krx.co.kr엔 공매도 데이터가 없다는 사실을 확인한 뒤 명시적으로 선택).
+import { toYYYYMMDDCompact } from "@/lib/date";
+
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const LOGIN_PAGE = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001.cmd";
@@ -125,10 +127,6 @@ export interface KrxShortBalanceSummary {
   top5: { name: string; ratio: number }[];
 }
 
-function toYYYYMMDD(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
 /** referenceDate부터 거슬러 올라가며 KOSPI 전종목 공매도 잔고를 찾아 시가총액가중 평균 비중과
  * 상위 5종목을 반환한다. KRX는 T+2 지연이라(공시 확인) 최근 며칠은 빈 데이터가 정상이다. */
 export async function fetchKrxShortBalanceSummary(
@@ -142,7 +140,7 @@ export async function fetchKrxShortBalanceSummary(
   for (let i = 0; i < maxLookback; i++) {
     const d = new Date(referenceDate);
     d.setUTCDate(d.getUTCDate() - i);
-    const trdDd = toYYYYMMDD(d);
+    const trdDd = toYYYYMMDDCompact(d);
     const rows = await fetchShortBalancePage(jar, trdDd, 1);
     if (rows.length === 0) continue;
 

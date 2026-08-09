@@ -3,6 +3,8 @@
 // 혼동하지 않는다 — 여기서 얻는 건 "이 거래가 공매도로 체결됐는가"의 비율이다.
 // 파일은 거래일 다음 영업일 새벽에 올라오고, 주말·휴장일엔 없다(403) — 최근 거래일을 찾을 때까지
 // 며칠 거슬러 올라간다.
+import { toYYYYMMDDCompact } from "@/lib/date";
+
 export interface ShortVolumeRow {
   ticker: string;
   shortVolume: number;
@@ -11,10 +13,6 @@ export interface ShortVolumeRow {
 }
 
 const BASE_URL = "https://cdn.finra.org/equity/regsho/daily/CNMSshvol";
-
-function toYYYYMMDD(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
-}
 
 function parseFile(text: string, tickers: readonly string[]): Map<string, ShortVolumeRow> {
   const wanted = new Set(tickers);
@@ -43,7 +41,7 @@ export async function fetchShortVolumeRatios(
   for (let i = 0; i < maxLookback; i++) {
     const d = new Date(referenceDate);
     d.setUTCDate(d.getUTCDate() - i);
-    const dateStr = toYYYYMMDD(d);
+    const dateStr = toYYYYMMDDCompact(d);
     try {
       const res = await fetch(`${BASE_URL}${dateStr}.txt`);
       if (!res.ok) continue;

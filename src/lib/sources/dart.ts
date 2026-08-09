@@ -3,6 +3,8 @@
 // (majorstock/elestock)를 조회해 변동폭을 얻는다 — 하루 100건 넘게 올라오는 날도 있어서
 // 전부 상세조회하면 파이프라인이 느려진다(institutional-signals.ts의 "매니저당 1건" 같은
 // 절제 원칙과 동일 — 전부 보여주면 정보량이 0이 된다).
+import { toYYYYMMDDCompact } from "@/lib/date";
+
 const LIST_URL = "https://opendart.fss.or.kr/api/list.json";
 const MAJORSTOCK_URL = "https://opendart.fss.or.kr/api/majorstock.json";
 const ELESTOCK_URL = "https://opendart.fss.or.kr/api/elestock.json";
@@ -43,10 +45,6 @@ export interface DartFiling {
   rceptDt: string; // YYYYMMDD
 }
 
-function toYYYYMMDD(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
 async function fetchDetail(apiKey: string, item: DartListItem): Promise<DartFiling | null> {
   const isMajor = item.report_nm.includes("대량보유");
   const url = isMajor ? MAJORSTOCK_URL : ELESTOCK_URL;
@@ -79,7 +77,7 @@ export async function fetchEquityDisclosures(
   maxDetail = 12
 ): Promise<{ filings: DartFiling[]; errors: string[] }> {
   const errors: string[] = [];
-  const dateStr = toYYYYMMDD(date);
+  const dateStr = toYYYYMMDDCompact(date);
   const res = await fetch(`${LIST_URL}?crtfc_key=${apiKey}&bgn_de=${dateStr}&end_de=${dateStr}&pblntf_ty=D&page_count=100`);
   if (!res.ok) {
     errors.push(`DART list.json 요청 실패: ${res.status}`);

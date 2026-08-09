@@ -1,4 +1,5 @@
 import { METRICS, SECTOR_ETFS, SECTOR_LABELS, type FetchedPoint } from "./types";
+import { computeSectorMetrics } from "./sector-math";
 
 // Yahoo Finance 비공식 차트 API. 무료, 키 불필요.
 // 공식 API가 아니므로 예고 없이 바뀌거나 막힐 수 있다 — 실패 시 "확인 못함"으로 처리하고
@@ -238,13 +239,6 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
   const closes = validIndices.map((i) => rawClose[i] as number);
   let volumes = validIndices.map((i) => rawVolume[i] as number);
 
-  const last = closes.length;
-  const close5dAgo = closes[Math.max(0, last - 6)];
-  const closeLatest = closes[last - 1];
-  const closePrevDay = closes[Math.max(0, last - 2)];
-  const return5d = ((closeLatest - close5dAgo) / close5dAgo) * 100;
-  const changePct1d = ((closeLatest - closePrevDay) / closePrevDay) * 100;
-
   // /report 페이지는 방문할 때마다 이 함수를 실시간 호출한다(09시 파이프라인 전용이 아니다) — 그래서
   // 미국 장중(KST 22:30~05:00경)에 방문하면 마지막 봉이 아직 장이 안 끝난 "당일 진행 중" 봉이라
   // 거래량이 다 안 찍힌 채로 20일 평균과 비교돼 volumeRatio가 구조적으로 낮게 나온다. "지금이
@@ -258,15 +252,7 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
 
   // 주의: 장중에 호출하면 당일 거래량이 아직 다 안 찍혀서 volumeRatio가 낮게 나온다.
   // 매일 09시(KST) 파이프라인은 미국 장 마감 후라 이 문제가 없다 — 디버그용으로 장중에 호출할 때만 주의.
-  //
-  // 당일(recentVolume) 자신을 20일 평균의 분모에 포함시키면 안 된다 — "오늘 거래량이 최근 평균보다
-  // 몇 배인가"를 재는 지표인데 오늘 값이 자기 자신을 재는 기준에 섞여 들어가면 배수가 구조적으로
-  // 항상 낮게(자기 자신 쪽으로 쏠리며) 나온다. 당일 이전 20봉만으로 평균을 낸다.
-  const recentVolume = volumes[volumes.length - 1];
-  const priorVolumes = volumes.slice(0, -1).slice(-20);
-  const avgVolume20d = priorVolumes.reduce((sum, v) => sum + v, 0) / priorVolumes.length;
-  const volumeRatio = recentVolume / avgVolume20d;
-
+  const { return5d, changePct1d, volumeRatio } = computeSectorMetrics(closes, volumes);
   return { name: `${SECTOR_LABELS[sectorKey]}(${ticker})`, ticker, return5d, changePct1d, volumeRatio };
 }
 

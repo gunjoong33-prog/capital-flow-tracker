@@ -1,4 +1,5 @@
 import { METRICS, SECTOR_ETFS, SECTOR_LABELS, type FetchedPoint } from "./types";
+import { computeSectorMetrics } from "./sector-math";
 
 // Yahoo가 유일한 소스인 지표가 20여개라 Yahoo가 막히면 4·5·6단계가 동시에 전멸한다(외부 감사
 // 지적, 실제 확인). Stooq를 폴백으로 검토했으나 실제로 호출해보니 CSV 다운로드가 JS 작업증명
@@ -98,18 +99,7 @@ export async function fetchSectorFallback(
   const closes = dates.map((d) => parseFloat(series[d]["4. close"]));
   const volumes = dates.map((d) => parseFloat(series[d]["5. volume"]));
 
-  const last = closes.length;
-  const close5dAgo = closes[Math.max(0, last - 6)];
-  const closeLatest = closes[last - 1];
-  const closePrevDay = closes[Math.max(0, last - 2)];
-  const return5d = ((closeLatest - close5dAgo) / close5dAgo) * 100;
-  const changePct1d = ((closeLatest - closePrevDay) / closePrevDay) * 100;
-
-  const recentVolume = volumes[volumes.length - 1];
-  const priorVolumes = volumes.slice(0, -1).slice(-20);
-  const avgVolume20d = priorVolumes.reduce((sum, v) => sum + v, 0) / priorVolumes.length;
-  const volumeRatio = recentVolume / avgVolume20d;
-
+  const { return5d, changePct1d, volumeRatio } = computeSectorMetrics(closes, volumes);
   return { name: `${SECTOR_LABELS[sectorKey]}(${ticker})`, ticker, return5d, changePct1d, volumeRatio };
 }
 
