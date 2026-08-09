@@ -226,8 +226,17 @@ async function fetchSectorRaw(sectorKey: keyof typeof SECTOR_ETFS): Promise<Sect
   const result = data.chart.result?.[0];
   if (!result) throw new Error(`Yahoo ${ticker}: 데이터 없음`);
 
-  const closes = result.indicators.quote[0].close.filter((v): v is number => v !== null);
-  let volumes = result.indicators.quote[0].volume.filter((v): v is number => v !== null);
+  // close·volume을 각자 따로 null 필터링하면 안 된다 — 어느 한쪽만 결측인 봉이 있으면(드물지만
+  // 실제 있을 수 있음) 두 배열 길이가 어긋나서, 이후 인덱스로 "같은 날"이라고 가정하고 꺼내 쓰는
+  // return5d·volumeRatio 계산이 서로 다른 날짜를 비교하게 된다(코드 감사로 발견, 조용히 틀린
+  // 값이 나오는 부류라 위험). 두 배열 다 값이 있는 인덱스만 같이 골라서 항상 같은 날을 가리키게 한다.
+  const rawClose = result.indicators.quote[0].close;
+  const rawVolume = result.indicators.quote[0].volume;
+  const validIndices = rawClose
+    .map((_, i) => i)
+    .filter((i) => rawClose[i] !== null && rawVolume[i] !== null);
+  const closes = validIndices.map((i) => rawClose[i] as number);
+  let volumes = validIndices.map((i) => rawVolume[i] as number);
 
   const last = closes.length;
   const close5dAgo = closes[Math.max(0, last - 6)];

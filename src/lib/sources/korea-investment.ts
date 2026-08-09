@@ -9,6 +9,7 @@
 // 최근 며칠만 잘라 쓴다. 응답값(frgn_ntby_tr_pbmn)은 백만원 단위로 확인됨(실측: 하루 약
 // 72억~7,240억원 규모로 코스피 전체 외국인 순매수 대금과 일치).
 import { METRICS, type FetchedPoint } from "./types";
+import { kstDateString } from "@/lib/date";
 
 const BASE_URL = "https://openapi.koreainvestment.com:9443";
 
@@ -34,8 +35,12 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+// d.toISOString()은 UTC 기준이라 KST 0~9시(9시 파이프라인 실행 시각과 겹침) 사이엔 실제보다
+// 하루 이른 날짜가 나온다 — coingecko.ts는 이미 kstDateString을 쓰는데 여기만 안 맞춰져 있었다
+// (코드 감사로 발견). 정시(00:00 UTC=09:00 KST) 실행에선 우연히 안 걸렸지만 수동/백필 실행 시
+// 어긋난다.
 function fmtDateParam(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
+  return kstDateString(d).replace(/-/g, "");
 }
 
 interface KisInvestorDailyRow {

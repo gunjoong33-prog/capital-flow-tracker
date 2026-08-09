@@ -760,7 +760,7 @@ export async function runDailyAnalysis(
   // FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 — 그래서 "예정" 여부가 아니라
   // "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
   const riskyNews = await getRecentRiskyNews(7, asOf);
-  const upcomingEvents = await getUpcomingMajorEvents(14);
+  const upcomingEvents = await getUpcomingMajorEvents(14, asOf);
   const recentOutcomes = await evaluateRecentEventOutcomes(5, asOf);
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
   const hasSevereNews = riskyNews.some((n) => n.severity === "high");

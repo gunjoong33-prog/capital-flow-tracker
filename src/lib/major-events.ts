@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { kstDateString } from "@/lib/date";
 
 // FOMC 회의 결과 발표일 — 연준이 매년 미리 공개하는 고정 일정(federalreserve.gov/monetarypolicy/fomccalendars.htm).
 // FRED에는 이 일정을 위한 release_id가 없어(확인함, release 101 "FOMC Press Release"는 확정된 미래 날짜를
@@ -100,9 +101,13 @@ export async function syncMajorEvents(): Promise<{ synced: number; errors: strin
   return { synced, errors };
 }
 
-export async function getUpcomingMajorEvents(days: number) {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+/** asOf(기본 "지금")을 KST 기준 오늘로 변환해 그날부터 days일 뒤까지를 조회한다. 예전엔
+ * new Date()+setUTCHours로 직접 UTC 자정을 잡아서, KST 0~9시(9시 파이프라인 실행 시각과 겹침)
+ * 사이엔 하루 이른 날짜를 "오늘"로 잘못 계산했다(event-outcomes.ts에서 이미 한 번 겪은 것과
+ * 같은 KST 경계 버그 클래스, 코드 감사로 발견 — 자매 함수 getMajorEventsInRange는 처음부터
+ * asOf를 그대로 받아 이 문제가 없었다). */
+export async function getUpcomingMajorEvents(days: number, asOf: Date = new Date()) {
+  const today = new Date(`${kstDateString(asOf)}T00:00:00Z`);
   const end = new Date(today);
   end.setUTCDate(end.getUTCDate() + days);
   return db.majorEvent.findMany({
