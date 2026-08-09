@@ -51,18 +51,24 @@ async function fetchGlobalQuote(symbol: string, apiKey: string): Promise<{ price
  * 지수 폴백 — ETF 가격을 그대로 저장하면 안 된다(SPY~$747 vs SPX~7489, 스케일이 완전히 다름).
  * 대신 검증된 ETF의 당일 등락률을 우리 DB에 남아있는 마지막 실제 지수값에 곱해서 근사치를
  * 합성한다 — 스케일은 항상 실제 지수 기준으로 유지되고, 등락률만 프록시에서 빌려온다.
+ *
+ * dateStr은 반드시 호출부(pipeline.ts)의 kstToday()를 그대로 받아야 한다 — 예전엔 여기서 직접
+ * new Date()로 찍었는데, 이건 UTC 기준이라 KST 0~9시 사이(파이프라인 실행 시각과 겹침)엔 실제
+ * 날짜보다 하루 이른 값이 나온다(이 프로젝트에서 반복된 KST 경계 버그와 같은 클래스, 코드 감사로
+ * 발견). 이 값이 SPX 폴백일 때는 marketDate 계산의 유일한 재료가 될 수도 있어(Yahoo가 완전히
+ * 막힌 날) 잘못되면 휴장일 중복 방지 자체가 깨진다.
  */
 export async function fetchIndexFallback(
   metric: string,
   lastRealValue: number,
-  apiKey: string
+  apiKey: string,
+  dateStr: string
 ): Promise<FetchedPoint> {
   const symbol = AV_INDEX_PROXY[metric];
   if (!symbol) throw new Error(`${metric}은 Alpha Vantage 지수 폴백 대상이 아니다`);
   const { changePct } = await fetchGlobalQuote(symbol, apiKey);
   const syntheticValue = lastRealValue * (1 + changePct / 100);
-  const today = new Date().toISOString().slice(0, 10);
-  return { metric, date: today, value: syntheticValue, source: "alphavantage" };
+  return { metric, date: dateStr, value: syntheticValue, source: "alphavantage" };
 }
 
 interface DailySeriesResponse {
