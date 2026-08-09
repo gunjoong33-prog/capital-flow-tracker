@@ -1324,6 +1324,9 @@ export async function runDailyAnalysis(
 
   const DATAROMA_URL = "https://www.dataroma.com/m/allact.php?typ=a";
   const OPENINSIDER_URL = "http://openinsider.com/latest-insider-trading";
+  const FINRA_SHORT_VOLUME_URL = "https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data/daily-short-sale-volume-files";
+  const KRX_SHORT_URL = "https://short.krx.co.kr";
+  const DART_EQUITY_URL = "https://opendart.fss.or.kr/disclosureinfo/qota/main.do";
 
   // 표를 2개로 나눈다 — ①기관·내부자 매집(신규, 충족열 없음, 바로가기 열 있음) ②공포탐욕·VIX 지수(기존, 충족열 유지).
   details.step7Institutional = [
@@ -1336,8 +1339,15 @@ export async function runDailyAnalysis(
       criterion: "거래대금 중 공매도 비율, T+1 지연 — 대형주는 마켓메이커 유동성공급 때문에 40~50%대가 정상 범위(방향성 약세 신호 아님)",
       value: institutional?.shortVolumeSummary ?? "확인 못함",
       met: null,
+      url: FINRA_SHORT_VOLUME_URL,
     },
-    { label: "국내 지분공시(DART)", criterion: "대량보유·임원소유 변동, 당일", value: institutional?.domesticFilingSummary ?? "확인 못함", met: null },
+    {
+      label: "국내 지분공시(DART)",
+      criterion: "대량보유·임원소유 변동, 당일",
+      value: institutional?.domesticFilingSummary ?? "확인 못함",
+      met: null,
+      url: DART_EQUITY_URL,
+    },
     {
       label: "KOSPI 공매도 잔고비중(KRX)",
       criterion: "시가총액가중 평균, T+2 지연",
@@ -1345,6 +1355,7 @@ export async function runDailyAnalysis(
         ? `${manualInputs.krxShortBalance.ratio.toFixed(2)}%(${manualInputs.krxShortBalance.date} 기준)`
         : "확인 못함",
       met: null,
+      url: KRX_SHORT_URL,
     },
     { label: "전단계 섹터·종목과 일치 여부", criterion: "5·6단계 분석과 비교", value: institutionalMatch, met: null },
   ];
