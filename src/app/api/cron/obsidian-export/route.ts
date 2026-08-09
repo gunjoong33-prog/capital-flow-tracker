@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { buildDailyReportMarkdown, buildPeriodReportMarkdown, dailyReportFileName, periodReportFileName } from "@/lib/obsidian-export";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -62,10 +63,8 @@ async function upsertFile(repoPath: string, content: string): Promise<"created" 
 }
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
   if (!process.env.GITHUB_EXPORT_TOKEN) {
     return NextResponse.json({ error: "GITHUB_EXPORT_TOKEN 환경변수 없음" }, { status: 500 });
   }

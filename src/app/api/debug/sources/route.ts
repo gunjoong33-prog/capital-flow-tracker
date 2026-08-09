@@ -1,19 +1,17 @@
-import { NextResponse } from "next/server";
 import { fetchAllFredMetrics } from "@/lib/sources/fred";
 import { fetchCftcJpyNetPosition } from "@/lib/sources/cftc";
 import { fetchCoinGeckoLatest } from "@/lib/sources/coingecko";
 import { fetchJp10yLatest } from "@/lib/sources/mof-japan";
 import { fetchAllYahooLatest, fetchAllSectors } from "@/lib/sources/yahoo";
 import { fetchKr10y } from "@/lib/sources/ecos";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 // 무료 데이터 소스 3종이 실제로 값을 가져오는지 확인하는 진단용 엔드포인트.
 // DB에는 저장하지 않는다(순수 연결 확인용). 무인증 배포 시 소스 전체를 대량 호출당할 수 있어
 // cron과 같은 가드를 건다.
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   const result: Record<string, unknown> = {};
 

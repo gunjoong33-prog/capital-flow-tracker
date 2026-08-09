@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runDailyPipeline } from "@/lib/pipeline";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 // Fluid Compute가 켜져 있어 Hobby 플랜에서도 최대 300초까지 가능하다. 파이프라인이 뉴스 판정(Gemini)·
@@ -9,10 +10,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   try {
     const result = await runDailyPipeline();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchYahooLatest } from "@/lib/sources/yahoo";
 import { saveMetricPoints } from "@/lib/metrics";
 import { METRICS } from "@/lib/sources/types";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,8 @@ export const dynamic = "force-dynamic";
  * 크론이 아니라 외부에서 이 엔드포인트를 호출하는 방식이라 하루 1회 제한과 무관하다.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   try {
     const points = await fetchYahooLatest(METRICS.USDJPY_INTRADAY);
