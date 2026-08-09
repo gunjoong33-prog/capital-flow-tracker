@@ -124,7 +124,7 @@ export interface FetchedPoint {
   metric: string;
   date: string; // YYYY-MM-DD
   value: number;
-  source: "fred" | "cftc" | "coingecko" | "eodhd" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual" | "alphavantage" | "krx";
+  source: "fred" | "cftc" | "coingecko" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual" | "alphavantage" | "krx";
 }
 
 export interface SourceFetchResult {

@@ -56,4 +56,23 @@ describe("fetchEquityDisclosures", () => {
     expect(filings).toEqual([]);
     expect(errors.length).toBe(1);
   });
+
+  it("개별 상세조회(majorstock/elestock)가 실패해도 조용히 삼키지 않고 errors에 남긴다", async () => {
+    const listBody = {
+      status: "000",
+      message: "정상",
+      list: [{ corp_code: "00838005", corp_name: "서진시스템", report_nm: "주식등의대량보유상황보고서(일반)", rcept_no: "R1", flr_nm: "전동규", rcept_dt: "20260807" }],
+    };
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("list.json")) return Promise.resolve(jsonResponse(true, listBody));
+      return Promise.resolve(jsonResponse(false, {})); // majorstock.json 장애 상황
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { filings, errors } = await fetchEquityDisclosures("key", new Date("2026-08-07"));
+
+    expect(filings).toEqual([]);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain("DART 상세조회 실패");
+  });
 });

@@ -49,7 +49,9 @@ async function fetchDetail(apiKey: string, item: DartListItem): Promise<DartFili
   const isMajor = item.report_nm.includes("대량보유");
   const url = isMajor ? MAJORSTOCK_URL : ELESTOCK_URL;
   const res = await fetch(`${url}?crtfc_key=${apiKey}&corp_code=${item.corp_code}`);
-  if (!res.ok) return null;
+  // HTTP 실패는 null이 아니라 던진다 — null은 "정상 응답인데 이 공시와 매칭 안 됨"에만 쓰고,
+  // API 장애는 호출부(fetchEquityDisclosures)의 errors 배열에 남아야 조용히 묻히지 않는다.
+  if (!res.ok) throw new Error(`DART ${isMajor ? "majorstock" : "elestock"} 요청 실패: ${res.status}`);
   const data = (await res.json()) as { status: string; list?: (MajorstockRow | ElestockRow)[] };
   if (data.status !== "000" || !data.list) return null;
   const match = data.list.find((r) => r.rcept_no === item.rcept_no);
@@ -90,8 +92,16 @@ export async function fetchEquityDisclosures(
     return { filings: [], errors };
   }
 
+  // .catch(() => null)로 개별 상세조회 실패를 조용히 삼키면, DART majorstock/elestock 쪽 장애로
+  // 전부 실패한 날도 "그냥 공시가 없었다"와 구분이 안 된다(다른 소스들은 다 errors 배열에 남기는데
+  // 여기만 안 그랬다 — 코드 감사로 발견). allSettled로 바꿔서 실제로 던진 에러만 기록한다
+  // (fetchDetail이 자체적으로 null을 반환하는 정상 케이스—예: rcept_no 매칭 실패—는 에러 아님).
   const targets = data.list.slice(0, maxDetail);
-  const results = await Promise.all(targets.map((item) => fetchDetail(apiKey, item).catch(() => null)));
-  const filings = results.filter((f): f is DartFiling => f !== null);
+  const settled = await Promise.allSettled(targets.map((item) => fetchDetail(apiKey, item)));
+  const filings: DartFiling[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled" && r.value !== null) filings.push(r.value);
+    else if (r.status === "rejected") errors.push(`DART 상세조회 실패: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
+  }
   return { filings, errors };
 }

@@ -4,6 +4,7 @@ import { ScoreBadge, DecisionBadge } from "@/components/ScoreBadge";
 import { RiskyNewsList } from "@/components/RiskyNewsList";
 import {
   Step2Donut, Step3ThresholdBar, Step4Quadrant, Step6SectorBars, Step7Gauge, Step8ContributionBar,
+  GRAPH_COLOR_PURPLE, GRAPH_COLOR_AMBER,
 } from "@/components/StepGraphs";
 import { STEP_TIPS } from "@/lib/scoring/tips";
 import { decisionFromScore, WEIGHTS } from "@/lib/scoring/pure";
@@ -73,9 +74,9 @@ export function ReportView({
   const sectorReturns = sectorReturnsFromDetails(details?.step6);
   const step8Contributions = [
     { label: `유동성×${WEIGHTS.step2}`, weighted: step2.finalScore * WEIGHTS.step2, color: "var(--accent)" },
-    { label: `캐리×${WEIGHTS.step3}`, weighted: step3.score * WEIGHTS.step3, color: "#8b7fd6" },
+    { label: `캐리×${WEIGHTS.step3}`, weighted: step3.score * WEIGHTS.step3, color: GRAPH_COLOR_PURPLE },
     { label: `환율금유가×${WEIGHTS.step4}`, weighted: step4.score * WEIGHTS.step4, color: "var(--pos)" },
-    { label: `자금도착×${WEIGHTS.step5}`, weighted: step5.score * WEIGHTS.step5, color: "#e0a63e" },
+    { label: `자금도착×${WEIGHTS.step5}`, weighted: step5.score * WEIGHTS.step5, color: GRAPH_COLOR_AMBER },
     { label: `섹터×${WEIGHTS.step6}`, weighted: step6.score * WEIGHTS.step6, color: "var(--ink-faint)" },
   ];
 

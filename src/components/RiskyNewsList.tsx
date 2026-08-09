@@ -82,10 +82,10 @@ export function RiskyNewsList({ riskyNews }: { riskyNews: RiskyNewsItem[] }) {
         ))}
       </div>
       <div className="space-y-2">
-        {shown.map((n, i) => {
+        {shown.map((n) => {
           const style = SEVERITY_STYLE[n.severity];
           return (
-            <div key={i} className={`rounded-md px-3 py-2 text-xs ${style.box}`}>
+            <div key={n.url} className={`rounded-md px-3 py-2 text-xs ${style.box}`}>
               <p className={`[word-break:keep-all] ${style.text}`}>
                 <span className={`mr-1 rounded px-1 py-0.5 text-[10px] font-medium ${style.badge}`}>{style.label}</span>
                 {n.summary}

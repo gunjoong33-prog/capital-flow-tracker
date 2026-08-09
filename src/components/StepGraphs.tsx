@@ -2,6 +2,12 @@
 // 전부 실제 표시값(details 표)에서 이미 검증된 숫자만 가져다 쓴다 — 새로운 계산을 하지 않는다
 // (숫자 자체는 run.ts가 만든 걸 그대로 재사용, 여기선 시각화만).
 
+// site.module.css의 --pos/--neg/--accent 팔레트엔 보라·호박색이 없다(중간 경고 톤·8단계
+// 기여도 5개 구간을 다 구분하려면 색이 더 필요함) — 여기 한 곳에서만 상수로 관리하고
+// ReportView.tsx가 가져다 쓴다(예전엔 두 파일에 같은 16진수를 각자 따로 박아뒀었다).
+export const GRAPH_COLOR_PURPLE = "#8b7fd6";
+export const GRAPH_COLOR_AMBER = "#e0a63e";
+
 function GraphBox({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
@@ -117,7 +123,7 @@ export function Step7Gauge({ vix, fearGreed }: { vix: number | null; fearGreed: 
   const fgPct = fearGreed !== null ? Math.min(100, Math.max(0, fearGreed)) : 50;
   const circumference = 188.5; // 반원 둘레(r=60) 근사
   const dash = (fgPct / 100) * circumference;
-  const zoneColor = fearGreed === null ? "var(--ink-faint)" : fearGreed < 25 || fearGreed > 75 ? "var(--neg)" : fearGreed < 45 || fearGreed > 55 ? "#e0a63e" : "var(--pos)";
+  const zoneColor = fearGreed === null ? "var(--ink-faint)" : fearGreed < 25 || fearGreed > 75 ? "var(--neg)" : fearGreed < 45 || fearGreed > 55 ? GRAPH_COLOR_AMBER : "var(--pos)";
   return (
     <GraphBox label="VIX · 공포탐욕지수">
       <div className="flex flex-wrap items-center gap-6">

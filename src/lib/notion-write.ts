@@ -68,12 +68,40 @@ export interface DailyNotionInput {
   sentiment: { name: string; cause: string }[]; // CNN F&G, VIX
 }
 
-/** 오늘자 체크리스트 결과를 노션 11개 하위 DB에 전부 기록한다. 생성된 페이지 ID를 전부 반환(정리·추적용). */
+/** 오늘자 체크리스트 결과를 노션 11개 하위 DB에 전부 기록한다. 생성된 페이지 ID를 전부 반환(정리·추적용).
+ *
+ * 20여 개 행을 순차 생성하는 도중 하나라도 실패하면(네트워크 순단 등), 이미 만들어진 앞쪽 행들은
+ * 그대로 남는다 — pages.create는 upsert가 아니라 dedup도 없어서, 실패 후 파이프라인을 수동 재실행하면
+ * 이미 성공했던 행들이 중복 생성된다(코드 감사로 발견). 전부-아니면-없음으로 만들어서, 실패 시
+ * 그때까지 만든 행을 전부 archiveNotionPages로 되돌리고 에러를 그대로 다시 던진다 — 재시도가
+ * 항상 "깨끗한 상태에서 다시 시작"이 되게 한다.
+ */
 export async function writeDailyChecklistToNotion(input: DailyNotionInput) {
   const notion = getNotionClient();
   const d = input.date;
   const pageIds: string[] = [];
 
+  try {
+    await writeDailyChecklistRows(notion, d, input, pageIds);
+  } catch (err) {
+    if (pageIds.length > 0) {
+      await archiveNotionPages(pageIds).catch(() => {
+        // 롤백 자체가 실패하면(예: 그 사이 또 네트워크 순단) 원래 에러를 덮지 않는다 — 아래에서
+        // 원래 에러를 그대로 던지되, 이 부분 페이지들이 남아있을 수 있다는 뜻이라 수동 확인이 필요.
+      });
+    }
+    throw err;
+  }
+
+  return { pageIds, count: pageIds.length };
+}
+
+async function writeDailyChecklistRows(
+  notion: NotionClient,
+  d: string,
+  input: DailyNotionInput,
+  pageIds: string[]
+): Promise<void> {
   pageIds.push(
     await addRow(notion, DB.지정학및정책, {
       "지정학 및 정책": titleProp(input.geopolitics.summary.slice(0, 100)),
@@ -190,8 +218,6 @@ export async function writeDailyChecklistToNotion(input: DailyNotionInput) {
       })
     );
   }
-
-  return { pageIds, count: pageIds.length };
 }
 
 /**
