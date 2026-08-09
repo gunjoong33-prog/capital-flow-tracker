@@ -220,85 +220,6 @@ export async function aggregatePeriod(type: PeriodType, reportDate: Date) {
   };
 }
 
-// 일간 종합 보고서(comprehensive-report.ts)와 같은 5단 구조(원인→환경→이동→전망→판단)로
-// 내용 순서는 통일하되, 가독성을 위해 형식은 다르게 간다 — 일간은 문단으로 길게 흐르는 산문체지만
-// 여기는 "한 줄에 한 문장씩" 요구를 받아 tips.ts·종합판단 박스와 같은 방식으로 바꾼다(사용자 지적,
-// 실제 확인 — 기존엔 UI(reports/[type]/[start]/page.tsx)에 whitespace-pre-line도 없어서 설령
-// 줄바꿈을 넣어도 화면에서 다 붙어버렸다, 같이 수정함). 일간과 달리 "예측"에 해당하는 재료가
-// firstScore→lastScore 방향성 하나뿐이라 ④ 항목은 그만큼 짧게 쓰도록 명시한다.
-function buildPeriodNarrativePrompt(summary: Awaited<ReturnType<typeof aggregatePeriod>>): string {
-  // DB에 저장되는 summary(UI가 읽는 원본)는 원자료 코드(WALCL 등)를 그대로 두고, LLM에게 보낼
-  // 사본만 한글 이름으로 바꾼다 — 위 문체 규칙에서 "코드 대신 이 이름을 그대로 써라"고 지시한 것과
-  // 짝을 이룬다.
-  const promptJson = {
-    ...summary,
-    metricChangesPct: relabelMetrics(summary.metricChangesPct),
-    metricPointChangesBp: relabelMetrics(summary.metricPointChangesBp),
-  };
-  return `너는 매크로 자본흐름을 직접 챙겨보는 개인 투자자이고, 지금 쓰는 글은 자기 자신에게 존댓말로
-보고하는 ${PERIOD_LABEL[summary.periodType]} 브리핑이다(반말로 쓰는 사적인 일기가 아니다). 아래는
-${summary.start} ~ ${summary.end} 기간 동안 집계된 데이터(JSON)다.
-
-*** 문체 규칙(가장 중요, 다른 모든 규칙보다 우선) ***
-- 출력하는 모든 문장은 예외 없이 "~습니다/~입니다/~합니다/~했습니다/~겠습니다" 같은 존댓말(합니다체)로
-  끝나야 한다. "~다/~였다/~한다/~하다/~겠다"처럼 "다"로 끝나는 평서체 문장은 단 하나도 섞이면 안 된다.
-- 문장이 끝날 때마다 반드시 줄바꿈해라 — 한 줄에 문장 하나만 오게 써라. 두 문장을 한 줄에 이어
-  쓰거나 문단처럼 길게 흘려 쓰지 마라(일간 종합 보고서와 다른 부분이니 특히 주의해라).
-- 독자는 주식·경제를 전혀 모르는 일반인이라고 생각해라. "역레포", "크레딧 스프레드",
-  "베어 스티프닝", "사분면", "텀프리미엄" 같은 말이 나오면 처음 등장할 때 한 번은 짧게 무슨
-  뜻이고 왜 중요한지 풀어줘라(예: "역레포(은행이 하루짜리로 연준에 돈을 맡기는 것으로, 늘어날수록
-  시장에 도는 돈은 줄어든다는 뜻)"). 매번 길게 설명할 필요는 없고, 문장 안에 자연스럽게 짧은
-  괄호 설명만 끼워 넣으면 된다. 용어 뜻만 풀고 끝내지 말고 "그래서 이게 자산 가격에 어떤 영향을
-  주는지"도 한 문장 안에 같이 담아라 — 정의만 나열하면 여전히 어렵게 느껴진다. 분석의 깊이와
-  정확성은 절대 낮추지 마라. 아래 JSON의 항목 이름은 이미 한글로 풀어져 있으니(예: WALCL 대신
-  "연준 대차대조표") 그 이름을 그대로 써라.
-- JSON의 필드 이름(vetoDays, jpySpikeDays, avgStepScores.liquidity, quadrantCounts,
-  decisionCounts, firstScore/lastScore 같은 영문 변수명)을 절대 본문에 그대로 옮겨 적지 마라 —
-  괄호 안에도 안 된다. 뜻만 한국어 문장으로 풀어써라(예: "거부권 발동 일수(vetoDays)가 4일"이
-  아니라 그냥 "이 기간 중 나흘이나 거부권이 발동됐습니다"처럼).
-- 크레딧 스프레드·실질금리·미국/일본 10년물·VIX는 원자료 자체가 이미 %(또는 포인트) 단위라서
-  "몇 % 움직였는지"(metricChangesPct)와 "몇 bp/포인트 움직였는지"(metricPointChangesBp)가
-  전혀 다른 얘기다 — 281bp였던 크레딧 스프레드가 284bp로 3bp만 움직여도 metricChangesPct는
-  "+1.07%"로 나오는데, 이걸 그대로 "1.07% 상승"이라고만 쓰면 스프레드가 1%p(100bp)나 벌어진
-  것처럼 오해하게 만든다. 이 5개 지표는 반드시 metricPointChangesBp의 bp(또는 포인트) 값으로
-  말해라 — %는 쓰지 마라. 나머지 지표(지수·환율·원자재 등)는 원래대로 %를 써도 된다.
-
-원칙
-- 집계 JSON에 없는 숫자나 사실을 지어내지 마라. 데이터가 있는 날이 적으면 그 사실을 먼저 밝혀라.
-- 하루치 사건이 아니라 "이 기간 전체의 흐름"을 써라 — 기간 시작 점수에서 끝 점수로 어떻게
-  달라졌는지, 결론이 며칠씩 어떻게 나뉘었는지가 핵심이다.
-- 단계 번호("2단계" 등)를 쓰지 말고 "유동성", "캐리 트레이드"처럼 내용으로 불러라.
-- 다섯 덩어리 사이에는 빈 줄을 하나씩 넣어 구분하되, 소제목은 달지 마라.
-
-다뤄야 할 내용 — 아래 다섯 덩어리를 이 순서대로, 각 덩어리는 한 줄에 한 문장씩 여러 줄로 써라.
-① 이 기간 자본을 움직인 가장 큰 요인은 무엇이었는지.
-   거부권이 발동된 날이 기간의 절반을 넘으면 그 자체가 이 기간의 성격이다.
-   엔화 변동성 급등이 감지된 날이 있으면 반드시 짚어라.
-② 이 기간이 자산 가격을 들어올리기 좋은 환경이었는지.
-   유동성 평균 점수와 유동성 관련 항목(연준 대차대조표·역레포·재무부 일반계정·크레딧
-   스프레드·실질금리) 변화율을 근거로 판정해라. 캐리 트레이드 평균 점수도 함께 다뤄라 —
-   이것도 자산을 떠받치는 자금원이기 때문이다.
-③ 자본이 실제로 어디로 갔는지.
-   지수별 변화율(S&P500·나스닥100·러셀2000·다우존스)과 금·달러·비트코인의 방향, 이 기간
-   가장 자주 충족된 섹터를 종합해 지목해라. 사분면(금값·실질금리 방향 조합) 분포가 한쪽으로
-   쏠렸으면 그 국면이 기간 내내 지속됐는지도 짚어라. ②의 환경 판정과 ③의 실제 이동이
-   어긋나면 반드시 짚어라 — 환경은 나쁜데 자금은 들어왔거나, 환경은 좋은데 안 들어왔다면
-   그게 이 기간 가장 중요한 관찰이다.
-④ 다음 기간에 자본이 어디로 갈 가능성이 있는가
-   *** 집계에 있는 추세로만 조건문으로 써라. 그 밖의 예측은 절대 하지 마라. *** 점수가
-   기간 시작에서 끝으로 어느 방향으로 움직였는지가 사실상 유일한 추세 재료다.
-   단정하지 마라 — 재료가 얇으면 "지금 데이터로는 방향을 좁히기 어렵습니다"라고 쓰는 게
-   지어내는 것보다 낫다.
-⑤ 이 기간을 통틀어 주식시장에 들어가기 좋았는지, 그리고 지금은 어떤지.
-   평균 점수와 결론이 어떻게 나뉘었는지를 근거로 담백하게 정리해라.
-   매번 같은 문장으로 끝내지 말고 이 기간 상황에 맞는 대응 한 문장으로 마무리해라.
-
-마지막으로 다시 한번: 문장이 끝날 때마다 줄바꿈해라. 한 줄에 문장 하나뿐이어야 한다.
-
-집계 JSON:
-${JSON.stringify(promptJson, null, 2)}`;
-}
-
 // gemini-flash-latest·Mistral 계열 모두 4~5문단짜리 긴 글을 다 채우려면 2048로는 부족하다는 걸
 // comprehensive-report.ts(일간)에서 이미 확인했다 — 같은 여유(8192)를 준다.
 const COMPREHENSIVE_MAX_OUTPUT_TOKENS = 8192;
@@ -306,9 +227,8 @@ const COMPREHENSIVE_MAX_OUTPUT_TOKENS = 8192;
 /**
  * 일간 종합보고서(comprehensive-report.ts)와 완전히 같은 문체·깊이·5단 구조(원인→환경→이동→전망→
  * 판단, 문단체, 합니다체, 소제목 없이 흐름으로만 구분)를 기간 집계 데이터에 맞춰 그대로 적용한다.
- * 위 buildPeriodNarrativePrompt(한 줄에 한 문장씩)와는 별도 산출물 — narrative는 아카이브 목록에서
- * 짧게 훑어볼 용도로 이미 사용자가 요청해 만든 포맷이라 그대로 두고, 이건 "종합보고서" 버튼처럼
- * 깊이 읽는 용도로 새로 추가한다.
+ * 예전엔 이거 말고 "한 줄에 한 문장씩" 짧은 narrative도 종합보고서 위에 따로 보여줬는데, 사용자
+ * 요청으로 그 필드·화면 노출을 전부 없애고 이 종합보고서 하나만 남겼다(2026-08-09).
  *
  * 일간판과 다른 점: riskyNews·step5BigTech·step7Institutional처럼 "그날의 개별 사건·종목" 데이터가
  * 기간 집계엔 없다(aggregateFromDaily가 점수만 평균내지 원본 사건을 보존하지 않음) — 그래서 ①·③
@@ -410,12 +330,6 @@ export async function generatePeriodComprehensiveReport(summary: Awaited<ReturnT
 
 export async function generateAndSavePeriodReport(type: PeriodType, reportDate: Date) {
   const summary = await aggregatePeriod(type, reportDate);
-  let narrative: string;
-  try {
-    narrative = await generateNarrative(buildPeriodNarrativePrompt(summary));
-  } catch (err) {
-    narrative = `[해설 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
-  }
 
   let comprehensiveReport: string;
   try {
@@ -429,9 +343,9 @@ export async function generateAndSavePeriodReport(type: PeriodType, reportDate: 
     where: { periodType_periodStart: { periodType: type, periodStart: start } },
     create: {
       periodType: type, periodStart: start, periodEnd: end,
-      summary: summary as unknown as Prisma.InputJsonValue, narrative, comprehensiveReport,
+      summary: summary as unknown as Prisma.InputJsonValue, comprehensiveReport,
     },
-    update: { periodEnd: end, summary: summary as unknown as Prisma.InputJsonValue, narrative, comprehensiveReport },
+    update: { periodEnd: end, summary: summary as unknown as Prisma.InputJsonValue, comprehensiveReport },
   });
 
   return summary;

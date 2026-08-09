@@ -92,18 +92,6 @@
   color: var(--ink-faint);
 }
 
-.narrative {
-  white-space: pre-line;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg-raised);
-  padding: 1.3rem 1.4rem;
-  font-size: 0.9rem;
-  line-height: 1.75;
-  color: var(--ink-dim);
-  margin: 1.2rem 0;
-}
-
 .comprehensiveToggle {
   display: flex;
   cursor: pointer;

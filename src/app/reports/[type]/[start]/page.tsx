@@ -80,8 +80,6 @@ export default async function ReportDetailPage({
           </div>
         </div>
 
-        {report.narrative && <p className={styles.narrative}>{report.narrative}</p>}
-
         {report.comprehensiveReport && (
           <div>
             <input type="checkbox" id="comprehensive-toggle" className={styles.comprehensiveCheckbox} />
