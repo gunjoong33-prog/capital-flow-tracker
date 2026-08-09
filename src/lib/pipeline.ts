@@ -404,6 +404,12 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
   };
 }
 
+// buildNotionInput 안에서 아직 실데이터 연동이 안 돼 항상 같은 문자열로 채워지는 자리표시자들 —
+// 리터럴로 곳곳에 흩어져 있던 걸(코드 감사로 발견) 이름 붙여 한 곳에 모아뒀다. 나중에 실제 구현이
+// 붙으면 이 두 상수를 참조하는 자리만 grep해서 찾으면 된다.
+const NOT_AUTO_JUDGED = "자동 미판정"; // 한국은행 기준금리·국내 CPI — 자동 판정 로직 미구현
+const NOT_TRACKED = "-"; // 전일/YTD 변동, 유가·환율 status — 원자료는 있으나 계산 미구현
+
 async function buildNotionInput(
   date: string,
   report: Awaited<ReturnType<typeof runDailyAnalysis>>,
@@ -435,8 +441,8 @@ async function buildNotionInput(
         }
       : { summary: "LLM 판정 결과 리스크 뉴스 없음", link: null, risky: false },
     domesticLiquidity: [
-      { name: "한국은행 기준금리", condition: "인하 또는 동결 흐름", status: "자동 미판정" },
-      { name: "국내 CPI", condition: "목표치(2%) 근접 추세", status: "자동 미판정" },
+      { name: "한국은행 기준금리", condition: "인하 또는 동결 흐름", status: NOT_AUTO_JUDGED },
+      { name: "국내 CPI", condition: "목표치(2%) 근접 추세", status: NOT_AUTO_JUDGED },
       {
         name: "외국인 순매수(코스피)",
         condition: "5거래일 누적 순매수",
@@ -460,20 +466,20 @@ async function buildNotionInput(
       status: `${report.step3.zone} (${report.step3.spreadBp}bp)`,
     },
     oil: [
-      { name: "WTI", priceChange: wti ? `$${wti.value.toFixed(2)}` : "확인 못함", status: "-" },
-      { name: "브렌트", priceChange: brent ? `$${brent.value.toFixed(2)}` : "확인 못함", status: "-" },
+      { name: "WTI", priceChange: wti ? `$${wti.value.toFixed(2)}` : "확인 못함", status: NOT_TRACKED },
+      { name: "브렌트", priceChange: brent ? `$${brent.value.toFixed(2)}` : "확인 못함", status: NOT_TRACKED },
     ],
     gold: { priceChange: gold ? `$${gold.value.toFixed(2)}` : "확인 못함", status: report.step4.quadrant },
     fx: [
-      { name: "USD/KRW", priceChange: usdkrw ? usdkrw.value.toFixed(2) : "확인 못함", status: "-" },
+      { name: "USD/KRW", priceChange: usdkrw ? usdkrw.value.toFixed(2) : "확인 못함", status: NOT_TRACKED },
       { name: "USD/JPY", priceChange: usdjpy ? usdjpy.value.toFixed(2) : "확인 못함", status: "3단계 결과 참고" },
     ],
     indices: [
-      { name: "나스닥100(NDX)", close: ndx ? ndx.value.toFixed(0) : "확인 못함", dayChange: "-", prevChange: "-", ytdChange: "-" },
-      { name: "러셀2000(RUT)", close: rut ? rut.value.toFixed(0) : "확인 못함", dayChange: "-", prevChange: "-", ytdChange: "-" },
-      { name: "다우존스(DJI)", close: dji ? dji.value.toFixed(0) : "확인 못함", dayChange: "-", prevChange: "-", ytdChange: "-" },
-      { name: "S&P500(SPX)", close: spx ? spx.value.toFixed(0) : "확인 못함", dayChange: "-", prevChange: "-", ytdChange: "-" },
-      { name: "VIX", close: vix ? vix.value.toFixed(2) : "확인 못함", dayChange: "-", prevChange: "-", ytdChange: "-" },
+      { name: "나스닥100(NDX)", close: ndx ? ndx.value.toFixed(0) : "확인 못함", dayChange: NOT_TRACKED, prevChange: NOT_TRACKED, ytdChange: NOT_TRACKED },
+      { name: "러셀2000(RUT)", close: rut ? rut.value.toFixed(0) : "확인 못함", dayChange: NOT_TRACKED, prevChange: NOT_TRACKED, ytdChange: NOT_TRACKED },
+      { name: "다우존스(DJI)", close: dji ? dji.value.toFixed(0) : "확인 못함", dayChange: NOT_TRACKED, prevChange: NOT_TRACKED, ytdChange: NOT_TRACKED },
+      { name: "S&P500(SPX)", close: spx ? spx.value.toFixed(0) : "확인 못함", dayChange: NOT_TRACKED, prevChange: NOT_TRACKED, ytdChange: NOT_TRACKED },
+      { name: "VIX", close: vix ? vix.value.toFixed(2) : "확인 못함", dayChange: NOT_TRACKED, prevChange: NOT_TRACKED, ytdChange: NOT_TRACKED },
     ],
     sectors: sectors.map((s) => ({
       name: s.name,

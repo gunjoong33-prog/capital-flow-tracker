@@ -17,9 +17,16 @@ import {
   TOTAL_WEIGHT,
 } from "./pure";
 import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
-import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
+import {
+  NEWS_RISK_SCORE_THRESHOLD,
+  VIX_OVERHEAT_BELOW,
+  VIX_FEAR_ABOVE,
+  FEAR_GREED_EXTREME_FEAR_BELOW,
+  FEAR_GREED_EXTREME_GREED_ABOVE,
+} from "./types";
 import { buildPptSlides } from "./ppt-slides";
 import { nbsp, slashDate } from "@/lib/text-format";
+import { daysBetween } from "@/lib/date";
 
 // 크레딧 스프레드가 "이미 과도한 낙관(=우호 충족) 구간"으로 넘어가는 경계값 — creditSpreadZone·
 // scoreStep2 입력(creditSpreadAlreadyTight)·forwardSignals 문구까지 총 4곳에서 같은 300bp를
@@ -414,10 +421,10 @@ function summarizeStep7(
   lines.push(
     vix === null
       ? "VIX 데이터를 확인하지 못했습니다."
-      : vix < 15
-        ? `VIX는 ${vix.toFixed(2)}로 과열 구간(15 미만)입니다.`
-        : vix > 25
-          ? `VIX는 ${vix.toFixed(2)}로 공포 구간(25 초과)입니다.`
+      : vix < VIX_OVERHEAT_BELOW
+        ? `VIX는 ${vix.toFixed(2)}로 과열 구간(${VIX_OVERHEAT_BELOW} 미만)입니다.`
+        : vix > VIX_FEAR_ABOVE
+          ? `VIX는 ${vix.toFixed(2)}로 공포 구간(${VIX_FEAR_ABOVE} 초과)입니다.`
           : `VIX는 ${vix.toFixed(2)}로 중립입니다.`
   );
   lines.push(
@@ -458,11 +465,11 @@ interface DailyChange {
 async function dailyChange(metric: string, asOf: Date = new Date()): Promise<DailyChange> {
   const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
   if (!curr) return { latest: null, changeAmount: null, changePct: null, source: null, daysOld: null, prevGapDays: null };
-  const daysOld = Math.round((asOf.getTime() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  const daysOld = daysBetween(asOf, curr.date);
   if (!prev) return { latest: curr.value, changeAmount: null, changePct: null, source: curr.source, daysOld, prevGapDays: null };
   const changeAmount = curr.value - prev.value;
   const changePct = prev.value !== 0 ? (changeAmount / prev.value) * 100 : null;
-  const prevGapDays = Math.round((curr.date.getTime() - prev.date.getTime()) / (1000 * 60 * 60 * 24));
+  const prevGapDays = daysBetween(curr.date, prev.date);
   return { latest: curr.value, changeAmount, changePct, source: curr.source, daysOld, prevGapDays };
 }
 
@@ -665,10 +672,21 @@ async function directionOfWithFreshness(
 ): Promise<{ direction: Direction | null; daysOld: number | null }> {
   const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
   if (!prev || !curr) return { direction: null, daysOld: null };
-  const daysOld = Math.round((asOf.getTime() - curr.date.getTime()) / (1000 * 60 * 60 * 24));
+  const daysOld = daysBetween(asOf, curr.date);
   if (curr.value > prev.value) return { direction: "up", daysOld };
   if (curr.value < prev.value) return { direction: "down", daysOld };
   return { direction: "flat", daysOld };
+}
+
+/** directionOfWithFreshness + "STALE_UNKNOWN_DAYS 이상 묵었으면 flat으로 폴백" 판정까지 한 번에.
+ * 금·달러(DXY) 둘 다 이 3줄짜리 fresh→stale→fallback 패턴을 각자 복붙해 쓰고 있었다. */
+async function freshDirection(
+  metric: string,
+  asOf: Date
+): Promise<{ dir: Direction; stale: boolean; daysOld: number | null }> {
+  const fresh = await directionOfWithFreshness(metric, asOf);
+  const stale = fresh.daysOld !== null && fresh.daysOld >= STALE_UNKNOWN_DAYS;
+  return { dir: stale ? "flat" : fresh.direction ?? "flat", stale, daysOld: fresh.daysOld };
 }
 
 /**
@@ -1090,15 +1108,13 @@ export async function runDailyAnalysis(
 
   // 4단계 — 금·달러(USD/KRW)는 Yahoo 일별 지표라 며칠째 안 갱신되면 방향 판정 자체가 낡은 값 비교가
   // 될 수 있다. 실질금리(REAL_RATE)는 FRED 월간 지표라 이 신선도 검사 대상이 아니다.
-  const goldFresh = await directionOfWithFreshness(METRICS.GOLD, asOf);
-  const goldStale = goldFresh.daysOld !== null && goldFresh.daysOld >= STALE_UNKNOWN_DAYS;
-  const goldDir = goldStale ? "flat" : goldFresh.direction ?? "flat";
+  const gold = await freshDirection(METRICS.GOLD, asOf);
+  const goldDir = gold.dir;
   const realRateDir = (await directionOf(METRICS.REAL_RATE, asOf)) ?? "flat";
   // 달러 방향은 USD/KRW가 아니라 DXY(달러 인덱스) 기준 — 원화는 한국 고유 수급 노이즈가 커서
   // 글로벌 달러 강약의 대리변수로 부적합하다(위 METRICS.DXY 주석 참고).
-  const dollarFresh = await directionOfWithFreshness(METRICS.DXY, asOf);
-  const dollarStale = dollarFresh.daysOld !== null && dollarFresh.daysOld >= STALE_UNKNOWN_DAYS;
-  const dollarDir = dollarStale ? "flat" : dollarFresh.direction ?? "flat";
+  const dollar = await freshDirection(METRICS.DXY, asOf);
+  const dollarDir = dollar.dir;
   const step4 = scoreStep4({
     goldDirection: goldDir,
     realRateDirection: realRateDir,
@@ -1112,8 +1128,8 @@ export async function runDailyAnalysis(
     {
       label: "금 가격 방향",
       criterion: "하락 시 충족\n(사분면 최고점 조합의 방향)",
-      value: goldStale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(goldFresh.daysOld, goldStale)}`,
-      met: goldStale ? null : goldDir === "down",
+      value: gold.stale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(gold.daysOld, gold.stale)}`,
+      met: gold.stale ? null : goldDir === "down",
     },
     {
       // 이전엔 여기서도 "상승 시 충족"으로 met을 매겼는데, 2단계에 이미 "실질금리 3기간 연속 하락(또는
@@ -1125,8 +1141,8 @@ export async function runDailyAnalysis(
     {
       label: "달러 방향(DXY)",
       criterion: "보조 확인\n(실질금리와 같은 방향이면 신호 강함)",
-      value: dollarStale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollarFresh.daysOld, dollarStale)}`,
-      met: dollarStale ? null : step4.dollarConfirms,
+      value: dollar.stale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollar.daysOld, dollar.stale)}`,
+      met: dollar.stale ? null : step4.dollarConfirms,
     },
     { label: "사분면 판정", criterion: "위험선호 우호적 조합 시 충족\n(금↓/보합+실질금리↑ 또는 금↑+실질금리↓/보합)", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
@@ -1299,7 +1315,7 @@ export async function runDailyAnalysis(
 
   // 7단계
   const vixRow = await getLatestMetric(METRICS.VIX, asOf);
-  const vixDaysOld = vixRow ? Math.round((asOf.getTime() - vixRow.date.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const vixDaysOld = vixRow ? daysBetween(asOf, vixRow.date) : null;
   const vixStale = vixDaysOld !== null && vixDaysOld >= STALE_UNKNOWN_DAYS;
   const vix = vixStale ? null : (vixRow?.value ?? null);
   const vixStaleNote = !vixStale && vixDaysOld !== null && vixDaysOld >= STALE_WARN_DAYS ? ` (${vixDaysOld}일 전 데이터)` : "";
@@ -1368,9 +1384,9 @@ export async function runDailyAnalysis(
   details.step7 = [
     {
       label: "VIX",
-      criterion: [nbsp("15 미만 과열"), nbsp("25 초과 공포")].join("\n"),
+      criterion: [nbsp(`${VIX_OVERHEAT_BELOW} 미만 과열`), nbsp(`${VIX_FEAR_ABOVE} 초과 공포`)].join("\n"),
       value: vix === null ? "확인 못함" : `${fmt(vix, 2)}${vixStaleNote}`,
-      met: vix === null ? null : vix >= 15 && vix <= 25,
+      met: vix === null ? null : vix >= VIX_OVERHEAT_BELOW && vix <= VIX_FEAR_ABOVE,
     },
     {
       label: "CNN 공포와 탐욕지수",
@@ -1382,7 +1398,7 @@ export async function runDailyAnalysis(
         nbsp("76~100 극단적탐욕"),
       ].join("\n"),
       value: fearGreed !== null ? `${fearGreed.toFixed(1)}(${cnnFearGreedRating(fearGreed)})` : "확인 못함",
-      met: fearGreed === null ? null : fearGreed >= 25 && fearGreed <= 75,
+      met: fearGreed === null ? null : fearGreed >= FEAR_GREED_EXTREME_FEAR_BELOW && fearGreed <= FEAR_GREED_EXTREME_GREED_ABOVE,
     },
     {
       label: "Put/Call 비율(SPY)",
@@ -1453,7 +1469,7 @@ export async function runDailyAnalysis(
       // 있었다(예: 168bp 남은 걸 168bp를 목표치로 오인) — 문장으로 미리 완성해 옮겨적기만 하면 되게
       // 한다(JPY_VOL_NOTE와 같은 원칙: 판단·계산을 LLM에 맡기지 않는다).
       carrySafeMargin: `현재 ${step3.spreadBp}bp, 안전 마진 350bp까지 ${(350 - step3.spreadBp).toFixed(0)}bp 남음`,
-      vixFearMargin: vix !== null ? `현재 ${vix.toFixed(2)}, 공포 구간 25까지 ${(25 - vix).toFixed(2)}pt 남음` : "확인 못함",
+      vixFearMargin: vix !== null ? `현재 ${vix.toFixed(2)}, 공포 구간 ${VIX_FEAR_ABOVE}까지 ${(VIX_FEAR_ABOVE - vix).toFixed(2)}pt 남음` : "확인 못함",
       creditNormalMargin:
         creditSpreadBp !== null
           ? `현재 ${creditSpreadBp}bp, 정상 수준 ${CREDIT_SPREAD_TIGHT_BP}bp까지 ${(CREDIT_SPREAD_TIGHT_BP - creditSpreadBp).toFixed(0)}bp 남음`

@@ -13,3 +13,10 @@ export function slashDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return `${y}/${m}/${d}`;
 }
+
+/** LLM이 플레이스홀더 치환 뒤 자기 마침표를 하나 더 붙여 "...습니다.."처럼 마침표가 중복되는
+ * 경우가 있다 — comprehensive-report.ts·period-report.ts 둘 다 생성 마지막 단계에서 이 정리를
+ * 똑같이 하고 있던 걸 하나로 모았다(코드 감사로 발견). */
+export function collapseRepeatedDots(text: string): string {
+  return text.replace(/\.\.+/g, ".");
+}

@@ -21,3 +21,9 @@ export function kstDateString(d: Date): string {
 export function toYYYYMMDDCompact(d: Date): string {
   return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
+
+/** 두 Date 사이 일수 차이(반올림) — "최신값이 며칠 전 것인지" 신선도 판정에 run.ts 여러 곳에서
+ * 쓴다(예전엔 (a.getTime() - b.getTime()) / (1000*60*60*24) 계산식을 곳곳에 복붙해뒀었다). */
+export function daysBetween(a: Date, b: Date): number {
+  return Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
+}

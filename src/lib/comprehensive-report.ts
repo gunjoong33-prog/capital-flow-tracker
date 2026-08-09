@@ -3,6 +3,7 @@
 // 계산은 전부 scoring/pure.ts가 결정론적으로 하고, 여기서는 그 결과를 근거로 서술만 생성한다.
 import { generateNarrative } from "@/lib/narrative";
 import { WEIGHTS, TOTAL_WEIGHT } from "@/lib/scoring/pure";
+import { collapseRepeatedDots } from "@/lib/text-format";
 
 // gemini-flash-latest는 내부적으로 thinking 모델로 풀려 추론에 토큰을 많이 쓴다(narrative.ts와 같은 문제).
 // 4문단 + 마지막 요약 문장을 다 채우려면 2048로는 부족해서 넉넉히 잡는다.
@@ -221,5 +222,5 @@ export async function generateComprehensiveReport(report: Parameters<typeof buil
 
   // jpyVolNote가 이미 마침표로 끝나는 완결된 문장인데, LLM이 그 뒤에 자기 마침표를 하나 더 붙이는
   // 경우가 있었다("...습니다.." 중복) — 치환 후 남는 이중 마침표만 하나로 정리한다.
-  return text.replace(/\.\.+/g, ".");
+  return collapseRepeatedDots(text);
 }

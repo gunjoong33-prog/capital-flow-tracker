@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { generateNarrative } from "@/lib/narrative";
 import type { Step1Result, Step2Result, Step3Result, Step4Result, Step5Result, Step6Result, Step8Result } from "@/lib/scoring/types";
+import { collapseRepeatedDots } from "@/lib/text-format";
 
 export type PeriodType = "week" | "month" | "quarter" | "year";
 
@@ -328,7 +329,7 @@ export async function generatePeriodComprehensiveReport(summary: Awaited<ReturnT
     }
   }
 
-  return text.replace(/\.\.+/g, ".");
+  return collapseRepeatedDots(text);
 }
 
 export async function generateAndSavePeriodReport(type: PeriodType, reportDate: Date) {

@@ -16,7 +16,13 @@ import type {
   Step8Input,
   Step8Result,
 } from "./types";
-import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
+import {
+  NEWS_RISK_SCORE_THRESHOLD,
+  VIX_OVERHEAT_BELOW,
+  VIX_FEAR_ABOVE,
+  FEAR_GREED_EXTREME_FEAR_BELOW,
+  FEAR_GREED_EXTREME_GREED_ABOVE,
+} from "./types";
 
 // ── 1단계: 글로벌 환경 — 거부권 ─────────────────────────────
 // 노션 v2 프롬프트 8단계 "1단계 거부권" 절 그대로. 여기에 "단독 즉시발동"(hasSevereNewsInWindow)과
@@ -204,13 +210,13 @@ export function scoreStep6(input: Step6Input): Step6Result {
 
 // ── 7단계: 심리 필터(합산에서 제외, 포지션 크기 조절용) ─────────
 export function scoreStep7(input: Step7Input): Step7Result {
-  const vixOverheated = input.vix !== null && input.vix < 15;
-  const fgOverheated = input.fearGreed !== null && input.fearGreed > 75;
+  const vixOverheated = input.vix !== null && input.vix < VIX_OVERHEAT_BELOW;
+  const fgOverheated = input.fearGreed !== null && input.fearGreed > FEAR_GREED_EXTREME_GREED_ABOVE;
   const bothOverheated = vixOverheated && fgOverheated;
   const oneOverheated = (vixOverheated || fgOverheated) && !bothOverheated;
   const fearZone =
-    (input.vix !== null && input.vix > 25) ||
-    (input.fearGreed !== null && input.fearGreed < 25);
+    (input.vix !== null && input.vix > VIX_FEAR_ABOVE) ||
+    (input.fearGreed !== null && input.fearGreed < FEAR_GREED_EXTREME_FEAR_BELOW);
 
   // 과열 신호 2개(VIX<15 AND F&G>75) 동시 발동은 기존 0.7배 그대로 두고, 1개만 뜬 경우(oneOverheated
   // — 계산은 해뒀지만 그동안 버려지던 신호)에 0.85배 중간 단계를 추가했다. 두 앵커값(0.7, 1.0)은

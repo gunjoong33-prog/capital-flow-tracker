@@ -26,6 +26,46 @@ function parseRow(row: StepDetailRow) {
  * 예: 7단계 기관·내부자 매집).
  * row.url이 하나라도 있으면 "바로가기" 열이 자동으로 추가돼 원본 출처 링크를 보여준다.
  */
+/**
+ * 표 4개 열(지표/기준/실제값/충족) 폭 계산 — 표 변형(narrow/wide/hideMet/resultMode/linkMode)이
+ * 5개 겹치면서 어느 게 우선인지 JSX 안 4중 삼항연산자에 숨어 있던 걸(코드 감사로 발견) 이름 붙은
+ * 함수로 뽑았다. 우선순위는 원래 로직 그대로: narrowCriterion(글자 그대로도 좁게) >
+ * hideMetColumn(충족열 없어진 만큼 나머지에 재분배) > resultMode(범주형 결과 텍스트라 더 넓게) >
+ * wideCriterion(긴 기준 문장) > 기본값.
+ */
+function columnWidths({
+  narrowCriterion,
+  wideCriterion,
+  hideMetColumn,
+  resultMode,
+  linkMode,
+}: {
+  narrowCriterion: boolean;
+  wideCriterion: boolean;
+  hideMetColumn: boolean;
+  resultMode: boolean;
+  linkMode: boolean;
+}) {
+  const label = narrowCriterion ? "w-[20%]" : wideCriterion ? "w-[18%]" : "w-[26%]";
+
+  let criterion: string;
+  if (narrowCriterion) criterion = "w-[14%]";
+  else if (hideMetColumn) criterion = "w-[36%]";
+  else if (resultMode) criterion = "w-[18%]";
+  else if (wideCriterion) criterion = "w-[40%]";
+  else criterion = "w-[32%]";
+
+  let value: string;
+  if (narrowCriterion) value = linkMode ? "w-[54%]" : "w-[66%]";
+  else if (hideMetColumn) value = "w-[38%]";
+  else if (resultMode) value = "w-[36%]";
+  else value = "w-[34%]";
+
+  const met = resultMode ? "w-[20%]" : "w-[8%]";
+
+  return { label, criterion, value, met };
+}
+
 function DetailTable({
   rows,
   hideMetColumn = false,
@@ -40,6 +80,7 @@ function DetailTable({
   const resultMode = rows.some((r) => r.result !== undefined);
   const linkMode = rows.some((r) => r.url);
   const metHeader = resultMode ? "결과" : "충족";
+  const colWidth = columnWidths({ narrowCriterion, wideCriterion, hideMetColumn, resultMode, linkMode });
 
   /** 충족/결과 열 내용 — 표·카드 레이아웃에서 공통으로 쓴다. */
   function MetCell({ row }: { row: StepDetailRow }) {
@@ -54,10 +95,10 @@ function DetailTable({
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full table-fixed text-xs">
           <colgroup>
-            <col className={narrowCriterion ? "w-[20%]" : wideCriterion ? "w-[18%]" : "w-[26%]"} />
-            <col className={narrowCriterion ? "w-[14%]" : hideMetColumn ? "w-[36%]" : resultMode ? "w-[18%]" : wideCriterion ? "w-[40%]" : "w-[32%]"} />
-            <col className={narrowCriterion ? (linkMode ? "w-[54%]" : "w-[66%]") : hideMetColumn ? "w-[38%]" : resultMode ? "w-[36%]" : "w-[34%]"} />
-            {!hideMetColumn && <col className={resultMode ? "w-[20%]" : "w-[8%]"} />}
+            <col className={colWidth.label} />
+            <col className={colWidth.criterion} />
+            <col className={colWidth.value} />
+            {!hideMetColumn && <col className={colWidth.met} />}
             {linkMode && <col className="w-[12%]" />}
           </colgroup>
           <thead>

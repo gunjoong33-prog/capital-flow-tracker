@@ -12,6 +12,14 @@ export type Direction = "up" | "down" | "flat";
 // 거부권을 걸었다 — 사용자가 직접 상향을 지시해 20으로 조정(보수적 선택지). 표본이 늘면 재검토.
 export const NEWS_RISK_SCORE_THRESHOLD = 20;
 
+// 7단계 VIX·공포탐욕지수 과열/공포 임계값. pure.ts(채점)와 run.ts(화면 표시 문구·표)가 같은
+// 기준선을 각자 숫자로 따로 박아뒀던 걸(외부 감사 지적과 별개로 자체 점검 중 발견) 하나로 합쳤다 —
+// 둘 중 하나만 고치고 다른 쪽을 안 고치면 화면에 보이는 구간 설명과 실제 채점이 어긋난다.
+export const VIX_OVERHEAT_BELOW = 15; // 이 미만이면 과열(저변동성 방심 구간)
+export const VIX_FEAR_ABOVE = 25; // 이 초과면 공포 구간
+export const FEAR_GREED_EXTREME_FEAR_BELOW = 25;
+export const FEAR_GREED_EXTREME_GREED_ABOVE = 75;
+
 export interface Step1Input {
   newsRiskScore: number; // 최근 7일 내 리스크 뉴스의 (심각도 × 출처 가중치 × 최근성 감쇠) 합산 점수
   hasRecentEventSurprise: boolean; // 최근 발표된 FOMC/CPI/고용지표의 실제 결과가 통계적 서프라이즈였는지
