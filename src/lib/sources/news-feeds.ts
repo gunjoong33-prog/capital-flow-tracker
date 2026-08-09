@@ -1,5 +1,6 @@
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { callGroq, extractJsonArray } from "@/lib/llm-clients";
+import { BIG_TECH_TICKERS } from "@/lib/sources/types";
 
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
 // Google News RSS: 검색어 기반 공개 RSS(비공식이지만 안정적으로 유지돼온 포맷).
@@ -131,27 +132,36 @@ function dedupOfficialHeadlines(headlines: Headline[]): Headline[] {
 
 // 빅테크 7 종목별 등락 원인 판정용 헤드라인 — 종목마다 별도 검색어로 조회해 티커별로 묶어서 반환한다
 // (지정학 리스크용 fetchCandidateHeadlines와 달리 종목 단위 판정이라 결과를 티커로 구분해야 한다).
-const BIG_TECH_QUERIES: { ticker: string; query: string }[] = [
-  { ticker: "AAPL", query: "Apple AAPL stock" },
-  { ticker: "MSFT", query: "Microsoft MSFT stock" },
-  { ticker: "GOOGL", query: "Google Alphabet GOOGL stock" },
-  { ticker: "AMZN", query: "Amazon AMZN stock" },
-  { ticker: "NVDA", query: "Nvidia NVDA stock" },
-  { ticker: "META", query: "Meta Platforms META stock" },
-  { ticker: "TSLA", query: "Tesla TSLA stock" },
-];
+// 티커 목록은 BIG_TECH_TICKERS에서 그대로 가져온다 — 예전엔 여기 따로 하드코딩돼 있어서, types.ts에서
+// 종목을 추가/제거해도 이 검색은 안 따라가는 드리프트 위험이 있었다(검색어 문구는 종목마다 사람이
+// 손으로 다듬은 거라 Record로 유지).
+const BIG_TECH_QUERY_TEXT: Record<string, string> = {
+  AAPL: "Apple AAPL stock",
+  MSFT: "Microsoft MSFT stock",
+  GOOGL: "Google Alphabet GOOGL stock",
+  AMZN: "Amazon AMZN stock",
+  NVDA: "Nvidia NVDA stock",
+  META: "Meta Platforms META stock",
+  TSLA: "Tesla TSLA stock",
+};
 
-export async function fetchBigTechHeadlines(): Promise<{
+/** Google News의 when:Nd는 검색 "실행 시각" 기준 상대창이라, marketDate가 오늘보다 며칠 전이면
+ * (주말·휴장일 지난 뒤 실행 등) when:1d로는 그날 뉴스를 못 찾는다 — asOf까지 확실히 포함되게
+ * 창을 그만큼 넓힌다(같은 버그를 institutional-signals.ts 쪽 marketDate 미스와 동일 원인으로
+ * 이미 한 번 겪었다). */
+export async function fetchBigTechHeadlines(asOf: Date = new Date()): Promise<{
   byTicker: Record<string, Headline[]>;
   errors: string[];
 }> {
   const errors: string[] = [];
   const byTicker: Record<string, Headline[]> = {};
 
+  const daysBehind = Math.max(1, Math.ceil((Date.now() - asOf.getTime()) / 86_400_000) + 1);
+
   const results = await Promise.allSettled(
-    BIG_TECH_QUERIES.map(({ ticker, query }) =>
+    BIG_TECH_TICKERS.map((ticker) =>
       fetchRss(
-        `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:1d&hl=en-US&gl=US&ceid=US:en`,
+        `https://news.google.com/rss/search?q=${encodeURIComponent(BIG_TECH_QUERY_TEXT[ticker])}+when:${daysBehind}d&hl=en-US&gl=US&ceid=US:en`,
         `google-news-${ticker}`,
         "general",
         3

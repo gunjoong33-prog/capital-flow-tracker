@@ -6,8 +6,8 @@ import { fetchBigTechHeadlines, type Headline } from "@/lib/sources/news-feeds";
 import { BIG_TECH_LABELS } from "@/lib/sources/types";
 import { callGroq, extractJsonArray } from "@/lib/llm-clients";
 
-async function change1dFor(ticker: string): Promise<number | null> {
-  const history = await getMetricHistoryByCount(ticker, 2);
+async function change1dFor(ticker: string, asOf: Date): Promise<number | null> {
+  const history = await getMetricHistoryByCount(ticker, 2, asOf);
   if (history.length < 2) return null;
   const [prev, curr] = history;
   return prev.value !== 0 ? ((curr.value - prev.value) / prev.value) * 100 : null;
@@ -68,16 +68,21 @@ ${sections}`;
 /**
  * 빅테크 7 등락 원인을 판정해 티커별 한 줄 이유를 반환한다. pipeline.ts·refresh-report.ts에서 호출해
  * runDailyAnalysis()에 넘긴다(run.ts 자체는 DB 읽기만 하도록 LLM 호출과 분리 — news-events.ts와 같은 원칙).
+ *
+ * asOf(=marketDate)를 반드시 넘겨야 한다 — 안 넘기면 등락률·뉴스 검색 둘 다 실행 시각("지금") 기준이
+ * 돼서, 주말·휴장일 지나 파이프라인이 도는 날엔 리포트가 다루는 거래일과 다른 뉴스를 찾아온다
+ * (institutional-signals.ts의 FINRA/DART/KRX/Put-Call에서 실제로 겪은 것과 같은 버그 클래스).
  */
 export async function computeBigTechReasons(
-  tickers: readonly string[]
+  tickers: readonly string[],
+  asOf: Date = new Date()
 ): Promise<{ reasons: Record<string, string>; errors: string[] }> {
   const errors: string[] = [];
   const changes = await Promise.all(
-    tickers.map(async (ticker) => ({ ticker, changePct1d: await change1dFor(ticker) }))
+    tickers.map(async (ticker) => ({ ticker, changePct1d: await change1dFor(ticker, asOf) }))
   );
 
-  const { byTicker, errors: fetchErrors } = await fetchBigTechHeadlines();
+  const { byTicker, errors: fetchErrors } = await fetchBigTechHeadlines(asOf);
   errors.push(...fetchErrors);
 
   let reasons: Record<string, string> = {};

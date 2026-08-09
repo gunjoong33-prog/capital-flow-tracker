@@ -129,7 +129,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       try {
         const lastReal = await getLatestMetric(metric);
         if (!lastReal) throw new Error("과거 실제값이 없어 등락률을 곱할 기준점이 없다");
-        const point = await fetchIndexFallback(metric, lastReal.value, avApiKey);
+        const point = await fetchIndexFallback(metric, lastReal.value, avApiKey, today);
         allPoints.push(point);
       } catch (err) {
         sourceErrors.push({ source: `AlphaVantage(지수 폴백):${metric}`, error: err instanceof Error ? err.message : String(err) });
@@ -235,13 +235,15 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     await saveMetricPoints(sectorPoints);
 
     // 2) 채점 — 뉴스·이벤트·엔화급등·공포탐욕지수 모두 위에서 이미 자동 동기화·계산됨.
-    const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS);
-    if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
-    // FINRA·DART·Put/Call·KRX 전부 리포트가 실제로 다루는 거래일(marketDate) 기준으로 조회해야
-    // 한다 — "지금"(파이프라인 실행 시각, KST 오늘)으로 조회하면 리포트가 다루는 날과 하루
-    // 어긋난다(실제 발견된 버그: date=8/8 리포트의 marketDate는 8/7인데 8/8로 조회해 다 "확인
-    // 못함"이 뜬 사례로 발견, 더 심각하게는 8/4~8/7도 조용히 하루 밀린 값을 보여주고 있었음).
+    // 아래 전부(빅테크 등락원인·FINRA·DART·Put/Call·KRX) 리포트가 실제로 다루는 거래일(marketDate)
+    // 기준으로 조회해야 한다 — "지금"(파이프라인 실행 시각, KST 오늘)으로 조회하면 리포트가 다루는
+    // 날과 하루 어긋난다(실제 발견된 버그: date=8/8 리포트의 marketDate는 8/7인데 8/8로 조회해 다
+    // "확인 못함"이 뜬 사례로 발견, 더 심각하게는 8/4~8/7도 조용히 하루 밀린 값을 보여주고 있었음.
+    // 빅테크 등락원인도 같은 버그 클래스였다 — 이후 감사에서 발견해 같이 고침).
     const marketDateAnchor = new Date(`${marketDate}T12:00:00Z`);
+
+    const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS, marketDateAnchor);
+    if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
 
     const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(
       BIG_TECH_TICKERS,
