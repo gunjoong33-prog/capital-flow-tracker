@@ -1,0 +1,32 @@
+/* 1~8단계 탭 버튼의 "선택됨" 강조 스타일.
+   Tailwind의 peer-checked/name: 는 일반 형제 결합자(~)로 컴파일되는데, 이건 대상 요소가
+   라디오의 "진짜 형제"일 때만 동작한다. 이 라벨들은 <nav> 안에 있어서 라디오의 형제가 아니라
+   조카뻘이라 Tailwind로는 표현이 안 된다 — 순수 CSS는 "형제 결합자 다음에 자손 결합자"를
+   체이닝할 수 있어서(A ~ B C) 이 구조를 그대로 표현 가능하다. src/app/indicators/page.module.css의
+   .tipCheckbox:checked ~ .widget__head .widget__tip 과 같은 해법이다. */
+/* :global()로 감싸야 한다 — CSS Modules는 #id도 .class처럼 자동 해싱하는데, DOM의 실제
+   id="step-tab-1"은 해싱 안 된 원본 그대로라 안 감싸면 셀렉터가 영원히 안 맞는다(실제 겪은 버그
+   — 클릭하면 내용은 바뀌는데 탭 강조만 하나도 안 움직였다). */
+:global(#step-tab-1):checked ~ nav .tab1,
+:global(#step-tab-2):checked ~ nav .tab2,
+:global(#step-tab-3):checked ~ nav .tab3,
+:global(#step-tab-4):checked ~ nav .tab4,
+:global(#step-tab-5):checked ~ nav .tab5,
+:global(#step-tab-6):checked ~ nav .tab6,
+:global(#step-tab-7):checked ~ nav .tab7,
+:global(#step-tab-8):checked ~ nav .tab8 {
+  border-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink);
+}
+:global(#step-tab-1):checked ~ nav .tab1 .num,
+:global(#step-tab-2):checked ~ nav .tab2 .num,
+:global(#step-tab-3):checked ~ nav .tab3 .num,
+:global(#step-tab-4):checked ~ nav .tab4 .num,
+:global(#step-tab-5):checked ~ nav .tab5 .num,
+:global(#step-tab-6):checked ~ nav .tab6 .num,
+:global(#step-tab-7):checked ~ nav .tab7 .num,
+:global(#step-tab-8):checked ~ nav .tab8 .num {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

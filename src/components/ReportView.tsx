@@ -1,3 +1,4 @@
+import styles from "@/components/ReportView.module.css";
 import { StepCard, Field } from "@/components/StepCard";
 import { ScoreBadge, DecisionBadge } from "@/components/ScoreBadge";
 import { RiskyNewsList } from "@/components/RiskyNewsList";
@@ -139,42 +140,25 @@ export function ReportView({
       <input type="radio" name="step-tab" id="step-tab-7" className="peer/t7 hidden" />
       <input type="radio" name="step-tab" id="step-tab-8" className="peer/t8 hidden" />
 
-      {/* Tailwind는 클래스명을 소스에서 문자 그대로 스캔하기 때문에(런타임 문자열 조합은 못 읽음),
-          peer-checked/tN: 8개를 map으로 동적 생성하면 안 되고 이렇게 리터럴로 풀어 써야 실제로
-          CSS가 생성된다 — 아래 8개 패널의 hidden peer-checked/tN:block과 같은 이유. */}
+      {/* "선택됨" 강조는 ReportView.module.css의 형제+자손 결합자 체이닝으로 처리한다(Tailwind의
+          peer-checked/name:는 라디오의 "진짜 형제"만 잡는데, 이 라벨들은 <nav> 자손이라 안 먹힌다 —
+          styles.tabN이라는 고정 클래스명만 붙이면 되므로 여기는 데이터 기반 map으로 반복 없이 쓴다. */}
       <nav className="flex justify-between gap-1.5 overflow-x-auto pb-1">
-        <label htmlFor="step-tab-1" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t1:border-[var(--accent-strong)] peer-checked/t1:bg-[var(--accent)]/10 peer-checked/t1:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t1:bg-[var(--accent)] peer-checked/t1:text-[var(--accent-ink)]">1</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[0]}</span>
-        </label>
-        <label htmlFor="step-tab-2" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t2:border-[var(--accent-strong)] peer-checked/t2:bg-[var(--accent)]/10 peer-checked/t2:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t2:bg-[var(--accent)] peer-checked/t2:text-[var(--accent-ink)]">2</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[1]}</span>
-        </label>
-        <label htmlFor="step-tab-3" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t3:border-[var(--accent-strong)] peer-checked/t3:bg-[var(--accent)]/10 peer-checked/t3:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t3:bg-[var(--accent)] peer-checked/t3:text-[var(--accent-ink)]">3</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[2]}</span>
-        </label>
-        <label htmlFor="step-tab-4" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t4:border-[var(--accent-strong)] peer-checked/t4:bg-[var(--accent)]/10 peer-checked/t4:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t4:bg-[var(--accent)] peer-checked/t4:text-[var(--accent-ink)]">4</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[3]}</span>
-        </label>
-        <label htmlFor="step-tab-5" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t5:border-[var(--accent-strong)] peer-checked/t5:bg-[var(--accent)]/10 peer-checked/t5:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t5:bg-[var(--accent)] peer-checked/t5:text-[var(--accent-ink)]">5</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[4]}</span>
-        </label>
-        <label htmlFor="step-tab-6" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t6:border-[var(--accent-strong)] peer-checked/t6:bg-[var(--accent)]/10 peer-checked/t6:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t6:bg-[var(--accent)] peer-checked/t6:text-[var(--accent-ink)]">6</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[5]}</span>
-        </label>
-        <label htmlFor="step-tab-7" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t7:border-[var(--accent-strong)] peer-checked/t7:bg-[var(--accent)]/10 peer-checked/t7:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t7:bg-[var(--accent)] peer-checked/t7:text-[var(--accent-ink)]">7</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[6]}</span>
-        </label>
-        <label htmlFor="step-tab-8" className="flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)] peer-checked/t8:border-[var(--accent-strong)] peer-checked/t8:bg-[var(--accent)]/10 peer-checked/t8:text-[var(--ink)]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)] peer-checked/t8:bg-[var(--accent)] peer-checked/t8:text-[var(--accent-ink)]">8</span>
-          <span className="whitespace-nowrap text-[10px]">{STEP_TAB_TITLES[7]}</span>
-        </label>
+        {STEP_TAB_TITLES.map((title, i) => {
+          const n = i + 1;
+          return (
+            <label
+              key={n}
+              htmlFor={`step-tab-${n}`}
+              className={`${styles[`tab${n}`]} flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)]`}
+            >
+              <span className={`${styles.num} flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)]`}>
+                {n}
+              </span>
+              <span className="whitespace-nowrap text-[10px]">{title}</span>
+            </label>
+          );
+        })}
       </nav>
 
       {/* peer-checked/tN: 은 일반 형제 결합자(~)라서 패널이 라디오와 실제 형제(같은 부모의
