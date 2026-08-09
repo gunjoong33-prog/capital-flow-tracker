@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { StepDetailRow } from "@/lib/scoring/types";
+import styles from "./StepCard.module.css";
 
 /** "Fed 대차대조표(WALCL)" -> 본명 + 코드로 나눈다 — 괄호가 좁은 열 안에서 줄바꿈되며 읽기 불편해지는 걸 막는다. */
 function splitLabel(label: string): { main: string; code: string | null } {
@@ -276,7 +277,7 @@ export function StepCard({
   const tipId = `tip-${step}`;
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-5">
-      {tip && <input type="checkbox" id={tipId} className="peer hidden" />}
+      {tip && <input type="checkbox" id={tipId} className={`peer ${styles.tipCheckbox} hidden`} />}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium text-[var(--ink-dim)]">
@@ -285,7 +286,7 @@ export function StepCard({
           {tip && (
             <label
               htmlFor={tipId}
-              className="flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-[var(--border)] text-[10px] leading-none text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)] peer-checked:border-[var(--accent-strong)] peer-checked:text-[var(--ink)]"
+              className={`${styles.tipIcon} flex h-4 w-4 cursor-pointer select-none items-center justify-center rounded-full border border-[var(--border)] text-[10px] leading-none text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink)]`}
             >
               ?
             </label>

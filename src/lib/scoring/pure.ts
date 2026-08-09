@@ -111,21 +111,28 @@ export function scoreStep4(input: Step4Input): Step4Result {
   let quadrant: string;
   let note: string;
 
+  // gold/rate는 "up이냐 아니냐"의 2분법으로 4버킷을 나눈다 — rate 쪽은 원래부터 "down 아니면
+  // flat이나 어차피 같은 버킷"이라 라벨에 "↓/보합"이라고 정직하게 밝혀왔는데, gold 쪽은
+  // else 분기로 떨어지면서 flat도 "금↓"라고 실제로 안 내려갔는데 내려간 것처럼 잘못 표시하고
+  // 있었다(코드 감사로 발견 — gold==="flat"이면 rate 값과 무관하게 무조건 else로 떨어져 score=3
+  // 라벨까지 나오는, 사실상 두 버그가 겹친 상태였다). gold도 rate와 똑같이 "up 아니면 결과가
+  // 같은 버킷"이라는 사실을 명시적 분기(rate === "up"으로 판정)로 바꾸고, 라벨도 "금↓/보합"으로
+  // 통일해서 실제 방향과 표시가 항상 맞게 한다.
   if (gold === "up" && rate === "up") {
     score = 2;
     quadrant = "금↑ 실질금리↑";
     note = "흔치 않은 조합(인플레 우려+안전자산 수요 동시). 1단계부터 재확인 필요";
-  } else if (gold === "up" && rate !== "up") {
+  } else if (gold === "up") {
     score = 5;
     quadrant = "금↑ 실질금리↓/보합";
     note = "안전자산 매력 유지, 위험도 커지는 중 — 원자재·가치주 유리";
-  } else if (gold === "down" && rate === "up") {
+  } else if (rate === "up") {
     score = 10;
-    quadrant = "금↓ 실질금리↑";
+    quadrant = "금↓/보합 실질금리↑";
     note = "안전자산에서 금융자산으로 이동 중 — 성장주·기술주 유리";
   } else {
     score = 3;
-    quadrant = "금↓ 실질금리↓/보합";
+    quadrant = "금↓/보합 실질금리↓/보합";
     note = "안전자산 매력도 하락, 위험선호도 약함(디플레·경기위축 우려일 수 있음)";
   }
 
@@ -137,7 +144,7 @@ export function scoreStep4(input: Step4Input): Step4Result {
   // 동시에 달러가 실질금리와 다른 방향으로 가는(디커플링) 경우는 "성장 기대"보다 "텀프리미엄 급등"
   // 신호에 가깝다고 보고 점수를 절반(5)으로 낮춘다. 두 조건 모두 필요 — 30Y 백분위만으로는 원인을
   // 못 가리므로(고금리가 오래 지속되면 항상 상단에 있을 수 있다) 디커플링과 함께 볼 때만 조정한다.
-  if (gold === "down" && rate === "up" && us30yPercentile !== null && us30yPercentile >= 90 && !dollarConfirms) {
+  if (gold !== "up" && rate === "up" && us30yPercentile !== null && us30yPercentile >= 90 && !dollarConfirms) {
     score = 5;
     note = "실질금리 상승이 성장 기대보다 장기물 금리 급등(텀프리미엄·금융여건 긴축)에 의한 것으로 보여 성장주 호재로 보기 어려움 — 점수 하향 조정";
   }

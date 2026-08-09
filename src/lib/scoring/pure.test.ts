@@ -103,6 +103,22 @@ describe("scoreStep4", () => {
     const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: 95 });
     expect(result.score).toBe(10);
   });
+
+  // 금이 "flat"(직전과 정확히 동일)일 때 else 분기로 떨어지며 "금↓"라고 실제로 안 내려갔는데
+  // 잘못 표시하던 버그(코드 감사로 발견) — gold===down과 gold===flat이 같은 버킷·점수를 받는 건
+  // 의도한 설계지만, 라벨은 "금↓/보합"으로 정직하게 나와야 한다.
+  it("금이 flat이어도 down과 같은 버킷 점수를 받고 라벨은 '금↓/보합'으로 정직하게 표시한다", () => {
+    const flat = scoreStep4({ goldDirection: "flat", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
+    const down = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
+    expect(flat.score).toBe(down.score);
+    expect(flat.quadrant).toBe("금↓/보합 실질금리↑");
+  });
+
+  it("금이 flat이고 실질금리도 flat이면 3점 버킷, 라벨은 두 축 다 '/보합'", () => {
+    const result = scoreStep4({ goldDirection: "flat", realRateDirection: "flat", dollarDirection: "up", us30yPercentile: null });
+    expect(result.score).toBe(3);
+    expect(result.quadrant).toBe("금↓/보합 실질금리↓/보합");
+  });
 });
 
 describe("scoreStep5", () => {
@@ -167,7 +183,7 @@ describe("scoreStep8", () => {
   const perfectSteps = {
     step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, finalScore: 10 },
     step3: { spreadBp: 400, zone: "안정" as const, score: 10, warning: null },
-    step4: { quadrant: "금↓ 실질금리↑", score: 10, note: "", dollarConfirms: true },
+    step4: { quadrant: "금↓/보합 실질금리↑", score: 10, note: "", dollarConfirms: true },
     step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 10, cryptoAlignsWithRisk: null },
     step6: { qualifying: ["a", "b", "c"], score: 10 },
     step7: { bothOverheated: false, oneOverheated: false, fearZone: false, positionSizeMultiplier: 1.0 },

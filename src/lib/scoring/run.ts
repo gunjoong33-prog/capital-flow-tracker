@@ -1116,7 +1116,7 @@ export async function runDailyAnalysis(
       value: dollarStale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollarFresh.daysOld, dollarStale)}`,
       met: dollarStale ? null : step4.dollarConfirms,
     },
-    { label: "사분면 판정", criterion: "위험선호 우호적 조합 시 충족\n(금↓+실질금리↑ 또는 금↑+실질금리↓/보합)", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
+    { label: "사분면 판정", criterion: "위험선호 우호적 조합 시 충족\n(금↓/보합+실질금리↑ 또는 금↑+실질금리↓/보합)", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
 
   // 보조 지표 — 환율(USD/KRW, USD/JPY)·유가(WTI, 브렌트)의 전일 대비 변동. 원본 프롬프트의 4개 핵심 지표
@@ -1439,8 +1439,8 @@ export async function runDailyAnalysis(
     quadrantScoreTable: {
       "금↑ 실질금리↑": 2,
       "금↑ 실질금리↓/보합": 5,
-      "금↓ 실질금리↑": 10,
-      "금↓ 실질금리↓/보합": 3,
+      "금↓/보합 실질금리↑": 10,
+      "금↓/보합 실질금리↓/보합": 3,
     },
     distanceToThresholds: {
       // 예전엔 raw bp 숫자만 줘서 LLM이 "현재값 대비 목표까지 거리"를 스스로 계산하다 틀리는 사례가

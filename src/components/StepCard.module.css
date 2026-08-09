@@ -1,0 +1,10 @@
+/* "?" 팁 아이콘의 열림 강조 표시. 체크박스는 <section>의 직계 자식이라 내용 박스(peer-checked:block,
+   Tailwind)는 문제없이 열리는데, 아이콘 자체는 wrapper div 두 겹 안에 있어서 Tailwind의
+   peer-checked:는 못 닿는다(형제 결합자는 직계 형제만 봄) — ReportView.module.css와 같은 이유,
+   같은 해법(형제+자손 결합자 체이닝). 체크박스 하나당 섹션 하나라 이름 없이 범용으로 써도
+   섹션 간에 안 겹친다(형제 관계가 각 섹션 안에서만 성립하므로).
+*/
+.tipCheckbox:checked ~ div .tipIcon {
+  border-color: var(--accent-strong);
+  color: var(--ink);
+}

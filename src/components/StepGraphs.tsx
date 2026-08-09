@@ -72,9 +72,9 @@ export function Step4Quadrant({ quadrant }: { quadrant: string }) {
         <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--border)]" />
         <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--border)]" />
         <span className="absolute left-1.5 top-1 text-[10px] text-[var(--ink-faint)]">금↑ 실질금리↑</span>
-        <span className="absolute right-1.5 top-1 text-right text-[10px] text-[var(--ink-faint)]">금↓ 실질금리↑</span>
-        <span className="absolute bottom-1 left-1.5 text-[10px] text-[var(--ink-faint)]">금↑ 실질금리↓</span>
-        <span className="absolute bottom-1 right-1.5 text-right text-[10px] text-[var(--ink-faint)]">금↓ 실질금리↓</span>
+        <span className="absolute right-1.5 top-1 text-right text-[10px] text-[var(--ink-faint)]">금↓/보합 실질금리↑</span>
+        <span className="absolute bottom-1 left-1.5 text-[10px] text-[var(--ink-faint)]">금↑ 실질금리↓/보합</span>
+        <span className="absolute bottom-1 right-1.5 text-right text-[10px] text-[var(--ink-faint)]">금↓/보합 실질금리↓/보합</span>
         <div
           className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)]"
           style={{ left, top, boxShadow: "0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent)" }}
