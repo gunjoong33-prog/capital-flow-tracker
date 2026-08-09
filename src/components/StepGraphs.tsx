@@ -71,20 +71,24 @@ export function Step4Quadrant({ quadrant }: { quadrant: string }) {
   const top = realRateUp ? "28%" : "72%";
   return (
     <GraphBox label="사분면 위치">
-      {/* 왼쪽=금↑ 오른쪽=금↓, 위=실질금리↑ 아래=실질금리↓ — 4개 라벨이 이 두 축으로 일관되게 배치돼야
-          점 위치와 라벨이 실제로 맞는다(처음엔 라벨 4개를 각자 눈대중으로 적어서 좌우/상하 축이
-          안 맞았음 — 실사용 데이터로 확인 중 발견). */}
-      <div className="relative h-44 w-44 rounded-lg border border-[var(--border)]">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--border)]" />
-        <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--border)]" />
-        <span className="absolute left-1.5 top-1 text-[10px] text-[var(--ink-faint)]">금↑ 실질금리↑</span>
-        <span className="absolute right-1.5 top-1 text-right text-[10px] text-[var(--ink-faint)]">금↓/보합 실질금리↑</span>
-        <span className="absolute bottom-1 left-1.5 text-[10px] text-[var(--ink-faint)]">금↑ 실질금리↓/보합</span>
-        <span className="absolute bottom-1 right-1.5 text-right text-[10px] text-[var(--ink-faint)]">금↓/보합 실질금리↓/보합</span>
-        <div
-          className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)]"
-          style={{ left, top, boxShadow: "0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent)" }}
-        />
+      {/* 왼쪽=금↑ 오른쪽=금↓, 위=실질금리↑ 아래=실질금리↓ — 이 두 축으로 라벨과 점 위치가 일관되게
+          맞아야 한다. 라벨을 4개 다 박스 안 모서리에 넣었더니 좁은 박스 폭에 긴 문구가 겹쳐서
+          서로 침범하고 사분면 선까지 가렸음 — 축마다 라벨 하나씩만 박스 바깥에 두는 방식으로 변경. */}
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="text-[10px] text-[var(--ink-faint)]">실질금리↑</span>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-right text-[10px] text-[var(--ink-faint)]">금↑</span>
+          <div className="relative h-40 w-40 shrink-0 rounded-lg border border-[var(--border)]">
+            <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--border)]" />
+            <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--border)]" />
+            <div
+              className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)]"
+              style={{ left, top, boxShadow: "0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent)" }}
+            />
+          </div>
+          <span className="w-14 shrink-0 text-[10px] text-[var(--ink-faint)]">금↓/보합</span>
+        </div>
+        <span className="text-[10px] text-[var(--ink-faint)]">실질금리↓/보합</span>
       </div>
     </GraphBox>
   );
