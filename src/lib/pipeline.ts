@@ -39,6 +39,13 @@ export interface DailyPipelineResult {
   periodReportsGenerated: string[];
 }
 
+// Promise.allSettled 결과 처리부(아래) 10곳 전부가 실패(rejected) 분기에서 이 한 줄을 반복했다
+// (코드 감사로 발견) — "fulfilled"일 때 points/errors를 꺼내는 모양은 소스마다 달라 공용화하지
+// 않고, 정확히 같은 모양인 rejected 분기만 뽑는다.
+function recordSourceError(sourceErrors: { source: string; error: string }[], source: string, reason: unknown) {
+  sourceErrors.push({ source, error: String(reason) });
+}
+
 /**
  * 매일 아침 9시(KST) 실행되는 전체 파이프라인.
  * 1) 데이터 수집 2) 채점 3) 해설 생성 4) DB 저장 5) 노션 기록
@@ -78,44 +85,44 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   if (majorEventsResult.status === "fulfilled") {
     for (const e of majorEventsResult.value.errors) sourceErrors.push({ source: "주요이벤트일정", error: e });
-  } else sourceErrors.push({ source: "주요이벤트일정", error: String(majorEventsResult.reason) });
+  } else recordSourceError(sourceErrors, "주요이벤트일정", majorEventsResult.reason);
 
   if (newsEventsResult.status === "fulfilled") {
     for (const e of newsEventsResult.value.errors) sourceErrors.push({ source: "뉴스판정", error: e });
-  } else sourceErrors.push({ source: "뉴스판정", error: String(newsEventsResult.reason) });
+  } else recordSourceError(sourceErrors, "뉴스판정", newsEventsResult.reason);
 
   if (newsPageResult.status === "fulfilled") {
     for (const e of newsPageResult.value.errors) sourceErrors.push({ source: "뉴스페이지", error: e });
-  } else sourceErrors.push({ source: "뉴스페이지", error: String(newsPageResult.reason) });
+  } else recordSourceError(sourceErrors, "뉴스페이지", newsPageResult.reason);
 
   if (foreignNetBuyResult.status === "fulfilled") {
     allPoints.push(...foreignNetBuyResult.value.points);
     for (const e of foreignNetBuyResult.value.errors) sourceErrors.push({ source: "외국인 순매수(코스피, KIS)", error: e });
-  } else sourceErrors.push({ source: "외국인 순매수(코스피, KIS)", error: String(foreignNetBuyResult.reason) });
+  } else recordSourceError(sourceErrors, "외국인 순매수(코스피, KIS)", foreignNetBuyResult.reason);
 
   if (fredResult.status === "fulfilled") {
     allPoints.push(...fredResult.value.points);
     for (const e of fredResult.value.errors) sourceErrors.push({ source: `FRED:${e.metric}`, error: e.message });
-  } else sourceErrors.push({ source: "FRED", error: String(fredResult.reason) });
+  } else recordSourceError(sourceErrors, "FRED", fredResult.reason);
 
   if (cftcResult.status === "fulfilled" && cftcResult.value) allPoints.push(cftcResult.value);
-  else if (cftcResult.status === "rejected") sourceErrors.push({ source: "CFTC", error: String(cftcResult.reason) });
+  else if (cftcResult.status === "rejected") recordSourceError(sourceErrors, "CFTC", cftcResult.reason);
 
   if (coingeckoResult.status === "fulfilled") allPoints.push(...coingeckoResult.value);
-  else sourceErrors.push({ source: "CoinGecko", error: String(coingeckoResult.reason) });
+  else recordSourceError(sourceErrors, "CoinGecko", coingeckoResult.reason);
 
   if (jp10yResult.status === "fulfilled") allPoints.push(...jp10yResult.value);
-  else sourceErrors.push({ source: "MOF(JP10Y)", error: String(jp10yResult.reason) });
+  else recordSourceError(sourceErrors, "MOF(JP10Y)", jp10yResult.reason);
 
   if (yahooResult.status === "fulfilled") {
     allPoints.push(...yahooResult.value.points);
     for (const e of yahooResult.value.errors) sourceErrors.push({ source: `Yahoo:${e.metric}`, error: e.message });
-  } else sourceErrors.push({ source: "Yahoo", error: String(yahooResult.reason) });
+  } else recordSourceError(sourceErrors, "Yahoo", yahooResult.reason);
 
   if (kr10yResult.status === "fulfilled") allPoints.push(...kr10yResult.value);
 
   if (fearGreedResult.status === "fulfilled") allPoints.push(...fearGreedResult.value);
-  else sourceErrors.push({ source: "CNN 공포탐욕지수", error: String(fearGreedResult.reason) });
+  else recordSourceError(sourceErrors, "CNN 공포탐욕지수", fearGreedResult.reason);
 
   // Yahoo는 무료 비공식 API라 막히면 4·5·6단계가 동시에 전멸한다(외부 감사 지적, 실제 확인) —
   // 채점에 실제로 쓰이는 지수 4개(SPX·DJI·NDX·RUT)만 Alpha Vantage로 폴백한다(무료 25회/일이라
@@ -197,7 +204,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
         ? sectorsResult.value.sectors.map((s) => ({ ...s, source: "yahoo" as const }))
         : [];
     const missingSectorLabels: string[] = [];
-    if (sectorsResult.status !== "fulfilled") sourceErrors.push({ source: "섹터(Yahoo)", error: String(sectorsResult.reason) });
+    if (sectorsResult.status !== "fulfilled") recordSourceError(sourceErrors, "섹터(Yahoo)", sectorsResult.reason);
 
     // 섹터 폴백은 Yahoo와 같은 티커(XLK 등)를 그대로 쓰므로 지수 폴백과 달리 스케일 문제가 없다 —
     // 실패한 섹터만 Alpha Vantage로 직접 계산해서 채운다.
@@ -331,27 +338,20 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       report.details.pptSlides = report.details.pptSlides.map((s) => ({ ...s, headline: headlines[s.step] ?? s.kicker }));
     }
 
-    // 4) DB 저장
+    // 4) DB 저장 — create/update가 date를 빼면 완전히 같은 필드셋이라 한 번만 적어 재사용한다.
     const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
+    const reportFields = {
+      marketDate: new Date(marketDate),
+      step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
+      step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
+      details: asJson(report.details),
+      narrative,
+      dataCompleteness: asJson({ sourceErrors }),
+    };
     await db.dailyReport.upsert({
       where: { date: new Date(today) },
-      create: {
-        date: new Date(today),
-        marketDate: new Date(marketDate),
-        step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
-        step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
-        details: asJson(report.details),
-        narrative,
-        dataCompleteness: asJson({ sourceErrors }),
-      },
-      update: {
-        marketDate: new Date(marketDate),
-        step1: asJson(report.step1), step2: asJson(report.step2), step3: asJson(report.step3), step4: asJson(report.step4),
-        step5: asJson(report.step5), step6: asJson(report.step6), step7: asJson(report.step7), step8: asJson(report.step8),
-        details: asJson(report.details),
-        narrative,
-        dataCompleteness: asJson({ sourceErrors }),
-      },
+      create: { date: new Date(today), ...reportFields },
+      update: reportFields,
     });
 
     // /report·홈은 이제 이 DB 스냅샷을 읽기 전용으로 쓴다(force-dynamic 제거) — 시간 기반 캐시

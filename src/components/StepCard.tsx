@@ -162,6 +162,35 @@ function DetailTable({
   );
 }
 
+/** `<details><summary>{label} 보기 (N개)</summary><DetailTable .../></details>` 뼈대 — StepCard 안에서
+ * 메인/보조/보조2 상세표 3번을 손으로 복붙하던 걸 하나로 뽑았다(코드 감사로 발견). rows가 비어 있으면
+ * 아무것도 렌더링하지 않는다(호출부의 `{x && x.length > 0 && (...)}` 조건을 이 안으로 옮김). */
+function DetailsSection({
+  label,
+  rows,
+  suffix = "",
+  hideMetColumn,
+  wideCriterion,
+  narrowCriterion,
+}: {
+  label: string;
+  rows?: StepDetailRow[];
+  suffix?: string;
+  hideMetColumn?: boolean;
+  wideCriterion?: boolean;
+  narrowCriterion?: boolean;
+}) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <details>
+      <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
+        {label} 보기 ({rows.length}개{suffix})
+      </summary>
+      <DetailTable rows={rows} hideMetColumn={hideMetColumn} wideCriterion={wideCriterion} narrowCriterion={narrowCriterion} />
+    </details>
+  );
+}
+
 interface TipItem {
   text: string;
   marker: string;
@@ -312,30 +341,9 @@ export function StepCard({
 
       {((details && details.length > 0) || (auxDetails && auxDetails.length > 0) || (aux2Details && aux2Details.length > 0)) && (
         <div className="mt-3 space-y-2">
-          {details && details.length > 0 && (
-            <details>
-              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
-                분석 기준·지표 상세 보기 ({details.length}개)
-              </summary>
-              <DetailTable rows={details} wideCriterion={detailsWideCriterion} hideMetColumn={detailsHideMetColumn} />
-            </details>
-          )}
-          {auxDetails && auxDetails.length > 0 && (
-            <details>
-              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
-                {auxLabel} 보기 ({auxDetails.length}개, 집계 제외)
-              </summary>
-              <DetailTable rows={auxDetails} hideMetColumn={auxHideMetColumn} narrowCriterion={auxNarrowCriterion} />
-            </details>
-          )}
-          {aux2Details && aux2Details.length > 0 && (
-            <details>
-              <summary className="cursor-pointer select-none text-xs text-[var(--ink-faint)] hover:text-[var(--ink)]">
-                {aux2Label} 보기 ({aux2Details.length}개, 집계 제외)
-              </summary>
-              <DetailTable rows={aux2Details} hideMetColumn={aux2HideMetColumn} />
-            </details>
-          )}
+          <DetailsSection label="분석 기준·지표 상세" rows={details} wideCriterion={detailsWideCriterion} hideMetColumn={detailsHideMetColumn} />
+          <DetailsSection label={auxLabel} rows={auxDetails} suffix=", 집계 제외" hideMetColumn={auxHideMetColumn} narrowCriterion={auxNarrowCriterion} />
+          <DetailsSection label={aux2Label} rows={aux2Details} suffix=", 집계 제외" hideMetColumn={aux2HideMetColumn} />
         </div>
       )}
     </section>

@@ -7,6 +7,7 @@ import { fetchInsiderTrades, type InsiderTrade } from "@/lib/sources/openinsider
 import { fetchShortVolumeRatios, type ShortVolumeRow } from "@/lib/sources/finra";
 import { fetchEquityDisclosures, type DartFiling } from "@/lib/sources/dart";
 import { BIG_TECH_LABELS, SECTOR_ETFS, SECTOR_LABELS } from "@/lib/sources/types";
+import { nbsp } from "@/lib/text-format";
 
 export interface InstitutionalSignals {
   superInvestorSummary: string;
@@ -63,13 +64,6 @@ function translateMoveDetail(detail: string, action: "buy" | "sell"): string {
   const pct = Math.abs(Number(pctMatch[1]));
   if (pct >= 100) return action === "buy" ? "신규매수" : "전량매도";
   return action === "buy" ? `비중 ${pct}% 확대` : `비중 ${pct}% 축소`;
-}
-
-// 표 열 너비가 좁아서 줄바꿈이 자주 일어나는데, 그냥 공백이면 "티커(회사명)"처럼 한 덩어리로
-// 읽혀야 할 구간이 회사명 중간에서 끊겨 다음 줄로 넘어가 버린다(예: "MOH(Molina Healthcare\nInc.)").
-// 줄바꿈 후보가 되는 공백을 줄바꿈 없는 공백(NBSP)으로 바꿔서 이 단위가 항상 붙어 다니게 한다.
-function nbsp(s: string): string {
-  return s.replace(/ /g, " ");
 }
 
 /** detail 문자열("Reduce -95.40%" 등)에서 절대값 퍼센트만 뽑는다. */

@@ -8,17 +8,12 @@ import {
 } from "@/components/StepGraphs";
 import { STEP_TIPS } from "@/lib/scoring/tips";
 import { decisionFromScore, WEIGHTS } from "@/lib/scoring/pure";
+import { slashDate } from "@/lib/text-format";
 import type {
   Step1Result, Step2Result, Step3Result, Step4Result,
   Step5Result, Step6Result, Step7Result, Step8Result,
   StepDetails, StepDetailRow,
 } from "@/lib/scoring/types";
-
-/** "YYYY-MM-DD" → "YYYY/M/D"(선행 0 없이). run.ts의 slashDate와 같은 표기 규칙(1단계 표시용). */
-function slashDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y}/${m}/${d}`;
-}
 
 /** 그래프용 숫자는 새로 계산하지 않고 이미 화면에 쓰이는 details 표시값에서만 뽑는다
  * (run.ts가 만든 값과 절대 어긋나지 않게 하기 위함 — backfill-ppt-slides.ts와 같은 원칙). */

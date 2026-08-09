@@ -96,6 +96,21 @@ export async function writeDailyChecklistToNotion(input: DailyNotionInput) {
   return { pageIds, count: pageIds.length };
 }
 
+/** items를 순회하며 한 줄씩 addRow — writeDailyChecklistRows 안에서 8번 반복되던 for/push 뼈대를
+ * 뽑아냈다(코드 감사로 발견). 호출부는 DB ID와 항목→속성 매핑 함수만 넘기면 된다. Notion API 호출
+ * 순서를 지키기 위해 병렬(Promise.all)이 아니라 원래처럼 순차 실행한다. */
+async function pushRows<T>(
+  notion: NotionClient,
+  pageIds: string[],
+  databaseId: string,
+  items: T[],
+  toProps: (item: T) => Record<string, unknown>
+): Promise<void> {
+  for (const item of items) {
+    pageIds.push(await addRow(notion, databaseId, toProps(item)));
+  }
+}
+
 async function writeDailyChecklistRows(
   notion: NotionClient,
   d: string,
@@ -112,28 +127,20 @@ async function writeDailyChecklistRows(
     })
   );
 
-  for (const item of input.domesticLiquidity) {
-    pageIds.push(
-      await addRow(notion, DB.국내유동성, {
-        "유동성 지표": titleProp(item.name),
-        "투자 체크리스트 조건": textProp(item.condition),
-        "상태 및 기준 판단": textProp(item.status),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.국내유동성, input.domesticLiquidity, (item) => ({
+    "유동성 지표": titleProp(item.name),
+    "투자 체크리스트 조건": textProp(item.condition),
+    "상태 및 기준 판단": textProp(item.status),
+    날짜: dateProp(d),
+  }));
 
-  for (const item of input.fredIndicators) {
-    pageIds.push(
-      await addRow(notion, DB.FRED지표, {
-        지표: titleProp(item.name),
-        체크박스: checkboxProp(item.qualifies),
-        "투자 체크포인트 조건": textProp(item.condition),
-        "상태 및 기준 판단": textProp(item.status),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.FRED지표, input.fredIndicators, (item) => ({
+    지표: titleProp(item.name),
+    체크박스: checkboxProp(item.qualifies),
+    "투자 체크포인트 조건": textProp(item.condition),
+    "상태 및 기준 판단": textProp(item.status),
+    날짜: dateProp(d),
+  }));
 
   pageIds.push(
     await addRow(notion, DB.US10Y_JP10Y, {
@@ -144,16 +151,12 @@ async function writeDailyChecklistRows(
     })
   );
 
-  for (const item of input.oil) {
-    pageIds.push(
-      await addRow(notion, DB.유가, {
-        "3대 유종": titleProp(item.name),
-        "종가/변동액/변동률": textProp(item.priceChange),
-        "상태 및 분석": textProp(item.status),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.유가, input.oil, (item) => ({
+    "3대 유종": titleProp(item.name),
+    "종가/변동액/변동률": textProp(item.priceChange),
+    "상태 및 분석": textProp(item.status),
+    날짜: dateProp(d),
+  }));
 
   pageIds.push(
     await addRow(notion, DB.실물자산, {
@@ -164,60 +167,40 @@ async function writeDailyChecklistRows(
     })
   );
 
-  for (const item of input.fx) {
-    pageIds.push(
-      await addRow(notion, DB.환율, {
-        화폐: titleProp(item.name),
-        "종가/변동액/변동률": textProp(item.priceChange),
-        "상태 및 분석": textProp(item.status),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.환율, input.fx, (item) => ({
+    화폐: titleProp(item.name),
+    "종가/변동액/변동률": textProp(item.priceChange),
+    "상태 및 분석": textProp(item.status),
+    날짜: dateProp(d),
+  }));
 
-  for (const item of input.indices) {
-    pageIds.push(
-      await addRow(notion, DB.주요주가지수, {
-        "주요 주가지수": titleProp(item.name),
-        "마감 지수 (p)": textProp(item.close),
-        "일간 등락률(%)": textProp(item.dayChange),
-        "전일 대비 변동폭": textProp(item.prevChange),
-        "연초 대비 등락률(%)": textProp(item.ytdChange),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.주요주가지수, input.indices, (item) => ({
+    "주요 주가지수": titleProp(item.name),
+    "마감 지수 (p)": textProp(item.close),
+    "일간 등락률(%)": textProp(item.dayChange),
+    "전일 대비 변동폭": textProp(item.prevChange),
+    "연초 대비 등락률(%)": textProp(item.ytdChange),
+    날짜: dateProp(d),
+  }));
 
-  for (const item of input.sectors) {
-    pageIds.push(
-      await addRow(notion, DB.섹터별자금, {
-        섹터: titleProp(item.name),
-        등락률: textProp(item.return),
-        "자본의 이동 및 근거": textProp(item.note),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.섹터별자금, input.sectors, (item) => ({
+    섹터: titleProp(item.name),
+    등락률: textProp(item.return),
+    "자본의 이동 및 근거": textProp(item.note),
+    날짜: dateProp(d),
+  }));
 
-  for (const item of input.smartMoney) {
-    pageIds.push(
-      await addRow(notion, DB.대형투자자, {
-        대형투자자: titleProp(item.name),
-        "변동 및 분석 일치 확인": textProp(item.note),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.대형투자자, input.smartMoney, (item) => ({
+    대형투자자: titleProp(item.name),
+    "변동 및 분석 일치 확인": textProp(item.note),
+    날짜: dateProp(d),
+  }));
 
-  for (const item of input.sentiment) {
-    pageIds.push(
-      await addRow(notion, DB.공포와탐욕, {
-        지수: titleProp(item.name),
-        "변동 원인": textProp(item.cause),
-        날짜: dateProp(d),
-      })
-    );
-  }
+  await pushRows(notion, pageIds, DB.공포와탐욕, input.sentiment, (item) => ({
+    지수: titleProp(item.name),
+    "변동 원인": textProp(item.cause),
+    날짜: dateProp(d),
+  }));
 }
 
 /**

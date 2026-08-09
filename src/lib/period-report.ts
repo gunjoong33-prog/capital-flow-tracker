@@ -57,11 +57,17 @@ function relabelMetrics(pct: Record<string, number | null>): Record<string, numb
 // 5개 지표는 절대 변화폭(bp 또는 포인트)도 따로 계산해서 LLM에게 같이 준다.
 export const RATE_TYPE_METRICS = new Set(["CREDIT_SPREAD", "REAL_RATE", "US10Y", "JP10Y", "VIX"]);
 
-async function metricPointChange(metric: string, start: Date, end: Date): Promise<number | null> {
+/** 구간 [start,end] 안에서 가장 이른/가장 늦은 MetricValue를 함께 조회한다(metricPointChange·metricChangePct 공용). */
+async function getFirstLastMetricValues(metric: string, start: Date, end: Date) {
   const [first, last] = await Promise.all([
     db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "asc" } }),
     db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "desc" } }),
   ]);
+  return { first, last };
+}
+
+async function metricPointChange(metric: string, start: Date, end: Date): Promise<number | null> {
+  const { first, last } = await getFirstLastMetricValues(metric, start, end);
   if (!first || !last) return null;
   const raw = last.value - first.value;
   // VIX는 지수 자체가 "포인트" 단위로 흔히 불린다(예: "15.99"). 나머지 4개는 원자료가 소수 %라
@@ -127,10 +133,7 @@ interface AggregatedBase {
 }
 
 async function metricChangePct(metric: string, start: Date, end: Date): Promise<number | null> {
-  const [first, last] = await Promise.all([
-    db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "asc" } }),
-    db.metricValue.findFirst({ where: { metric, date: { gte: start, lte: end } }, orderBy: { date: "desc" } }),
-  ]);
+  const { first, last } = await getFirstLastMetricValues(metric, start, end);
   if (!first || !last || first.value === 0) return null;
   return Number((((last.value - first.value) / Math.abs(first.value)) * 100).toFixed(2));
 }

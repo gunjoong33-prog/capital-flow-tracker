@@ -19,6 +19,20 @@ import {
 import type { Direction, SectorInput, Step5Result, StepDetailRow, StepDetails } from "./types";
 import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
 import { buildPptSlides } from "./ppt-slides";
+import { nbsp, slashDate } from "@/lib/text-format";
+
+// 크레딧 스프레드가 "이미 과도한 낙관(=우호 충족) 구간"으로 넘어가는 경계값 — creditSpreadZone·
+// scoreStep2 입력(creditSpreadAlreadyTight)·forwardSignals 문구까지 총 4곳에서 같은 300bp를
+// 매직넘버로 반복 써서(코드 감사로 발견) 하나로 묶는다. 값 자체는 그대로, 이름만 붙였다.
+const CREDIT_SPREAD_TIGHT_BP = 300;
+
+// 7단계 "기관·내부자 매집" 표의 출처 링크 — 런타임 값에 의존하지 않는데도 함수 안에 선언돼 있었다
+// (코드 감사로 발견). 모듈 상단 상수로 올린다.
+const DATAROMA_URL = "https://www.dataroma.com/m/allact.php?typ=a";
+const OPENINSIDER_URL = "http://openinsider.com/latest-insider-trading";
+const FINRA_SHORT_VOLUME_URL = "https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data/daily-short-sale-volume-files";
+const KRX_SHORT_URL = "https://short.krx.co.kr";
+const DART_EQUITY_URL = "https://opendart.fss.or.kr/disclosureinfo/qota/main.do";
 
 /**
  * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
@@ -31,7 +45,7 @@ import { buildPptSlides } from "./ppt-slides";
 // 스프레드가 오래가지 못하고 되돌림(반등) 위험을 안고 있다는 사실(경계 문구)은 서로 다른 얘기다.
 // 문구 자체를 "충족 근거 + 별도 경계"로 명확히 분리해 같은 오독이 반복되지 않게 한다.
 function creditSpreadZone(bp: number): string {
-  if (bp < 300) return "유동성 우호 구간(충족) — 단, 과도한 낙관 상태라 되돌림(반등) 리스크는 별도 경계";
+  if (bp < CREDIT_SPREAD_TIGHT_BP) return "유동성 우호 구간(충족) — 단, 과도한 낙관 상태라 되돌림(반등) 리스크는 별도 경계";
   if (bp < 400) return "낙관에서 정상으로 이행";
   if (bp <= 500) return "역사적 평균 정상 구간";
   if (bp < 600) return "정상에서 경색으로 이행, 주의";
@@ -82,19 +96,6 @@ function describeQuadrantFlip(
   const axisLabel = axis === "gold" ? "금이" : "실질금리가";
   const directionLabel = axis === "gold" ? (flippedGold === "up" ? "상승" : "하락") : flippedRate === "up" ? "상승" : "하락";
   return `${axisLabel} ${directionLabel} 전환하면 '${result.quadrant}'(${result.score}/10)로 이동합니다`;
-}
-
-// 표 열 너비가 좁아 줄바꿈이 자주 일어나는데, 일반 공백이면 "0~24 극단적공포"처럼 한 덩어리로
-// 읽혀야 할 구간이 숫자와 라벨 사이에서 끊겨 다음 줄로 넘어가 버린다. 줄바꿈 후보인 공백을
-// 줄바꿈 없는 공백(NBSP)으로 바꿔서 이 단위가 항상 붙어 다니게 한다(institutional-signals.ts와 같은 패턴).
-function nbsp(s: string): string {
-  return s.replace(/ /g, " ");
-}
-
-/** "YYYY-MM-DD" → "YYYY/M/D"(선행 0 없이). 1단계 분석 지표 표의 날짜 표기를 "/" 구분으로 통일. */
-function slashDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y}/${m}/${d}`;
 }
 
 function fmt(v: number | null, decimals = 2, unit = ""): string {
@@ -496,26 +497,30 @@ interface TrendCheck {
  * 날짜창이 아니라 "최근 N개 데이터포인트"로 가져온다 — 월간 지표(TOTRESNS, REAL_RATE 등)는
  * 발표가 몇 달씩 밀리기도 해서 날짜창 방식으론 필요한 개수를 못 채우는 경우가 있었다.
  */
-async function risingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
+// risingCheck·fallingCheck는 비교 방향(<= vs >=)만 다른 동일 로직이었다 — 하나로 합친다.
+async function trendCheck(
+  metric: string,
+  periods: number,
+  direction: "rising" | "falling",
+  asOf: Date = new Date()
+): Promise<TrendCheck> {
   const history = await getMetricHistoryByCount(metric, periods + 1, asOf);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   if (history.length < periods + 1) return { met: null, latestValue };
   let met = true;
   for (let i = 1; i < history.length; i++) {
-    if (history[i].value <= history[i - 1].value) { met = false; break; }
+    const brokeTrend = direction === "rising" ? history[i].value <= history[i - 1].value : history[i].value >= history[i - 1].value;
+    if (brokeTrend) { met = false; break; }
   }
   return { met, latestValue };
 }
 
+async function risingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
+  return trendCheck(metric, periods, "rising", asOf);
+}
+
 async function fallingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
-  const history = await getMetricHistoryByCount(metric, periods + 1, asOf);
-  const latestValue = history.length > 0 ? history[history.length - 1].value : null;
-  if (history.length < periods + 1) return { met: null, latestValue };
-  let met = true;
-  for (let i = 1; i < history.length; i++) {
-    if (history[i].value >= history[i - 1].value) { met = false; break; }
-  }
-  return { met, latestValue };
+  return trendCheck(metric, periods, "falling", asOf);
 }
 
 /**
@@ -638,14 +643,9 @@ async function tgaDeviationFromRecentAverage(asOf: Date = new Date()): Promise<{
   };
 }
 
+// directionOfWithFreshness(아래)의 daysOld 없는 축약형 — 대부분의 호출부는 방향만 필요하다.
 async function directionOf(metric: string, asOf: Date = new Date()): Promise<Direction | null> {
-  // 날짜창(예: 최근 10일) 방식은 월간 지표(REAL_RATE 등)가 발표 지연 시 데이터 0~1개만 잡혀
-  // 늘 null->"flat"로 새는 버그가 있었다 — "최근 2개 데이터포인트"로 바꿔 발표 주기와 무관하게 동작.
-  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
-  if (!prev || !curr) return null;
-  if (curr.value > prev.value) return "up";
-  if (curr.value < prev.value) return "down";
-  return "flat";
+  return (await directionOfWithFreshness(metric, asOf)).direction;
 }
 
 // Yahoo(등 매일 갱신을 전제로 하는 소스)가 며칠째 막혔을 때, "확인 못함"으로 완전히 숨기지도
@@ -656,7 +656,9 @@ async function directionOf(metric: string, asOf: Date = new Date()): Promise<Dir
 const STALE_WARN_DAYS = 4;
 const STALE_UNKNOWN_DAYS = 10;
 
-/** directionOf와 같지만, 최신 데이터포인트가 며칠 전 것인지(daysOld)도 함께 돌려준다(Yahoo 일별 지표 전용). */
+// 날짜창(예: 최근 10일) 방식은 월간 지표(REAL_RATE 등)가 발표 지연 시 데이터 0~1개만 잡혀
+// 늘 null->"flat"로 새는 버그가 있었다 — "최근 2개 데이터포인트"로 바꿔 발표 주기와 무관하게 동작.
+/** directionOf(방향만)와 같은 로직에 최신 데이터포인트가 며칠 전 것인지(daysOld)도 함께 돌려준다(Yahoo 일별 지표 전용). */
 async function directionOfWithFreshness(
   metric: string,
   asOf: Date = new Date()
@@ -760,8 +762,18 @@ export async function runDailyAnalysis(
   // FOMC·CPI·고용지표를 합쳐 거의 매일 걸려서 거부권이 상시 발동해버림 — 그래서 "예정" 여부가 아니라
   // "지난 발표의 실제 결과"로 기준을 바꿨다. 예정 목록은 정보용으로만 따로 보여준다.)
   const riskyNews = await getRecentRiskyNews(7, asOf);
-  const upcomingEvents = await getUpcomingMajorEvents(14, asOf);
   const recentOutcomes = await evaluateRecentEventOutcomes(5, asOf);
+  // getUpcomingMajorEvents는 asOf 당일 0시(KST) 이상(gte)을 "예정"으로 잡는데, 그 날 안에 이미
+  // 발표까지 끝난 지표(recentOutcomes에 "실제 결과"로 이미 올라온 것)가 섞여 들어올 수 있다 —
+  // 같은 이벤트가 "실제 결과: 예상 범위 내"와 "14일 내 예정된 이벤트" 양쪽에 동시에 뜨는 자기모순이
+  // 실측 확인됐다(2026-08-08 리포트, 미국 고용지표 8/7). 두 함수의 날짜 경계 계산을 각각 손대는
+  // 대신, 이미 결과가 나온 이벤트는 예정 목록에서 이름+날짜로 걸러낸다 — 어느 쪽 경계가 정확하든
+  // 결과적으로 한 이벤트가 두 목록에 동시에 뜨는 일은 없다.
+  const rawUpcomingEvents = await getUpcomingMajorEvents(14, asOf);
+  const evaluatedKeys = new Set(recentOutcomes.map((o) => `${o.name}|${o.date}`));
+  const upcomingEvents = rawUpcomingEvents.filter(
+    (e) => !evaluatedKeys.has(`${e.name}|${e.date.toISOString().slice(0, 10)}`)
+  );
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
   const hasSevereNews = riskyNews.some((n) => n.severity === "high");
   const newsRiskScore = riskyNews.reduce((sum, n) => sum + newsItemWeight(n, asOf), 0);
@@ -861,9 +873,9 @@ export async function runDailyAnalysis(
   const realRateAlreadyLow = realRatePercentile !== null && realRatePercentile <= 25;
   const creditSpread = await fallingCheck(METRICS.CREDIT_SPREAD, 3, asOf);
   const creditSpreadBp = creditSpread.latestValue !== null ? creditSpread.latestValue * 100 : null;
-  // 300bp 미만 = creditSpreadZone()이 이미 "과도한 낙관"으로 분류하는 구간과 동일한 기준을 재사용 —
-  // 화면에 표시되는 구간 라벨과 점수 판정이 서로 다른 기준을 쓰던 불일치를 없앤다.
-  const creditSpreadAlreadyTight = creditSpreadBp !== null && creditSpreadBp < 300;
+  // creditSpreadZone()이 이미 "과도한 낙관"으로 분류하는 구간과 동일한 기준(CREDIT_SPREAD_TIGHT_BP)을
+  // 재사용 — 화면에 표시되는 구간 라벨과 점수 판정이 서로 다른 기준을 쓰던 불일치를 없앤다.
+  const creditSpreadAlreadyTight = creditSpreadBp !== null && creditSpreadBp < CREDIT_SPREAD_TIGHT_BP;
 
   const step2 = scoreStep2({
     walclIncreasing: walcl.met,
@@ -898,7 +910,7 @@ export async function runDailyAnalysis(
     },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
-      criterion: "최근 3기간 연속 축소\n(또는 300bp 미만=이미 과도한 낙관 구간)",
+      criterion: `최근 3기간 연속 축소\n(또는 ${CREDIT_SPREAD_TIGHT_BP}bp 미만=이미 과도한 낙관 구간)`,
       value: creditSpread.latestValue !== null
         ? `${(creditSpread.latestValue * 100).toFixed(0)}bp — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
@@ -1322,12 +1334,6 @@ export async function runDailyAnalysis(
     institutionalMatch = "확인 안 됨";
   }
 
-  const DATAROMA_URL = "https://www.dataroma.com/m/allact.php?typ=a";
-  const OPENINSIDER_URL = "http://openinsider.com/latest-insider-trading";
-  const FINRA_SHORT_VOLUME_URL = "https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data/daily-short-sale-volume-files";
-  const KRX_SHORT_URL = "https://short.krx.co.kr";
-  const DART_EQUITY_URL = "https://opendart.fss.or.kr/disclosureinfo/qota/main.do";
-
   // 표를 2개로 나눈다 — ①기관·내부자 매집(신규, 충족열 없음, 바로가기 열 있음) ②공포탐욕·VIX 지수(기존, 충족열 유지).
   details.step7Institutional = [
     { label: "슈퍼 투자자 포트폴리오", criterion: "고래/헤지펀드 매매 내역", value: institutional?.superInvestorSummary ?? "확인 못함", met: null, url: DATAROMA_URL },
@@ -1419,7 +1425,7 @@ export async function runDailyAnalysis(
       rrpBuffer: rrpStatus?.depleted ? "고갈(충격 흡수 여력 없음)" : "여유 있음",
       creditSpreadBp,
       creditLeadsEquity:
-        creditSpreadBp !== null && creditSpreadBp < 300
+        creditSpreadBp !== null && creditSpreadBp < CREDIT_SPREAD_TIGHT_BP
           ? "스프레드가 역사적 저점권이라 추가 축소 여력은 작고, 확대 전환 시 주식이 뒤따를 위험"
           : "스프레드가 정상 구간 — 추가 확대 여부가 다음 관문",
     },
@@ -1450,7 +1456,7 @@ export async function runDailyAnalysis(
       vixFearMargin: vix !== null ? `현재 ${vix.toFixed(2)}, 공포 구간 25까지 ${(25 - vix).toFixed(2)}pt 남음` : "확인 못함",
       creditNormalMargin:
         creditSpreadBp !== null
-          ? `현재 ${creditSpreadBp}bp, 정상 수준 300bp까지 ${(300 - creditSpreadBp).toFixed(0)}bp 남음`
+          ? `현재 ${creditSpreadBp}bp, 정상 수준 ${CREDIT_SPREAD_TIGHT_BP}bp까지 ${(CREDIT_SPREAD_TIGHT_BP - creditSpreadBp).toFixed(0)}bp 남음`
           : "확인 못함",
       scoreToWatchMargin: `현재 ${step8.macroTrendScore.toFixed(2)}점, 지켜보기 기준 5.0점까지 ${(5.0 - step8.macroTrendScore).toFixed(2)}점 모자람`,
     },
