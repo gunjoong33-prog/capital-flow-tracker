@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { kstToday } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 import { saveMetricPoints } from "@/lib/metrics";
-import { fetchAllFredMetrics } from "@/lib/sources/fred";
+import { fetchAllFredMetrics, fetchLatestFredMetrics, MONTHLY_FRED_METRICS } from "@/lib/sources/fred";
 import { fetchCftcJpyNetPositionLatest } from "@/lib/sources/cftc";
 import { fetchCoinGeckoLatest } from "@/lib/sources/coingecko";
 import { fetchJp10yLatest } from "@/lib/sources/mof-japan";
@@ -65,12 +65,17 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
   // 1) 데이터 수집 — 서로 독립적인 소스라 병렬로 실행 (뉴스 판정·주요 이벤트 동기화도 여기 포함)
   const [
-    fredResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
+    fredResult, fredMonthlyResult, cftcResult, coingeckoResult, jp10yResult, yahooResult, sectorsResult,
     kr10yResult, fearGreedResult, majorEventsResult, newsEventsResult, newsPageResult, foreignNetBuyResult,
   ] = await Promise.allSettled([
       process.env.FRED_API_KEY
         ? fetchAllFredMetrics(process.env.FRED_API_KEY, sevenDaysAgoStr)
         : Promise.resolve({ points: [], errors: [{ metric: "FRED", message: "FRED_API_KEY 없음" }] }),
+      // 위 fetchAllFredMetrics의 "최근 7일" 창은 월간 지표(CPI 등 7개)의 신규 관측치(항상 발표월
+      // 1일자)를 거의 항상 놓친다 — MONTHLY_FRED_METRICS 주석 참고. 이 7개만 날짜창 없이 별도 수집.
+      process.env.FRED_API_KEY
+        ? fetchLatestFredMetrics(MONTHLY_FRED_METRICS, process.env.FRED_API_KEY)
+        : Promise.resolve({ points: [], errors: [{ metric: "FRED(월간)", message: "FRED_API_KEY 없음" }] }),
       fetchCftcJpyNetPositionLatest(),
       fetchCoinGeckoLatest(),
       fetchJp10yLatest(),
@@ -105,6 +110,11 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     allPoints.push(...fredResult.value.points);
     for (const e of fredResult.value.errors) sourceErrors.push({ source: `FRED:${e.metric}`, error: e.message });
   } else recordSourceError(sourceErrors, "FRED", fredResult.reason);
+
+  if (fredMonthlyResult.status === "fulfilled") {
+    allPoints.push(...fredMonthlyResult.value.points);
+    for (const e of fredMonthlyResult.value.errors) sourceErrors.push({ source: `FRED(월간):${e.metric}`, error: e.message });
+  } else recordSourceError(sourceErrors, "FRED(월간)", fredMonthlyResult.reason);
 
   if (cftcResult.status === "fulfilled" && cftcResult.value) allPoints.push(cftcResult.value);
   else if (cftcResult.status === "rejected") recordSourceError(sourceErrors, "CFTC", cftcResult.reason);

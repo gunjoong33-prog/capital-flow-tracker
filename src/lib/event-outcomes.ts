@@ -29,6 +29,26 @@ async function fetchVintageAccurate(
   }
 }
 
+/**
+ * fetchVintageAccurate가 "실패"(null)한 게 아니라 "성공했지만 필요한 개수보다 적게" 돌려주는 경우가
+ * 있다 — 실측(2026-08-13): 2025-10 CPI가 정부 셧다운 여파로 FRED 자체에 통째로 결측이라, asOf
+ * 기준 최근 13개를 요청해도 vintage 조회는 항상 12개만 돌려준다. 기존엔 `?? `(null만 걸러냄)라서
+ * 이 경우 DB 폴백을 아예 안 타고 그대로 "데이터 부족"으로 오판정했다. DB는 더 깊은 백필 이력이 있어
+ * 그 결손 한 달을 우회하고도 필요한 개수를 채울 수 있으니, 길이가 부족하면 DB도 시도해 더 긴 쪽을
+ * 쓴다 — 그래도 둘 다 부족하면 호출부가 정직하게 "데이터 부족"으로 판정하게 그대로 둔다.
+ */
+async function fetchHistoryWithFallback(
+  metric: string,
+  count: number,
+  asOf: Date
+): Promise<{ date: Date; value: number }[]> {
+  const vintage = await fetchVintageAccurate(metric, count, asOf);
+  if (vintage && vintage.length >= count) return vintage;
+  const dbFallback = await getMetricHistoryByCount(metric, count, asOf);
+  if (dbFallback.length >= count) return dbFallback;
+  return (vintage?.length ?? 0) >= dbFallback.length ? vintage! : dbFallback;
+}
+
 export interface EventOutcome {
   name: string;
   date: string;
@@ -64,7 +84,7 @@ async function zScoreSurprise(
   // 최종 단위(명)까지 미리 환산해 옮겨적기만 하면 되게 한다 — 계산을 LLM에 맡기지 않는다.
   formatChange: (change: number) => string = (v) => v.toFixed(1)
 ): Promise<{ risky: boolean | null; detail: string }> {
-  const recent = (await fetchVintageAccurate(metric, periods + 1, asOf)) ?? (await getMetricHistoryByCount(metric, periods + 1, asOf));
+  const recent = await fetchHistoryWithFallback(metric, periods + 1, asOf);
   if (recent.length < periods + 1) return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
   const changes: number[] = [];
   for (let i = 1; i < recent.length; i++) changes.push(recent[i].value - recent[i - 1].value);
@@ -92,9 +112,7 @@ async function corePceDetail(
 ): Promise<{ risky: boolean | null; detail: string; url: string }> {
   const url = "https://www.bea.gov/data/personal-consumption-expenditures-price-index";
   // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
-  const history =
-    (await fetchVintageAccurate(METRICS.US_PCE_CORE, periods + 2, asOf)) ??
-    (await getMetricHistoryByCount(METRICS.US_PCE_CORE, periods + 2, asOf));
+  const history = await fetchHistoryWithFallback(METRICS.US_PCE_CORE, periods + 2, asOf);
   if (history.length < periods + 2) {
     return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가", url };
   }

@@ -128,6 +128,49 @@ export async function fetchFredMetric(
   }));
 }
 
+/**
+ * 월간(또는 그보다 느린) 지표 7개 — M2·REAL_RATE·CPI·NFP·PPI·PCE·PCE_CORE. 신규 관측치의 date가
+ * 항상 발표월 1일이라, fetchAllFredMetrics의 일별 증분 수집 창(daily/weekly 지표엔 적합한
+ * "최근 N일" observation_start)에는 거의 항상 안 걸린다 — 오늘이 이번 달 초 며칠이 아닌 이상,
+ * 지난달 1일자 신규 관측치는 그 창 밖에 있다. 실측(2026-08-13): FRED엔 이미 7월 CPI가 있는데
+ * MetricValue엔 6월치 이후로 몇 주째 갱신이 안 됨 — 이 목록 지표들은 날짜창 대신 fetchLatestFredMetrics로
+ * "최신 N개"를 따로 수집해야 한다.
+ */
+export const MONTHLY_FRED_METRICS = [
+  METRICS.M2,
+  METRICS.REAL_RATE,
+  METRICS.US_CPI,
+  METRICS.US_NFP,
+  METRICS.US_PPI,
+  METRICS.US_PCE,
+  METRICS.US_PCE_CORE,
+] as const;
+
+/** MONTHLY_FRED_METRICS를 날짜창 없이 "최신 N개"로 수집 — fetchFredSeriesAsOf(asOf=오늘)를 재사용해
+ * observation_start 필터를 아예 안 거친다. */
+export async function fetchLatestFredMetrics(
+  metrics: readonly string[],
+  apiKey: string,
+  limit = 3
+): Promise<{ points: FetchedPoint[]; errors: { metric: string; message: string }[] }> {
+  const results = await Promise.allSettled(
+    metrics.map(async (metric) => {
+      const seriesId = FRED_SERIES[metric];
+      if (!seriesId) throw new Error(`${metric}에 대응하는 FRED 시리즈가 없다`);
+      const obs = await fetchFredSeriesAsOf(seriesId, apiKey, new Date(), limit);
+      return obs.map((o) => ({ metric, date: o.date, value: parseFloat(o.value), source: "fred" as const }));
+    })
+  );
+
+  const points: FetchedPoint[] = [];
+  const errors: { metric: string; message: string }[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") points.push(...r.value);
+    else errors.push({ metric: metrics[i], message: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+  });
+  return { points, errors };
+}
+
 export async function fetchAllFredMetrics(
   apiKey: string,
   startDate?: string
