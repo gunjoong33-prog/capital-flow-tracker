@@ -8,7 +8,7 @@
 export const GRAPH_COLOR_PURPLE = "#8b7fd6";
 export const GRAPH_COLOR_AMBER = "#e0a63e";
 
-function GraphBox({ label, children }: { label: string; children: React.ReactNode }) {
+export function GraphBox({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
       <p className="mb-3 text-[10px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">{label}</p>

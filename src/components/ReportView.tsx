@@ -32,7 +32,7 @@ function sectorReturnsFromDetails(rows: StepDetailRow[] | undefined): { name: st
     .filter((s): s is { name: string; return5d: number } => s.return5d !== null);
 }
 
-const STEP_TAB_TITLES = ["글로벌환경", "유동성", "캐리트레이드", "환율·금·유가", "자금도착", "섹터", "심리필터", "최종결론"];
+export const STEP_TAB_TITLES = ["글로벌환경", "유동성", "캐리트레이드", "환율·금·유가", "자금도착", "섹터", "심리필터", "최종결론"];
 
 export interface ReportViewData {
   step1: Step1Result;

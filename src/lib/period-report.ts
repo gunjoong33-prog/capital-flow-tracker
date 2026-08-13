@@ -50,6 +50,75 @@ function relabelMetrics(pct: Record<string, number | null>): Record<string, numb
   return Object.fromEntries(Object.entries(pct).map(([code, v]) => [METRIC_LABELS[code] ?? code, v]));
 }
 
+// 오늘의 리포트 1~8단계 탭과 같은 분류로 TREND_METRICS를 나눈다 — run.ts를 직접 확인해서 만든
+// 매핑이다(추측 아님): 2단계(유동성)=WALCL/M2/TOTRESNS/RRP/TGA/REAL_RATE/CREDIT_SPREAD,
+// 3단계(캐리트레이드)=US10Y/JP10Y, 4단계(환율·금·유가)=USDJPY/USDKRW/DXY/GOLD/WTI,
+// 5단계(자금도착, "섹터"가 아니라 지수·크립토 20일 수익률로 판정)=SPX/NDX/RUT/DJI/BTC,
+// 7단계(심리필터)=VIX. 1단계(거부권)·6단계(GICS 섹터, 시계열 미저장)·8단계(최종점수)는
+// TREND_METRICS에 해당 원자료가 없어 이 맵에서 빠진다 — 그 세 단계는 페이지에서
+// summary(vetoDays/topSectors/avgMacroTrendScore 등)와 getPeriodStepScoreSeries()로 대신 그린다.
+export const STEP_METRICS: Record<number, string[]> = {
+  2: ["WALCL", "M2", "TOTRESNS", "RRP", "TGA", "REAL_RATE", "CREDIT_SPREAD"],
+  3: ["US10Y", "JP10Y"],
+  4: ["USDJPY", "USDKRW", "DXY", "GOLD", "WTI"],
+  5: ["SPX", "NDX", "RUT", "DJI", "BTC"],
+  7: ["VIX"],
+};
+
+/** [start,end] 구간의 일별 MetricValue 시계열을 지표별로 묶어서 반환한다 — 그래프용 원자료.
+ * aggregatePeriod()의 summary(첫날·끝날 델타만 남김, LLM 프롬프트용)와는 별개로, 이건 페이지가
+ * 그래프를 그릴 때만 그때그때 조회하고 PeriodReport.summary엔 저장하지 않는다(365일치를 전부
+ * 저장하면 LLM 프롬프트가 불필요하게 커진다 — "집계는 평균·카운트만 남기고 원본은 보존 안 함"
+ * 설계를 그대로 따름). */
+export async function getPeriodMetricSeries(
+  metrics: string[],
+  start: Date,
+  end: Date
+): Promise<Record<string, { date: string; value: number }[]>> {
+  const rows = await db.metricValue.findMany({
+    where: { metric: { in: metrics }, date: { gte: start, lte: end } },
+    orderBy: { date: "asc" },
+    select: { metric: true, date: true, value: true },
+  });
+  const series: Record<string, { date: string; value: number }[]> = {};
+  for (const m of metrics) series[m] = [];
+  for (const row of rows) {
+    series[row.metric]?.push({ date: row.date.toISOString().slice(0, 10), value: row.value });
+  }
+  return series;
+}
+
+export interface PeriodStepScoreRow {
+  date: string;
+  vetoTriggered: boolean;
+  step2: number | null;
+  step3: number | null;
+  step4: number | null;
+  step5: number | null;
+  step6: number | null;
+  step8: number | null;
+}
+
+/** [start,end] 구간의 일별 단계 점수(0~10)·거부권 여부 — 각 단계 그래프의 "기간 내 추이" 선을
+ * 그리는 원자료. aggregateFromDaily()의 avgStepScores(평균 하나)와 달리 날짜별 값을 그대로 보존한다. */
+export async function getPeriodStepScoreSeries(start: Date, end: Date): Promise<PeriodStepScoreRow[]> {
+  const rows = await db.dailyReport.findMany({
+    where: { date: { gte: start, lte: end } },
+    orderBy: { date: "asc" },
+    select: { date: true, step1: true, step2: true, step3: true, step4: true, step5: true, step6: true, step8: true },
+  });
+  return rows.map((r) => ({
+    date: r.date.toISOString().slice(0, 10),
+    vetoTriggered: (r.step1 as unknown as Step1Result)?.vetoTriggered ?? false,
+    step2: (r.step2 as unknown as Step2Result)?.finalScore ?? null,
+    step3: (r.step3 as unknown as Step3Result)?.score ?? null,
+    step4: (r.step4 as unknown as Step4Result)?.score ?? null,
+    step5: (r.step5 as unknown as Step5Result)?.score ?? null,
+    step6: (r.step6 as unknown as Step6Result)?.score ?? null,
+    step8: (r.step8 as unknown as Step8Result)?.macroTrendScore ?? null,
+  }));
+}
+
 // 크레딧 스프레드·실질금리·국채금리·VIX는 원자료 자체가 이미 %(또는 포인트) 단위라, "값이 몇 %
 // 움직였는지"(상대 변화율)와 "몇 bp/포인트 움직였는지"(절대 변화폭)가 전혀 다른 얘기가 된다 —
 // 281bp였던 크레딧 스프레드가 284bp가 된 걸 metricChangesPct는 "+1.07%"로만 보여주는데, 이걸
@@ -114,7 +183,7 @@ export function getPrecedingPeriodBounds(type: PeriodType, reportDate: Date): { 
   return { start: utc(y - 1, 0, 1), end: utc(y - 1, 11, 31) };
 }
 
-interface AggregatedBase {
+export interface AggregatedBase {
   daysWithData: number;
   avgMacroTrendScore: number | null;
   firstScore: number | null;

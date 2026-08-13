@@ -2,8 +2,16 @@ import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
-import { RATE_TYPE_METRICS, type PeriodType } from "@/lib/period-report";
+import {
+  RATE_TYPE_METRICS, STEP_METRICS, getPeriodMetricSeries, getPeriodStepScoreSeries,
+  type AggregatedBase, type PeriodType,
+} from "@/lib/period-report";
+import { StepCard } from "@/components/StepCard";
+import { STEP_TAB_TITLES } from "@/components/ReportView";
+import { MetricSparkline, ScoreTrend, RatioBar, FrequencyBars } from "@/components/PeriodStepGraphs";
+import { STEP_TIPS } from "@/lib/scoring/tips";
 import siteStyles from "@/styles/site.module.css";
+import tabStyles from "@/components/ReportView.module.css";
 import styles from "../../reports.module.css";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +23,22 @@ const LABEL: Record<string, string> = {
   weekly: "주간", monthly: "월간", quarterly: "분기", yearly: "연간",
 };
 
-interface PeriodSummary {
-  daysWithData: number;
-  avgMacroTrendScore: number | null;
-  firstScore: number | null;
-  lastScore: number | null;
-  decisionCounts: Record<string, number>;
+interface PeriodSummary extends AggregatedBase {
   metricChangesPct: Record<string, number | null>;
   metricPointChangesBp: Record<string, number | null>;
+}
+
+/** 지표 하나의 기간 변화를 이미 계산된 summary 값(overall delta)에서 그대로 읽어 포맷한다 —
+ * ReportDetailPage 상단의 기존 "기간 내 주요 지표 변화" 목록과 같은 숫자를 그래프 쪽에서 다시
+ * 계산하지 않기 위함(RATE_TYPE_METRICS 5개는 %가 아니라 bp/pt로, 나머지는 %로). */
+function metricDelta(summary: PeriodSummary, metric: string): { label: string | null; positive: boolean | null } {
+  const isRateType = RATE_TYPE_METRICS.has(metric);
+  const bp = summary.metricPointChangesBp?.[metric] ?? null;
+  const pct = summary.metricChangesPct?.[metric] ?? null;
+  const value = isRateType ? bp : pct;
+  const unit = isRateType ? (metric === "VIX" ? "pt" : "bp") : "%";
+  if (value === null) return { label: null, positive: null };
+  return { label: `${value > 0 ? "+" : ""}${value}${unit}`, positive: value >= 0 };
 }
 
 const METRIC_LABEL: Record<string, string> = {
@@ -48,6 +64,16 @@ export default async function ReportDetailPage({
   if (!report) notFound();
 
   const summary = report.summary as unknown as PeriodSummary;
+
+  // 오늘의 리포트(ReportView.tsx)와 동일한 1~8단계 탭 UI — 거기는 하루치 단일 값을 그리지만
+  // 여기는 기간 [periodStart, periodEnd] 안의 일별 추이를 그린다. PeriodReport.summary엔 이
+  // 시계열이 없어(LLM 프롬프트용으로 첫날·끝날 델타만 저장, capital_flow_tracker_period_reports
+  // 메모리 참고) 페이지 렌더 시점에 원본 테이블에서 직접 조회한다.
+  const allStepMetrics = Object.values(STEP_METRICS).flat();
+  const [metricSeries, stepScores] = await Promise.all([
+    getPeriodMetricSeries(allStepMetrics, report.periodStart, report.periodEnd),
+    getPeriodStepScoreSeries(report.periodStart, report.periodEnd),
+  ]);
 
   return (
     <div
@@ -104,27 +130,113 @@ export default async function ReportDetailPage({
           </div>
         </section>
 
-        <section className={styles.card}>
-          <h2 className={styles.card__title}>기간 내 주요 지표 변화</h2>
-          {/* 크레딧 스프레드·실질금리·국채금리·VIX는 원자료가 이미 %(포인트) 단위라, "%가 몇 %
-              움직였는지"(상대 변화율)를 그대로 보여주면 실제보다 훨씬 크게 움직인 것처럼 보인다
-              (281bp→284bp가 "+1.07%"로 표시되던 문제, 사용자 지적) — 이 5개는 bp/포인트
-              절대 변화폭을 대신 보여준다. */}
-          {Object.entries(summary.metricChangesPct ?? {}).map(([metric, pct]) => {
-            const isRateType = RATE_TYPE_METRICS.has(metric);
-            const bp = summary.metricPointChangesBp?.[metric] ?? null;
-            const value = isRateType ? bp : pct;
-            const unit = isRateType ? (metric === "VIX" ? "pt" : "bp") : "%";
+        <h2 className={styles.card__title}>기간 내 주요 지표 변화</h2>
+
+        {/* 8개 라디오는 전부 여기 모아둔다 — ReportView.tsx와 같은 이유(일반 형제 결합자)로
+            아래 탭 nav·패널보다 DOM상 앞, 그리고 같은 부모의 직계 형제여야 한다. */}
+        <input type="radio" name="step-tab" id="step-tab-1" defaultChecked className="peer/t1 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-2" className="peer/t2 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-3" className="peer/t3 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-4" className="peer/t4 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-5" className="peer/t5 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-6" className="peer/t6 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-7" className="peer/t7 hidden" />
+        <input type="radio" name="step-tab" id="step-tab-8" className="peer/t8 hidden" />
+
+        <nav className="flex justify-between gap-1.5 overflow-x-auto pb-1">
+          {STEP_TAB_TITLES.map((title, i) => {
+            const n = i + 1;
             return (
-              <div key={metric} className={styles.metricRow}>
-                <span className={styles.metricRow__label}>{METRIC_LABEL[metric] ?? metric}</span>
-                <span style={{ color: value === null ? "var(--ink-faint)" : value >= 0 ? "var(--pos)" : "var(--neg)" }}>
-                  {value === null ? "확인 못함" : `${value > 0 ? "+" : ""}${value}${unit}`}
+              <label
+                key={n}
+                htmlFor={`step-tab-${n}`}
+                className={`${tabStyles[`tab${n}`]} flex min-w-[4.2rem] shrink-0 cursor-pointer select-none flex-col items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-2.5 text-[var(--ink-faint)] hover:border-[var(--accent-strong)] hover:text-[var(--ink-dim)]`}
+              >
+                <span className={`${tabStyles.num} flex h-6 w-6 items-center justify-center rounded-full bg-[var(--border)] text-xs font-bold text-[var(--ink-dim)]`}>
+                  {n}
                 </span>
-              </div>
+                <span className="whitespace-nowrap text-[10px]">{title}</span>
+              </label>
             );
           })}
-        </section>
+        </nav>
+
+        {/* Fragment로 감싼다 — 감싸는 실제 div를 두면 peer-checked/tN:이 끊긴다(ReportView.tsx에서
+            실제 겪은 버그와 동일 원인). */}
+        <>
+          <div className="mt-3 hidden peer-checked/t1:block">
+            <StepCard step={1} title="글로벌 환경" tip={STEP_TIPS[1]}>
+              <RatioBar label="거부권 발동 비율" count={summary.vetoDays ?? 0} total={summary.daysWithData} dangerWhenHigh />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t2:block">
+            <StepCard step={2} title="유동성" score={summary.avgStepScores?.liquidity ?? undefined} tip={STEP_TIPS[2]}>
+              {STEP_METRICS[2].map((m) => {
+                const d = metricDelta(summary, m);
+                return <MetricSparkline key={m} label={METRIC_LABEL[m] ?? m} series={metricSeries[m] ?? []} deltaLabel={d.label} deltaPositive={d.positive} />;
+              })}
+              <ScoreTrend label="유동성" series={stepScores.map((r) => r.step2)} />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t3:block">
+            <StepCard step={3} title="캐리 트레이드" score={summary.avgStepScores?.carry ?? undefined} tip={STEP_TIPS[3]}>
+              {STEP_METRICS[3].map((m) => {
+                const d = metricDelta(summary, m);
+                return <MetricSparkline key={m} label={METRIC_LABEL[m] ?? m} series={metricSeries[m] ?? []} deltaLabel={d.label} deltaPositive={d.positive} />;
+              })}
+              <ScoreTrend label="캐리 트레이드" series={stepScores.map((r) => r.step3)} />
+              <RatioBar label="엔화 변동성 급등 감지 비율" count={summary.jpySpikeDays ?? 0} total={summary.daysWithData} dangerWhenHigh />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t4:block">
+            <StepCard step={4} title="환율·금·유가" score={summary.avgStepScores?.fxGoldOil ?? undefined} tip={STEP_TIPS[4]}>
+              {STEP_METRICS[4].map((m) => {
+                const d = metricDelta(summary, m);
+                return <MetricSparkline key={m} label={METRIC_LABEL[m] ?? m} series={metricSeries[m] ?? []} deltaLabel={d.label} deltaPositive={d.positive} />;
+              })}
+              <ScoreTrend label="환율·금·유가" series={stepScores.map((r) => r.step4)} />
+              <FrequencyBars label="사분면 분포" counts={summary.quadrantCounts ?? {}} />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t5:block">
+            <StepCard step={5} title="자금 도착" score={summary.avgStepScores?.flows ?? undefined} tip={STEP_TIPS[5]}>
+              {STEP_METRICS[5].map((m) => {
+                const d = metricDelta(summary, m);
+                return <MetricSparkline key={m} label={METRIC_LABEL[m] ?? m} series={metricSeries[m] ?? []} deltaLabel={d.label} deltaPositive={d.positive} />;
+              })}
+              <ScoreTrend label="자금 도착" series={stepScores.map((r) => r.step5)} />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t6:block">
+            <StepCard step={6} title="섹터" score={summary.avgStepScores?.sectors ?? undefined} tip={STEP_TIPS[6]}>
+              {/* 섹터(GICS 11개)는 시계열로 저장하지 않고 매번 라이브 조회만 하므로(run.ts 주석
+                  참고) 기간 그래프용 원자료가 없다 — 대신 기간 내 "충족(자금 유입 판정)" 빈도만
+                  보여준다. 없는 데이터를 지어내지 않는다는 이 프로젝트의 원칙을 그대로 따름. */}
+              <FrequencyBars label="충족 섹터 빈도" counts={summary.topSectors ?? {}} />
+              <ScoreTrend label="섹터" series={stepScores.map((r) => r.step6)} />
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t7:block">
+            <StepCard step={7} title="심리 필터" tip={STEP_TIPS[7]}>
+              {STEP_METRICS[7].map((m) => {
+                const d = metricDelta(summary, m);
+                return <MetricSparkline key={m} label={METRIC_LABEL[m] ?? m} series={metricSeries[m] ?? []} deltaLabel={d.label} deltaPositive={d.positive} />;
+              })}
+            </StepCard>
+          </div>
+
+          <div className="mt-3 hidden peer-checked/t8:block">
+            <StepCard step={8} title="최종 결론" score={summary.avgMacroTrendScore ?? undefined} tip={STEP_TIPS[8]}>
+              <ScoreTrend label="최종 판단" series={stepScores.map((r) => r.step8)} />
+            </StepCard>
+          </div>
+        </>
       </div>
     </div>
   );
