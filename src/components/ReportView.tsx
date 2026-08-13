@@ -82,17 +82,19 @@ export function ReportView({
         <div className="flex flex-wrap items-center gap-3">
           <DecisionBadge decision={step8.finalDecision} />
           <ScoreBadge score={step8.macroTrendScore} label="투자 적합도 점수" />
-          {step8.vetoApplied && (
-            <span className="[word-break:keep-all] rounded-full border border-rose-500/30 bg-rose-500/15 px-3 py-1 text-xs text-rose-400">
-              {vetoChangedDecision
-                ? `1단계 거부권 발동 — 결론이 "${preVetoDecision}"에서 "${step8.finalDecision}"로 하향 조정됨`
-                : `1단계 거부권 발동 — 원점수 기준으로도 이미 "${step8.finalDecision}"라 결론 변화 없음`}
-            </span>
-          )}
           {step8.positionSizePct !== null && (
             <span className="text-sm text-[var(--ink-dim)]">권장 매수 비중 {step8.positionSizePct}%</span>
           )}
         </div>
+        {/* 배지(rounded-full 알약 모양)는 상태 단문에만 쓴다 — 거부권 설명은 완전한 문장이라
+            배지가 아니라 아래 트랙레코드 안내와 같은 캡션 스타일로 통일한다(디자인 일관성 정리). */}
+        {step8.vetoApplied && (
+          <p className="[word-break:keep-all] text-xs text-rose-400">
+            ⚠ {vetoChangedDecision
+              ? `1단계 거부권 발동 — 결론이 "${preVetoDecision}"에서 "${step8.finalDecision}"로 하향 조정됨`
+              : `1단계 거부권 발동 — 원점수 기준으로도 이미 "${step8.finalDecision}"라 결론 변화 없음`}
+          </p>
+        )}
         {/* 결론 배지 바로 옆에 상시 노출 — 아직 표본이 적어(2026-07-27부터 운영 시작) "매수/지켜보기/
             현금비중늘리기" 결론이 실제로 얼마나 맞았는지 추적한 트랙레코드가 없다는 걸 명시한다.
             사용자가 결론만 보고 투자 신호처럼 쓰지 않도록 하는 게 목적(외부 감사 지적, 실제로 백테스트
