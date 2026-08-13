@@ -841,7 +841,7 @@ export async function runDailyAnalysis(
       met: !hasSevereNews,
     },
     ...recentOutcomes.map((o) => ({
-      label: `${o.name}(${slashDate(o.date)}) 실제 결과`,
+      label: `${o.name}${o.subLabel ?? ""}(${slashDate(o.date)}) 실제 결과`,
       criterion: "예상 범위 내(서프라이즈 아님)",
       value: o.detail,
       // o.risky는 null(판정불가)일 수 있다 — !null이 true가 돼서 "충족(✓)"으로 잘못 보이면

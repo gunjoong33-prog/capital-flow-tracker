@@ -58,6 +58,10 @@ export interface EventOutcome {
   risky: boolean | null;
   detail: string;
   url?: string; // 원본 출처(예: FRED 시리즈 페이지) — "바로가기" 열에 표시
+  // CPI처럼 한 발표에서 헤드라인·근원 두 줄을 따로 보여줄 때 행 라벨에 붙이는 구분자(예: "(헤드라인)").
+  // name·date는 원래 이벤트 이름 그대로 유지해야 run.ts의 "이미 결과 나온 이벤트는 예정 목록에서
+  // 제외" 중복제거 키(name|date)가 안 깨진다.
+  subLabel?: string;
 }
 
 /**
@@ -99,22 +103,23 @@ async function zScoreSurprise(
 }
 
 /**
- * 근원(Core) PCE의 실제 YoY/전월대비 값을 표기한다. 헤드라인 PCE(식품·에너지 포함)는 화면에 안 보여주고
- * BEA 원본 링크로 안내한다 — 연준이 실제로 목표(YoY 2%)로 삼는 건 근원 PCE라 서프라이즈 판정·표시 둘 다
- * 근원 기준으로 통일한다. z-score 계산도 같은 이력에서 한 번에 처리해 이중 조회를 피한다.
- * CPI·PPI와 같은 이유로 "예상보다 덜 오름(z가 음수)"은 리스크로 잡지 않는다 — z > threshold(예상보다
- * 더 뜨거워짐)일 때만 risky로 본다.
+ * 물가지수(CPI·PPI·PCE 등) 공통 — YoY·전월대비(%)를 사람이 실제로 물가지표를 읽는 방식대로 계산해
+ * 표기한다. 예전엔 CPI·PPI만 원지수 변화량+z-score("변화량 0.2 (z=-0.76)")로, PCE만 YoY/MoM(%)로
+ * 서로 다르게 표기했는데, 사용자가 셋 다 이 형식으로 통일해달라고 요청해 하나의 함수로 합쳤다
+ * ([[헤드라인/근원 CPI 병기 요청]] 2026-08-13). z-score는 전월대비 변화량의 최근 분포 기준(기존
+ * zScoreSurprise와 동일 계산), "예상보다 덜 오름(디스인플레이션)"은 CPI·PPI·PCE 공통 관례대로
+ * risky로 안 잡는다(z > threshold, 즉 예상보다 더 뜨거워질 때만 risky).
  */
-async function corePceDetail(
+async function priceIndexDetail(
+  metric: string,
   periods: number,
   thresholdZ: number,
-  asOf: Date = new Date()
-): Promise<{ risky: boolean | null; detail: string; url: string }> {
-  const url = "https://www.bea.gov/data/personal-consumption-expenditures-price-index";
+  asOf: Date
+): Promise<{ risky: boolean | null; detail: string }> {
   // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
-  const history = await fetchHistoryWithFallback(METRICS.US_PCE_CORE, periods + 2, asOf);
+  const history = await fetchHistoryWithFallback(metric, periods + 2, asOf);
   if (history.length < periods + 2) {
-    return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가", url };
+    return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
   }
   const changes: number[] = [];
   for (let i = 1; i < history.length; i++) changes.push(history[i].value - history[i - 1].value);
@@ -135,8 +140,7 @@ async function corePceDetail(
   const momSign = mom >= 0 ? "+" : "";
   return {
     risky,
-    detail: `근원(Core) PCE YoY ${yoy.toFixed(2)}%, 전월대비 ${momSign}${mom.toFixed(2)}%(${monthLabel} 기준) — 헤드라인·세부 항목은 링크 참고`,
-    url,
+    detail: `YoY ${yoy.toFixed(2)}%, 전월대비 ${momSign}${mom.toFixed(2)}%(${monthLabel} 기준)`,
   };
 }
 
@@ -228,21 +232,38 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
 
   const outcomes: EventOutcome[] = [];
   for (const e of events) {
-    let result: { risky: boolean | null; detail: string; url?: string };
-    // vintage 정확도가 중요한 네 지표(CPI·NFP·PPI·PCE)는 report asOf가 아니라 이벤트가 실제로 발표된
+    const dateStr = e.date.toISOString().slice(0, 10);
+    // vintage 정확도가 중요한 지표들(CPI·NFP·PPI·PCE)은 report asOf가 아니라 이벤트가 실제로 발표된
     // 그 날짜(e.date)를 기준으로 FRED에 그 시점 스냅샷을 물어봐야 한다 — report asOf를 쓰면 리포트
     // 생성이 발표일보다 며칠 늦게 재구성되는 경우(백필 등) 그사이 또 다른 개정이 끼어들 수 있다.
-    if (e.name.includes("CPI")) result = await zScoreSurprise(METRICS.US_CPI, 12, 1.5, true, e.date);
-    // US_NFP(FRED PAYEMS)는 "천 명" 단위 레벨값이라 전월 대비 변화량도 천 명 단위다 — 위
-    // zScoreSurprise 주석 참고. ×1,000 해서 실제 "명" 단위로 미리 환산해 넘긴다.
-    else if (e.name.includes("고용지표"))
+    if (e.name.includes("CPI")) {
+      // 헤드라인·근원 CPI를 한 줄에 억지로 합치지 않고 별도 행 두 개로 나눈다 — 사용자 요청
+      // (2026-08-13): "헤드라인 cpi, core cpi yoy,mom으로 표기, 기준에 따라 충족값 표기(v,x)".
+      // name·date는 원래 이벤트("미국 CPI 발표")로 유지해 중복제거 키가 안 깨지게 하고, subLabel로만
+      // 행 라벨을 구분한다(run.ts가 `${o.name}${o.subLabel}(...)` 형태로 조립).
+      const headline = await priceIndexDetail(METRICS.US_CPI, 12, 1.5, e.date);
+      const core = await priceIndexDetail(METRICS.US_CPI_CORE, 12, 1.5, e.date);
+      outcomes.push({ name: e.name, date: dateStr, risky: headline.risky, detail: headline.detail, subLabel: "(헤드라인)" });
+      outcomes.push({ name: e.name, date: dateStr, risky: core.risky, detail: core.detail, subLabel: "(근원)" });
+      continue;
+    }
+
+    let result: { risky: boolean | null; detail: string; url?: string };
+    // US_NFP(FRED PAYEMS)는 "천 명" 단위 레벨값이라 전월 대비 변화량도 천 명 단위다 — 물가지수가
+    // 아니라 YoY/MoM(%) 표기 대상이 아니므로 zScoreSurprise를 그대로 유지한다.
+    if (e.name.includes("고용지표"))
       result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, e.date, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
-    else if (e.name.includes("PPI")) result = await zScoreSurprise(METRICS.US_PPI, 12, 1.5, true, e.date);
-    else if (e.name.includes("PCE")) result = await corePceDetail(12, 1.5, e.date);
+    else if (e.name.includes("PPI")) result = await priceIndexDetail(METRICS.US_PPI, 12, 1.5, e.date);
+    else if (e.name.includes("PCE")) {
+      const core = await priceIndexDetail(METRICS.US_PCE_CORE, 12, 1.5, e.date);
+      // 헤드라인 PCE(식품·에너지 포함)는 화면에 안 보여주고 BEA 원본 링크로 안내한다 — 연준이 실제로
+      // 목표(YoY 2%)로 삼는 건 근원 PCE라 서프라이즈 판정·표시 둘 다 근원 기준으로 통일한다.
+      result = { risky: core.risky, detail: `근원(Core) PCE ${core.detail} — 헤드라인·세부 항목은 링크 참고`, url: "https://www.bea.gov/data/personal-consumption-expenditures-price-index" };
+    }
     else if (e.name.includes("FOMC")) result = await fedRateChanged(e.date, asOf);
     else continue;
 
-    outcomes.push({ name: e.name, date: e.date.toISOString().slice(0, 10), risky: result.risky, detail: result.detail, url: result.url });
+    outcomes.push({ name: e.name, date: dateStr, risky: result.risky, detail: result.detail, url: result.url });
   }
   return outcomes;
 }
