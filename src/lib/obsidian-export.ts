@@ -77,6 +77,66 @@ export function buildDailyReportMarkdown(row: DailyReport): string {
 
 const PERIOD_TYPE_LABEL: Record<string, string> = { week: "주간", month: "월간", quarter: "분기", year: "연간" };
 
+const GITHUB_OWNER = "gunjoong33-prog";
+const GITHUB_REPO = "capital-flow-tracker";
+const GITHUB_BRANCH = "master";
+
+async function githubRequest(path: string, token: string, init?: RequestInit): Promise<Response> {
+  return fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(init?.headers ?? {}),
+    },
+  });
+}
+
+/** 내용이 실제로 바뀐 파일만 커밋한다 — api/cron/obsidian-export와 exportDailyReportNow가 공유해서
+ * GitHub Contents API 호출부가 두 곳에서 따로 어긋나지 않게 한다. */
+export async function upsertObsidianFile(repoPath: string, content: string, token: string): Promise<"created" | "updated" | "unchanged" | "error"> {
+  const encodedPath = repoPath.split("/").map(encodeURIComponent).join("/");
+  const contentBase64 = Buffer.from(content, "utf8").toString("base64");
+
+  const getRes = await githubRequest(`${encodedPath}?ref=${GITHUB_BRANCH}`, token);
+  let sha: string | undefined;
+  if (getRes.ok) {
+    const existing = (await getRes.json()) as { sha: string; content: string };
+    const existingContent = Buffer.from(existing.content, "base64").toString("utf8");
+    if (existingContent === content) return "unchanged";
+    sha = existing.sha;
+  } else if (getRes.status !== 404) {
+    return "error";
+  }
+
+  const putRes = await githubRequest(encodedPath, token, {
+    method: "PUT",
+    body: JSON.stringify({
+      message: `옵시디언 export: ${repoPath}`,
+      content: contentBase64,
+      branch: GITHUB_BRANCH,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+  return putRes.ok ? (sha ? "updated" : "created") : "error";
+}
+
+/**
+ * 당일 파이프라인이 DailyReport를 저장한 직후 바로 호출한다 — 09:30 별도 cron-job.org 크론이 그날
+ * 아예 안 도는 실패 케이스(2026-08-13 실측: 리포트는 08:52에 이미 저장됐는데 obsidian-export 크론
+ * 자체가 안 돌아서 하루 넘게 반영이 밀림)에도, 리포트 생성 성공 즉시 같은 요청 안에서 GitHub에
+ * 커밋해버리면 별도 크론의 타이밍에 더 이상 의존하지 않는다. 09:30 크론은 이후 백필·주기별 리포트
+ * 재확인용 안전망으로 계속 남겨둔다(제거하지 않음).
+ */
+export async function exportDailyReportNow(row: DailyReport): Promise<void> {
+  const token = process.env.GITHUB_EXPORT_TOKEN;
+  if (!token) throw new Error("GITHUB_EXPORT_TOKEN 환경변수 없음");
+  const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
+  const status = await upsertObsidianFile(repoPath, buildDailyReportMarkdown(row), token);
+  if (status === "error") throw new Error(`GitHub 커밋 실패: ${repoPath}`);
+}
+
 export function periodReportFileName(row: Pick<PeriodReport, "periodType" | "periodStart">): string {
   return `${row.periodType}-${row.periodStart.toISOString().slice(0, 10)}.md`;
 }

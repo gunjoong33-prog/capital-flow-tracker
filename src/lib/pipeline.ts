@@ -18,6 +18,7 @@ import { generatePptHeadlines } from "@/lib/ppt-headlines";
 import { sleep } from "@/lib/llm-clients";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
+import { exportDailyReportNow } from "@/lib/obsidian-export";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
 import { syncNewsPageHeadlines } from "@/lib/news-page";
@@ -348,7 +349,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       narrative,
       dataCompleteness: asJson({ sourceErrors }),
     };
-    await db.dailyReport.upsert({
+    const savedReport = await db.dailyReport.upsert({
       where: { date: new Date(today) },
       create: { date: new Date(today), ...reportFields },
       update: reportFields,
@@ -358,6 +359,17 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     // 대신 저장 직후 바로 무효화해서 스테일 0초로 최신 반영한다.
     revalidatePath("/report");
     revalidatePath("/");
+
+    // 옵시디언(GitHub obsidian-export/) 반영을 별도 09:30 크론에만 맡기지 않고 리포트 저장 직후
+    // 바로 시도한다 — 2026-08-13에 그 크론 자체가 그날 안 돌아서 반영이 하루 넘게 밀린 사고 실측
+    // 이후 추가([[capital_flow_tracker_cron_reliability]]). 실패해도(토큰 없음·GitHub 장애) 리포트
+    // 저장 자체는 이미 끝났으니 흐름을 막지 않고 sourceErrors에만 기록 — 09:30 크론이 다음 실행에서
+    // 재시도하는 안전망 역할을 계속 한다.
+    try {
+      await exportDailyReportNow(savedReport);
+    } catch (err) {
+      sourceErrors.push({ source: "옵시디언export", error: err instanceof Error ? err.message : String(err) });
+    }
 
     // 5) 노션 기록 — 11개 하위 DB(상세) + Calender DB(시장 체크리스트 페이지에 실제로 보이는 항목)
     try {
