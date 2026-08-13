@@ -89,7 +89,7 @@ export function ReportView({
         {/* 배지(rounded-full 알약 모양)는 상태 단문에만 쓴다 — 거부권 설명은 완전한 문장이라
             배지가 아니라 아래 트랙레코드 안내와 같은 캡션 스타일로 통일한다(디자인 일관성 정리). */}
         {step8.vetoApplied && (
-          <p className="[word-break:keep-all] text-xs text-rose-400">
+          <p className="[word-break:keep-all] text-xs text-[var(--neg)]">
             ⚠ {vetoChangedDecision
               ? `1단계 거부권 발동 — 결론이 "${preVetoDecision}"에서 "${step8.finalDecision}"로 하향 조정됨`
               : `1단계 거부권 발동 — 원점수 기준으로도 이미 "${step8.finalDecision}"라 결론 변화 없음`}
