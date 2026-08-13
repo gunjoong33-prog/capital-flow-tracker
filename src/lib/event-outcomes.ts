@@ -103,20 +103,40 @@ async function zScoreSurprise(
 }
 
 /**
+ * history에서 baseDate 기준 정확히 monthsBack개월 전 값을 "카운트 위치"가 아니라 "달력 날짜"로
+ * 찾는다. 결측월(예: 2025-10 CPI, 정부 셧다운으로 그 달만 통째로 안 나옴)이 창 안에 끼어 있으면
+ * "최근 N개" 카운트 인덱싱은 조용히 한 달 더 밀려서 12개월 전이 아니라 13개월 전과 비교하게 된다
+ * (실측 2026-08-13: 헤드라인 CPI YoY가 3.52%로 계산됐는데 실제 BLS·언론 보도치는 3.4% — PPI는
+ * 같은 코드로도 정확히 맞았는데(4.69%≈4.7%), PPI 시리즈엔 그 결측월이 없어서 우연히 안 걸렸을
+ * 뿐이었다). 달력 매칭이면 결측월이 몇 개 끼어도 항상 정확히 monthsBack개월 전을 찾는다.
+ */
+function findMonthsBefore(history: { date: Date; value: number }[], baseDate: Date, monthsBack: number): number | null {
+  const target = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() - monthsBack, 1));
+  const found = history.find((h) => h.date.getUTCFullYear() === target.getUTCFullYear() && h.date.getUTCMonth() === target.getUTCMonth());
+  return found ? found.value : null;
+}
+
+/**
  * 물가지수(CPI·PPI·PCE 등) 공통 — YoY·전월대비(%)를 사람이 실제로 물가지표를 읽는 방식대로 계산해
  * 표기한다. 예전엔 CPI·PPI만 원지수 변화량+z-score("변화량 0.2 (z=-0.76)")로, PCE만 YoY/MoM(%)로
  * 서로 다르게 표기했는데, 사용자가 셋 다 이 형식으로 통일해달라고 요청해 하나의 함수로 합쳤다
  * ([[헤드라인/근원 CPI 병기 요청]] 2026-08-13). z-score는 전월대비 변화량의 최근 분포 기준(기존
  * zScoreSurprise와 동일 계산), "예상보다 덜 오름(디스인플레이션)"은 CPI·PPI·PCE 공통 관례대로
  * risky로 안 잡는다(z > threshold, 즉 예상보다 더 뜨거워질 때만 risky).
+ *
+ * yoyMetric: BLS 관례상 CPI·PPI의 "전년동월대비(YoY)" 헤드라인 수치는 비계절조정(NSA) 지수로
+ * 계산하고, 전월대비(MoM)만 계절조정(SA) 지수를 쓴다(PCE는 반대로 YoY도 BEA가 SA로 발표) — 실측
+ * (2026-08-13): metric(SA)만으로 CPI YoY를 계산하니 3.54%가 나왔는데 실제 BLS·언론 보도치는
+ * 3.4%(NSA 기준)였다. 생략하면 metric과 동일한 지표로 YoY도 계산한다(PCE처럼 SA로 충분한 경우).
  */
 async function priceIndexDetail(
   metric: string,
   periods: number,
   thresholdZ: number,
-  asOf: Date
+  asOf: Date,
+  yoyMetric: string = metric
 ): Promise<{ risky: boolean | null; detail: string }> {
-  // +1(YoY 비교용 12개월 전) +1(변화량 계산용)
+  // +1(전월대비 계산용) +1(z-score 기준선용) — z-score·전월대비는 최근 구간이라 결측월과 안 겹침.
   const history = await fetchHistoryWithFallback(metric, periods + 2, asOf);
   if (history.length < periods + 2) {
     return { risky: null, detail: "데이터 부족(발표 반영 전이거나 이력 부족) — 판정불가" };
@@ -133,11 +153,19 @@ async function priceIndexDetail(
 
   const latest = history[history.length - 1];
   const prevMonth = history[history.length - 2];
-  const yearAgo = history[history.length - 1 - 12];
-  const yoy = ((latest.value - yearAgo.value) / yearAgo.value) * 100;
   const mom = ((latest.value - prevMonth.value) / prevMonth.value) * 100;
   const monthLabel = `${latest.date.getUTCFullYear()}년 ${latest.date.getUTCMonth() + 1}월`;
   const momSign = mom >= 0 ? "+" : "";
+
+  // YoY는 결측월을 우회할 여유(+6개월 버퍼)를 두고 findMonthsBefore로 달력상 정확히 12개월 전을 찾는다.
+  const yoyHistory = await fetchHistoryWithFallback(yoyMetric, periods + 6, asOf);
+  const yoyLatest = yoyHistory[yoyHistory.length - 1];
+  const yearAgoValue = yoyLatest ? findMonthsBefore(yoyHistory, yoyLatest.date, 12) : null;
+  const yoy = yearAgoValue !== null && yoyLatest ? ((yoyLatest.value - yearAgoValue) / yearAgoValue) * 100 : null;
+
+  if (yoy === null) {
+    return { risky, detail: `전월대비 ${momSign}${mom.toFixed(2)}%(${monthLabel} 기준) — YoY 데이터 부족` };
+  }
   return {
     risky,
     detail: `YoY ${yoy.toFixed(2)}%, 전월대비 ${momSign}${mom.toFixed(2)}%(${monthLabel} 기준)`,
@@ -241,8 +269,8 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
       // (2026-08-13): "헤드라인 cpi, core cpi yoy,mom으로 표기, 기준에 따라 충족값 표기(v,x)".
       // name·date는 원래 이벤트("미국 CPI 발표")로 유지해 중복제거 키가 안 깨지게 하고, subLabel로만
       // 행 라벨을 구분한다(run.ts가 `${o.name}${o.subLabel}(...)` 형태로 조립).
-      const headline = await priceIndexDetail(METRICS.US_CPI, 12, 1.5, e.date);
-      const core = await priceIndexDetail(METRICS.US_CPI_CORE, 12, 1.5, e.date);
+      const headline = await priceIndexDetail(METRICS.US_CPI, 12, 1.5, e.date, METRICS.US_CPI_NSA);
+      const core = await priceIndexDetail(METRICS.US_CPI_CORE, 12, 1.5, e.date, METRICS.US_CPI_CORE_NSA);
       outcomes.push({ name: e.name, date: dateStr, risky: headline.risky, detail: headline.detail, subLabel: "(헤드라인)" });
       outcomes.push({ name: e.name, date: dateStr, risky: core.risky, detail: core.detail, subLabel: "(근원)" });
       continue;
@@ -253,7 +281,7 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
     // 아니라 YoY/MoM(%) 표기 대상이 아니므로 zScoreSurprise를 그대로 유지한다.
     if (e.name.includes("고용지표"))
       result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, e.date, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
-    else if (e.name.includes("PPI")) result = await priceIndexDetail(METRICS.US_PPI, 12, 1.5, e.date);
+    else if (e.name.includes("PPI")) result = await priceIndexDetail(METRICS.US_PPI, 12, 1.5, e.date, METRICS.US_PPI_NSA);
     else if (e.name.includes("PCE")) {
       const core = await priceIndexDetail(METRICS.US_PCE_CORE, 12, 1.5, e.date);
       // 헤드라인 PCE(식품·에너지 포함)는 화면에 안 보여주고 BEA 원본 링크로 안내한다 — 연준이 실제로

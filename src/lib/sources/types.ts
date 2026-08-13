@@ -13,10 +13,16 @@ export const METRICS = {
   US10Y_2Y10Y_SPREAD: "US10Y_2Y10Y_SPREAD", // 미국 2Y-10Y 스프레드
   US30Y: "US30Y", // 미국 30년물 국채금리(FRED DGS30) — 베어 스티프닝(장기금리 급등) 감지용
   US2Y: "US2Y", // 미국 2년물 국채금리(FRED DGS2) — 기준금리와의 스프레드로 시장의 향후 정책금리 기대 추정
-  US_CPI: "US_CPI", // 미국 CPI(헤드라인, 계절조정, 1단계 이벤트 서프라이즈 판정용)
-  US_CPI_CORE: "US_CPI_CORE", // 근원(Core) CPI — 식품·에너지 제외, FRED CPILFESL. 헤드라인과 나란히 YoY/MoM 표기용.
+  US_CPI: "US_CPI", // 미국 CPI(헤드라인, 계절조정 SA, 전월대비·서프라이즈 판정용). FRED CPIAUCSL.
+  US_CPI_CORE: "US_CPI_CORE", // 근원(Core) CPI — 식품·에너지 제외, 계절조정 SA, 전월대비용. FRED CPILFESL.
+  // BLS 관례: CPI의 "전년동월대비(YoY)" 헤드라인 수치는 계절조정 안 한(NSA) 지수로 계산한다(월간
+  // 변화율만 SA를 쓴다) — 실측(2026-08-13): SA(CPIAUCSL)로 YoY를 계산하니 3.54%가 나왔는데 실제
+  // BLS·언론 보도치는 3.4%(NSA 기준)였다. YoY 표시 전용으로 NSA 짝 지표를 별도로 둔다.
+  US_CPI_NSA: "US_CPI_NSA", // 헤드라인 CPI, 비계절조정(NSA), YoY 계산 전용. FRED CPIAUCNS.
+  US_CPI_CORE_NSA: "US_CPI_CORE_NSA", // 근원 CPI, 비계절조정(NSA), YoY 계산 전용. FRED CPILFENS.
   US_NFP: "US_NFP", // 미국 비농업 고용자수(1단계 이벤트 서프라이즈 판정용)
-  US_PPI: "US_PPI", // 미국 생산자물가지수(최종수요 기준, 1단계 이벤트 서프라이즈 판정용)
+  US_PPI: "US_PPI", // 미국 생산자물가지수(최종수요 기준, 계절조정 SA, 전월대비·서프라이즈 판정용). FRED PPIFIS.
+  US_PPI_NSA: "US_PPI_NSA", // PPI 최종수요, 비계절조정(NSA), YoY 계산 전용(CPI와 같은 BLS 관례). FRED PPIFID.
   US_PCE: "US_PCE", // 미국 PCE 물가지수(헤드라인) — 서프라이즈 판정용, 화면엔 안 씀(근원 PCE로 대체)
   US_PCE_CORE: "US_PCE_CORE", // 근원(Core) PCE — 식품·에너지 제외, 연준이 실제 목표(YoY 2%)로 삼는 지표. FRED PCEPILFE.
   FED_FUNDS_RATE: "FED_FUNDS_RATE", // 연준 기준금리 상단(FOMC 실제 결정 판정용)

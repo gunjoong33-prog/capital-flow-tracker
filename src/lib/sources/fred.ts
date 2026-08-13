@@ -18,8 +18,11 @@ const FRED_SERIES: Record<string, string> = {
   [METRICS.US2Y]: "DGS2",
   [METRICS.US_CPI]: "CPIAUCSL",
   [METRICS.US_CPI_CORE]: "CPILFESL",
+  [METRICS.US_CPI_NSA]: "CPIAUCNS",
+  [METRICS.US_CPI_CORE_NSA]: "CPILFENS",
   [METRICS.US_NFP]: "PAYEMS",
   [METRICS.US_PPI]: "PPIFIS",
+  [METRICS.US_PPI_NSA]: "PPIFID",
   [METRICS.US_PCE]: "PCEPI",
   [METRICS.US_PCE_CORE]: "PCEPILFE",
   [METRICS.FED_FUNDS_RATE]: "DFEDTARU",
@@ -130,7 +133,8 @@ export async function fetchFredMetric(
 }
 
 /**
- * 월간(또는 그보다 느린) 지표 8개 — M2·REAL_RATE·CPI(헤드라인)·CPI_CORE·NFP·PPI·PCE·PCE_CORE. 신규 관측치의 date가
+ * 월간(또는 그보다 느린) 지표 11개 — M2·REAL_RATE·CPI(헤드라인·SA/NSA)·CPI_CORE(SA/NSA)·NFP·PPI(SA/NSA)·PCE·PCE_CORE.
+ * NSA(비계절조정) 짝은 YoY 표시 전용(BLS 관례, US_CPI_NSA 주석 참고). 신규 관측치의 date가
  * 항상 발표월 1일이라, fetchAllFredMetrics의 일별 증분 수집 창(daily/weekly 지표엔 적합한
  * "최근 N일" observation_start)에는 거의 항상 안 걸린다 — 오늘이 이번 달 초 며칠이 아닌 이상,
  * 지난달 1일자 신규 관측치는 그 창 밖에 있다. 실측(2026-08-13): FRED엔 이미 7월 CPI가 있는데
@@ -142,8 +146,11 @@ export const MONTHLY_FRED_METRICS = [
   METRICS.REAL_RATE,
   METRICS.US_CPI,
   METRICS.US_CPI_CORE,
+  METRICS.US_CPI_NSA,
+  METRICS.US_CPI_CORE_NSA,
   METRICS.US_NFP,
   METRICS.US_PPI,
+  METRICS.US_PPI_NSA,
   METRICS.US_PCE,
   METRICS.US_PCE_CORE,
 ] as const;
