@@ -131,9 +131,15 @@ export default async function NewsPage({
                           {h.category ? TAB_ICON[h.category] : TAB_ICON[active.key]}
                         </td>
                         <td className={styles.contentCell}>
-                          <a href={h.url} target="_blank" rel="noopener noreferrer" className={styles.contentCell__title}>
-                            {h.title}
-                          </a>
+                          {h.url.startsWith("/") ? (
+                            <Link href={h.url} className={styles.contentCell__title}>
+                              {h.title}
+                            </Link>
+                          ) : (
+                            <a href={h.url} target="_blank" rel="noopener noreferrer" className={styles.contentCell__title}>
+                              {h.title}
+                            </a>
+                          )}
                           {tickers.length > 0 && (
                             <div className={styles.tickerRow}>
                               {tickers.map((t) => (

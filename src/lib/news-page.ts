@@ -8,6 +8,7 @@ import {
 import { matchTickers } from "@/lib/sources/news-ticker-match";
 import { computeNewsReaction } from "@/lib/news-reaction";
 import { kstToday } from "@/lib/date";
+import type { MarketEventHeadline } from "@/lib/news-market-events";
 
 // 하루치 헤드라인(최대 5개 카테고리 × 20건 = 100건) 중 실제로 종목이 매칭된 것만 반응을 계산해도
 // 상한 없이 다 계산하면 Yahoo 비공식 API에 짧은 시간 안에 몰아치게 된다 — 하루 배치 전체에 걸리는
@@ -101,6 +102,53 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
   }
 
   return { saved, errors };
+}
+
+/** runDailyAnalysis()·computeInstitutionalSignals()가 계산을 끝낸 뒤 호출 — FRED 경제지표 발표
+ * 결과·FINRA/DART/Dataroma/OpenInsider 기관 동향을 오늘 날짜 헤드라인으로 추가 저장한다.
+ * syncNewsPageHeadlines()와 완전히 분리된 호출이라(그 함수는 이 데이터가 계산되기 전에 이미
+ * 끝나 있음, pipeline.ts 순서 참고) 이 함수가 실패해도 구글 뉴스 헤드라인 저장엔 영향 없다.
+ * 음수 rank를 줘서 같은 카테고리 탭에서 구글 뉴스 결과보다 항상 위(더 신뢰도 높은 1차 데이터)에
+ * 오게 한다. */
+export async function saveMarketEventHeadlines(headlines: MarketEventHeadline[]): Promise<{ saved: number; errors: string[] }> {
+  const errors: string[] = [];
+  if (headlines.length === 0) return { saved: 0, errors };
+
+  const today = kstToday();
+  try {
+    // 파이프라인이 같은 날 재실행될 수 있다(재시도·수동 재계산) — 지우지 않고 매번 추가만 하면
+    // NewsHeadlineTicker 반응 계산이 이미 처리된 행까지 다시 붙어 같은 헤드라인에 중복 반응이
+    // 쌓인다(실측 확인). syncNewsPageHeadlines와 동일하게 오늘치 합성 헤드라인(rank<0)만 지우고
+    // 다시 만든다 — 구글 뉴스 헤드라인(rank>=0)은 안 건드린다.
+    await db.newsPageHeadline.deleteMany({ where: { date: new Date(today), rank: { lt: 0 } } });
+
+    await db.newsPageHeadline.createMany({
+      data: headlines.map((h, i) => ({
+        date: new Date(today),
+        category: h.category,
+        rank: -(i + 1),
+        title: h.title,
+        url: h.url,
+        source: h.source,
+        publishedAt: new Date(h.publishedAt),
+      })),
+      skipDuplicates: true,
+    });
+
+    const inserted = await db.newsPageHeadline.findMany({
+      where: { date: new Date(today), rank: { lt: 0 } },
+      select: { id: true, title: true, publishedAt: true },
+    });
+    const withIds = inserted.map((r) => ({ headlineId: r.id, title: r.title, publishedAt: r.publishedAt }));
+    const reactionBudget = { count: MAX_REACTIONS_PER_SYNC };
+    const reactionRows = await computeReactionsForHeadlines(withIds, reactionBudget);
+    if (reactionRows.length > 0) await db.newsHeadlineTicker.createMany({ data: reactionRows });
+
+    return { saved: headlines.length, errors };
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : String(err));
+    return { saved: 0, errors };
+  }
 }
 
 function toCategoryHeadline(r: {

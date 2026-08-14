@@ -22,7 +22,8 @@ import { exportDailyReportNow } from "@/lib/obsidian-export";
 import { sendReportUploadedAlert } from "@/lib/discord-alert";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
-import { syncNewsPageHeadlines } from "@/lib/news-page";
+import { syncNewsPageHeadlines, saveMarketEventHeadlines } from "@/lib/news-page";
+import { buildEventOutcomeHeadlines, buildInstitutionalHeadlines } from "@/lib/news-market-events";
 import { computeBigTechReasons } from "@/lib/bigtech-reasons";
 import { computeInstitutionalSignals } from "@/lib/institutional-signals";
 import { BIG_TECH_TICKERS, METRICS, SECTOR_ETFS, type FetchedPoint } from "@/lib/sources/types";
@@ -325,6 +326,21 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       await saveMetricPoints([
         { metric: METRICS.NEWS_RISK_SCORE_7D, date: today, value: report.step1.newsRiskScore, source: "manual" },
       ]);
+    }
+
+    // /news 피드가 지금까지 구글 뉴스뿐이었는데, 이 사이트가 이미 매일 계산하는 FRED 경제지표
+    // 발표 결과·FINRA/DART/Dataroma/OpenInsider 기관 동향도 "속보"로 반영한다. syncNewsPageHeadlines
+    // (위 1단계 병렬 수집 블록)는 이 값들이 계산되기 전에 이미 끝나 있어 여기서 별도로 저장한다 —
+    // 실패해도 리포트 저장 자체엔 영향 없게 sourceErrors에만 기록.
+    try {
+      const marketEventHeadlines = [
+        ...buildEventOutcomeHeadlines(report.step1.recentEventOutcomes ?? [], today),
+        ...buildInstitutionalHeadlines(institutionalSignals, new Date()),
+      ];
+      const { errors: marketEventErrors } = await saveMarketEventHeadlines(marketEventHeadlines);
+      for (const e of marketEventErrors) sourceErrors.push({ source: "뉴스페이지(실데이터 속보)", error: e });
+    } catch (err) {
+      sourceErrors.push({ source: "뉴스페이지(실데이터 속보)", error: err instanceof Error ? err.message : String(err) });
     }
 
     // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
