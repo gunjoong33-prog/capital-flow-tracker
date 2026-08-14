@@ -7,7 +7,8 @@ export async function sendReportUploadedAlert(marketDate: string, finalDecision:
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      content: `📊 새 리포트 업로드됨 — ${marketDate} | 판단: ${finalDecision} | 매크로 추세 점수: ${macroTrendScore.toFixed(1)}/10\nhttps://capital-flow-tracker.vercel.app/report`,
+      content: `@everyone 📊 새 리포트 업로드됨 — ${marketDate} | 판단: ${finalDecision} | 매크로 추세 점수: ${macroTrendScore.toFixed(1)}/10\nhttps://capital-flow-tracker.vercel.app/report`,
+      allowed_mentions: { parse: ["everyone"] },
     }),
   });
 }
