@@ -8,19 +8,38 @@
   letter-spacing: 0.02em;
 }
 
+/* valley.town 실시간 속보와 같은 구조 — 탭+토글이 위에 있는 카드형 패널 하나에 표 전체를 담는다. */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 1rem 1.2rem 0.4rem;
+  margin-bottom: 2.5rem;
+  overflow: hidden;
+}
+
+.panelTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding-bottom: 0.8rem;
+}
+
 .tabs {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
-  padding: 1.2rem 0 1.6rem;
 }
 .tab {
-  padding: 0.45rem 1rem;
+  padding: 0.4rem 0.85rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   color: var(--ink-dim);
   text-decoration: none;
+  white-space: nowrap;
 }
 .tab:hover {
   color: var(--ink);
@@ -32,8 +51,8 @@
   font-weight: 600;
 }
 
-/* "중요만 보기" 토글 — 체크박스는 시각적으로 숨기고 라벨을 스위치처럼 그린다. 뒤에 나오는
-   .list 안의 [data-has-tickers="false"] 규칙이 이 체크 상태를 형제 결합자(~)로 참조한다. */
+/* "중요만 보기" 토글 — 체크박스는 시각적으로 숨기고 라벨을 스위치처럼 그린다. 아래 표의
+   tr[data-has-tickers="false"] 규칙이 이 체크 상태를 형제 결합자(~)로 참조한다. */
 .toggleInput {
   position: absolute;
   width: 1px;
@@ -48,15 +67,15 @@
   font-size: 0.82rem;
   color: var(--ink-dim);
   cursor: pointer;
-  margin-bottom: 1rem;
   user-select: none;
+  flex-shrink: 0;
 }
 .toggleBox {
   width: 2rem;
   height: 1.1rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--bg);
   position: relative;
   flex-shrink: 0;
   transition: background 0.15s ease;
@@ -72,68 +91,120 @@
   background: var(--ink-faint);
   transition: transform 0.15s ease, background 0.15s ease;
 }
-:global(#important-only):checked ~ .toggleLabel .toggleBox {
+:global(#important-only):checked ~ .panelTop .toggleLabel .toggleBox {
   background: var(--accent);
   border-color: var(--accent);
 }
-:global(#important-only):checked ~ .toggleLabel .toggleBox::after {
+:global(#important-only):checked ~ .panelTop .toggleLabel .toggleBox::after {
   transform: translateX(0.9rem);
   background: var(--accent-ink);
 }
 
-.list {
+/* valley.town의 "2026년 1월 9일(금) · 15:10:31 서울" 날짜/시계 줄 — 우리는 실시간 틱이 아니라
+   하루 1회 배치라 "페이지 생성 시각"이라고 정직하게 라벨링한다(데이터 정직성 원칙, 실시간처럼
+   보이게 지어내지 않는다). */
+.panelMeta {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   gap: 0.7rem;
-  padding-bottom: 2.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
 }
-:global(#important-only):checked ~ .list .item[data-has-tickers="false"] {
-  display: none;
+.panelMeta__date {
+  font-weight: 700;
+  color: var(--ink);
+}
+.panelMeta__clock {
+  font-family: var(--font-mono), monospace;
+  color: var(--ink-faint);
 }
 
-.item {
-  display: block;
-  padding: 1rem 1.2rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-  text-decoration: none;
-  color: inherit;
+.tableWrap {
+  overflow-x: auto;
 }
-.item:hover {
-  border-color: var(--accent-strong);
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
 }
-.item__row {
-  display: flex;
-  gap: 0.9rem;
-  align-items: baseline;
-}
-.item__time {
-  flex-shrink: 0;
-  width: 3.4rem;
-  font-family: var(--font-mono), monospace;
-  font-size: 0.76rem;
+.table thead th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--ink-faint);
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
-.item__body {
-  min-width: 0;
-  flex: 1;
+.thTime {
+  width: 4.5rem;
 }
-.item__title {
-  font-size: 0.94rem;
+.thCategory {
+  width: 2.5rem;
+}
+.thSource {
+  width: 8rem;
+}
+.table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+.table tbody tr:hover {
+  background: var(--bg);
+}
+:global(#important-only):checked ~ .tableWrap tbody tr[data-has-tickers="false"] {
+  display: none;
+}
+.table td {
+  padding: 0.65rem 0.5rem;
+  vertical-align: top;
+}
+
+.timeCell {
+  font-family: var(--font-mono), monospace;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.timeCell__time {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+.timeCell__date {
+  display: block;
+  font-size: 0.68rem;
+}
+
+.categoryCell {
+  font-size: 1rem;
+  text-align: center;
+}
+
+.contentCell__title {
+  color: inherit;
+  text-decoration: none;
   line-height: 1.5;
 }
-.item__meta {
-  margin-top: 0.5rem;
-  font-size: 0.78rem;
+.contentCell__title:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.sourceCell {
   color: var(--ink-faint);
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .tickerRow {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.5rem;
+  margin-top: 0.45rem;
 }
 .tickerBadge {
   display: inline-flex;
@@ -157,7 +228,7 @@
 .empty {
   font-size: 0.86rem;
   color: var(--ink-faint);
-  padding: 1rem 0;
+  padding: 1rem 0 1.4rem;
 }
 .errorBox {
   border: 1px solid rgba(244, 63, 94, 0.35);
@@ -166,4 +237,5 @@
   padding: 0.7rem 1rem;
   font-size: 0.8rem;
   color: #fb7185;
+  margin-bottom: 1rem;
 }
