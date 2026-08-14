@@ -8,7 +8,7 @@
   letter-spacing: 0.02em;
 }
 
-/* valley.town 실시간 속보와 같은 구조 — 탭+토글이 위에 있는 카드형 패널 하나에 표 전체를 담는다. */
+/* valley.town 실시간 속보와 같은 구조 — 필터 탭이 위에 있는 카드형 패널 하나에 표 전체를 담는다. */
 .panel {
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -49,55 +49,6 @@
   border-color: var(--accent);
   color: var(--accent-ink);
   font-weight: 600;
-}
-
-/* "중요만 보기" 토글 — 체크박스는 시각적으로 숨기고 라벨을 스위치처럼 그린다. 아래 표의
-   tr[data-has-tickers="false"] 규칙이 이 체크 상태를 형제 결합자(~)로 참조한다. */
-.toggleInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-.toggleLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--ink-dim);
-  cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-}
-.toggleBox {
-  width: 2rem;
-  height: 1.1rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  position: relative;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-.toggleBox::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: 50%;
-  background: var(--ink-faint);
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-:global(#important-only):checked ~ .panelTop .toggleLabel .toggleBox {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-:global(#important-only):checked ~ .panelTop .toggleLabel .toggleBox::after {
-  transform: translateX(0.9rem);
-  background: var(--accent-ink);
 }
 
 /* valley.town의 "2026년 1월 9일(금) · 15:10:31 서울" 날짜/시계 줄 — 우리는 실시간 틱이 아니라
@@ -155,9 +106,6 @@
 }
 .table tbody tr:hover {
   background: var(--bg);
-}
-:global(#important-only):checked ~ .tableWrap tbody tr[data-has-tickers="false"] {
-  display: none;
 }
 .table td {
   padding: 0.65rem 0.5rem;

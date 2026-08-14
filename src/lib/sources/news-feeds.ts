@@ -1,5 +1,4 @@
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
-import { callGroq, extractJsonArray } from "@/lib/llm-clients";
 import { BIG_TECH_TICKERS } from "@/lib/sources/types";
 
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
@@ -177,43 +176,50 @@ export async function fetchBigTechHeadlines(asOf: Date = new Date()): Promise<{
   return { byTicker, errors };
 }
 
-// ── /news 페이지: 주제별 구글 뉴스 헤드라인 ─────────────────────
+// ── /news 페이지: valley.town 실시간 속보와 동일한 필터 구성(전체/중요/주식/경제 발표/
+// 중앙은행/뉴스) ─────────────────────
 // 위 fetchCandidateHeadlines/fetchBigTechHeadlines는 영문(hl=en-US) 검색어 기반이라 판정용으로만
 // 쓰지만, 뉴스 페이지는 사람이 직접 읽는 화면이라 한국어 결과(hl=ko&gl=KR)로 검색하고 실제 발행사
 // 이름(<source> 태그)도 그대로 보여준다.
-export type NewsPageCategoryKey = "world-politics" | "world-economy" | "domestic-politics" | "domestic-economy" | "tech";
+//
+// "전체"·"중요"는 구글 뉴스에 실제로 검색을 던지는 카테고리가 아니다 — 아래 4개(주식/경제 발표/
+// 중앙은행/뉴스)를 합친 가상 뷰다: "전체"는 4개를 시간순으로 합친 것, "중요"는 그중 추적 중인
+// 종목이 매칭된(news-ticker-match.ts) 것만. news-page.ts의 getNewsPageCategory가 DB에서 이
+// 두 뷰를 조립한다 — DB에는 4개 실제 카테고리로만 저장된다.
+export type NewsPageCategoryKey = "all" | "important" | "stock" | "econ-release" | "central-bank" | "news";
+export type FetchableCategoryKey = "stock" | "econ-release" | "central-bank" | "news";
 
-export const NEWS_PAGE_CATEGORIES: { key: NewsPageCategoryKey; label: string; query: string }[] = [
-  { key: "world-politics", label: "세계 정치", query: "국제 정치" },
-  { key: "world-economy", label: "세계 경제", query: "세계 경제" },
-  { key: "domestic-politics", label: "국내 정치", query: "국내 정치" },
-  { key: "domestic-economy", label: "국내 경제", query: "국내 경제" },
-  { key: "tech", label: "기술", query: "IT 기술" },
+interface FetchableCategory {
+  key: FetchableCategoryKey;
+  label: string;
+  query: string;
+}
+
+export const FETCHABLE_CATEGORIES: FetchableCategory[] = [
+  { key: "stock", label: "주식", query: "주식시장 증시" },
+  { key: "econ-release", label: "경제 발표", query: "경제지표 발표" },
+  { key: "central-bank", label: "중앙은행", query: "연준 한국은행 기준금리 통화정책" },
+  { key: "news", label: "뉴스", query: "속보" },
 ];
 
-// 구글 뉴스 자체 "토픽" 피드(뉴스 홈 상단 탭 — 세계·비즈니스 등) ID. 검색어 기반(q=...)이 아니라
-// 구글이 자체 편집 알고리즘으로 큐레이션한 섹션이라, "정치"·"경제" 같은 흔한 단어만 봐도 매칭되는
-// 검색 방식보다 훨씬 정확하다 — 봉화군 박람회 같은 무관한 지역 뉴스가 애초에 안 섞인다. 토픽 ID는
-// news.google.com 페이지 상단 탭의 실제 href에서 그대로 가져온 값(언어와 무관하게 안정적).
-const GOOGLE_NEWS_TOPIC_IDS: Partial<Record<NewsPageCategoryKey, string>> = {
-  "world-politics": "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtdHZHZ0pMVWlnQVAB", // 세계(World)
-  "world-economy": "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtdHZHZ0pMVWlnQVAB", // 비즈니스(Business)
-};
-
-// "대한민국"(Korea) 토픽 — 세계/비즈니스와 달리 정치·경제로 나뉘어 있지 않고 "한국 전체 주요
-// 뉴스"라 폭염·범죄·지역 뉴스 비중이 크다(실측: 70건 중 46건이 정치·경제 키워드 어디에도 안 걸림).
-// 그래서 이 토픽만 단독으로 쓰면 세계 카테고리와 달리 오히려 품질이 떨어진다 — 대신 기존 검색어
-// 기반 결과와 합쳐 후보 풀을 넓히고, 카테고리별 키워드 필터로 정치/경제를 가른다.
-const DOMESTIC_TOPIC_ID = "CAAqIQgKIhtDQkFTRGdvSUwyMHZNRFp4WkRNU0FtdHZLQUFQAQ";
+// 탭 표시 순서 그대로 — valley.town 화면과 동일한 순서(전체/중요/주식/경제 발표/중앙은행/뉴스).
+export const NEWS_PAGE_CATEGORIES: { key: NewsPageCategoryKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "important", label: "중요" },
+  ...FETCHABLE_CATEGORIES.map(({ key, label }) => ({ key, label })),
+];
 
 export interface CategoryHeadline {
   title: string;
   url: string;
   source: string;
   publishedAt: string | null;
-  // DB(NewsPageHeadline.tickers)에서 읽을 때만 채워진다(computeAllNewsPageCategories의 라이브
-  // RSS 파싱 결과에는 없음) — news-page.ts의 getNewsPageCategory가 채워 넣는다.
+  // 아래 둘 다 DB(NewsPageHeadline)에서 읽을 때만 채워진다(computeAllNewsPageCategories의 라이브
+  // RSS 파싱 결과에는 없음) — news-page.ts의 getNewsPageCategory가 채워 넣는다. category는
+  // "전체"·"중요"처럼 여러 실카테고리가 섞인 뷰에서 행마다 실제 출처 카테고리를 보여주기 위함
+  // (단일 카테고리 탭에서는 어차피 다 같은 값이라 화면에서 안 씀).
   tickers?: { ticker: string; changePct: number | null; asOfLabel: string | null }[];
+  category?: FetchableCategoryKey;
 }
 
 function parseGoogleNewsItems(xml: string): CategoryHeadline[] {
@@ -232,50 +238,6 @@ function parseGoogleNewsItems(xml: string): CategoryHeadline[] {
   }).filter((h) => h.title && h.url);
 }
 
-// "국내 정치"/"국제 정치" 같은 검색어가 너무 넓어서(구글 뉴스가 "정치"·"경제" 단어만 봐도
-// 매칭시킴) 박람회·강좌·기념식·연구 발표처럼 자본흐름과 무관한 지역/행정 뉴스가 다수 섞였다 —
-// 국내 카테고리만 필터링했더니 "세계 정치" 탭에서도 똑같이 무관한 지역 뉴스(예: "봉화군 국제
-// 수면치유박람회")가 나와서 세계 카테고리에도 같은 필터를 적용한다. 제외 목록은 무한히 늘어나는
-// 예외를 다 못 잡으니, 대신 "이 사이트가 실제로 다루는 주제와 관련 있는가"를 포함 키워드로
-// 판정한다 — 아래 키워드가 하나도 없으면 노출하지 않는다. "기술" 카테고리는 제외한다 — 그
-// 자체가 이미 좁은 주제 버킷이라 경제·정치 키워드로 거르면 정상적인 기술 뉴스까지 잘려나간다.
-// 짧고 흔한 낱말은 무관한 복합어 안에 우연히 포함돼 오탐을 낸다 — 예: "산업"은 "치유산업"(수면치유
-// 박람회 기사)에도 걸리고, "재정"은 "재정비"(도시 재정비 기사)에도 걸린다. 부분 문자열 매칭이라
-// 이런 키워드는 목록에서 뺐다 — 대신 "기업"·"실적"·"매출" 등 산업 관련 실제 뉴스는 다른 키워드로도
-// 대부분 걸린다.
-// 대한민국 토픽은 정치/경제로 안 나뉘어 있어 카테고리별로 직접 걸러야 한다 — 두 목록에 겹치는
-// 키워드(경제·정책 등)가 있어도 무방하다(어느 한쪽에라도 걸리면 해당 탭 후보로 채택).
-const DOMESTIC_RELEVANCE_KEYWORDS: Partial<Record<NewsPageCategoryKey, string[]>> = {
-  "domestic-politics": [
-    "대통령", "국회", "법안", "총리", "개각", "여당", "야당", "선거", "정치", "탄핵", "청문회",
-    "전쟁", "분쟁", "충돌", "공습", "제재", "정상회담", "외교", "협정", "동맹", "무력", "군사",
-  ],
-  "domestic-economy": [
-    "금리", "환율", "증시", "주가", "코스피", "코스닥", "국채", "채권", "수출", "수입", "무역", "관세",
-    "GDP", "성장률", "물가", "인플레", "실업", "고용", "부동산", "규제", "정책", "투자", "외국인",
-    "연기금", "국민연금", "세금", "과세", "예산", "통화정책", "한은", "기준금리", "경제", "기업",
-    "반도체", "자산", "펀드", "은행", "증권", "상장", "IPO", "인수합병", "실적", "매출", "영업이익", "적자", "흑자",
-  ],
-};
-
-// "비즈니스" 토픽은 gl=KR(한국 편집판)으로 조회하기 때문에 삼성전자·SK하이닉스·코스피처럼
-// 국내 기업/증시 뉴스가 상당수 섞여 나온다 — "세계 경제" 탭 취지(해외 이슈)에 안 맞아 걸러서
-// "국내 경제" 탭으로 넘긴다. 국가를 불문하고 걸릴 수 있는 일반 명사("정부"·"당국"·"국회" 등,
-// "일본 정부"처럼 다른 나라 기사에도 오탐 가능)는 빼고, 한국에서만 의미가 성립하는 고유명사
-// (기업명·지명)와 관용 표현("한국"·"국내"·"대한민국")만 쓴다.
-const KOREA_INDICATOR_KEYWORDS = [
-  "한국", "대한민국", "국내", "코스피", "코스닥", "원화", "한은", "한국은행",
-  "삼성", "SK하이닉스", "SK텔레콤", "SKT", "LG전자", "LG화학", "현대차", "현대자동차", "기아",
-  "한화", "포스코", "카카오", "네이버", "KT", "홈플러스", "이마트", "롯데", "두산", "쿠팡",
-  "HD현대", "신세계", "GS", "CJ", "셀트리온", "우리금융", "하나금융", "KB금융", "신한",
-  "서울", "강남", "부산", "명동", "국세청",
-  "국힘", "국민의힘", "민주당", "개미", "반대매매", "사이드카",
-];
-
-function isKoreaRelated(title: string): boolean {
-  return KOREA_INDICATOR_KEYWORDS.some((kw) => title.includes(kw));
-}
-
 async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (capital-flow-tracker personal use)" } });
   if (!res.ok) throw new Error(`구글 뉴스 조회 실패: ${res.status}`);
@@ -283,60 +245,8 @@ async function fetchGoogleNewsRss(url: string): Promise<CategoryHeadline[]> {
   return parseGoogleNewsItems(xml);
 }
 
-/**
- * 키워드 목록은 회사명·지명 등 명시적 마커가 있는 국내 뉴스만 잡는다 — 정치인 실명, 세수 통계처럼
- * 한국 특유 맥락이지만 고유명사가 없는 헤드라인은 못 걸러낸다("코스피 6500선 돌파"처럼 세계 정치
- * 토픽에도 새어든 사례 확인). 이런 잔여 케이스는 끝없이 키워드를 추가해도 다 못 잡으므로, 키워드
- * 필터를 통과한 나머지만 LLM(Groq)에 넘겨 한 번 더 국내/해외를 판정한다(비용 절감을 위해 전체가
- * 아닌 잔여분만 판정).
- */
-async function classifyKoreaRelated(headlines: CategoryHeadline[]): Promise<Set<number>> {
-  if (!process.env.GROQ_API_KEY || headlines.length === 0) return new Set();
-
-  const list = headlines.map((h, i) => `${i + 1}. ${h.title}`).join("\n");
-  const prompt = `아래는 구글 뉴스 헤드라인 목록이다. 이 중 "대한민국(한국) 국내 이슈"에 해당하는
-항목의 번호만 골라라 — 한국 기업의 실적·주가·경영, 한국 증시(코스피·코스닥 등), 한국 정부·정치·
-정책·선거·법안, 한국 특정 지역 뉴스는 전부 국내 이슈다(회사명·정치인 실명이 직접 언급되지 않고
-"세수"·"증권거래세"처럼 문맥과 용어만으로 한국 얘기임을 알 수 있는 경우도 포함해라). 미국·일본·
-중국·유럽 등 해외 기업/시장/정부 관련 뉴스는 국내 이슈가 아니다.
-
-번호만 담은 JSON 배열로만 답해라. 다른 텍스트는 쓰지 마라. 예: [1, 4, 7]
-해당하는 게 없으면 빈 배열 []만 답해라.
-
-헤드라인 목록:
-${list}`;
-
-  // fail-open: 키워드 필터 결과는 이미 반영됐으니 이 LLM 판정은 보강일 뿐이다 — 실패해도 그냥 빈
-  // Set을 돌려줘 키워드 필터만 적용된 상태로 계속 진행한다.
-  let text: string;
-  try {
-    // 응답은 [1, 4, 7]처럼 짧은 번호 배열뿐이라 2048은 과했다 — 512로 낮춰 bigtech-reasons.ts와
-    // 같은 분(TPM 8000)에 몰려도 합계가 한도에 덜 빠듯하게 걸리도록 여유를 늘렸다.
-    text = await callGroq(prompt, { maxTokens: 512, reasoningEffort: "low" });
-  } catch {
-    return new Set();
-  }
-  const indices = extractJsonArray<number>(text);
-  return indices ? new Set(indices.filter((n) => typeof n === "number")) : new Set();
-}
-
-/** 세계 정치/경제 토픽 피드를 국내/해외로 가른다 — 키워드로 1차, 통과한 잔여분만 LLM(Groq)으로 2차 판정. */
-async function splitTopicByKorea(topicId: string): Promise<{ korea: CategoryHeadline[]; world: CategoryHeadline[] }> {
-  const items = await fetchGoogleNewsRss(`https://news.google.com/rss/topics/${topicId}?hl=ko&gl=KR&ceid=KR:ko`);
-  const keywordKorea = items.filter((h) => isKoreaRelated(h.title));
-  const remainder = items.filter((h) => !isKoreaRelated(h.title));
-
-  const koreaIndices = await classifyKoreaRelated(remainder);
-  const llmKorea = remainder.filter((_, i) => koreaIndices.has(i + 1));
-  const world = remainder.filter((_, i) => !koreaIndices.has(i + 1));
-
-  return { korea: [...keywordKorea, ...llmKorea], world };
-}
-
-function searchUrlFor(key: NewsPageCategoryKey): string {
-  const category = NEWS_PAGE_CATEGORIES.find((c) => c.key === key);
-  if (!category) throw new Error(`알 수 없는 뉴스 카테고리: ${key}`);
-  return `https://news.google.com/rss/search?q=${encodeURIComponent(category.query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
+function searchUrlFor(query: string): string {
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:2d&hl=ko&gl=KR&ceid=KR:ko`;
 }
 
 function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
@@ -353,40 +263,23 @@ function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
 }
 
 /**
- * /news 페이지 5개 카테고리를 전부 계산한다. Groq 무료 티어 일일 할당량(RPD/TPD)을 메인 리포트
- * 파이프라인(judgeHeadlines 등)과 공유하기 때문에 페이지 방문마다 실시간 호출하면 안 되고, 이 함수를
- * 하루 배치에서 딱 한 번만 호출해 결과를 DB(NewsPageHeadline)에 저장한다 — 세계 정치/경제 토픽도
- * (국내/해외 분리에) 한 번씩만 조회해 두 국내 탭에 재사용한다.
+ * /news 페이지의 실제 검색 카테고리(주식/경제 발표/중앙은행/뉴스) 4개만 구글 뉴스에서 가져온다 —
+ * "전체"·"중요"는 이 4개를 DB에서 조합해 만드는 가상 뷰라 여기선 안 다룬다(news-page.ts의
+ * getNewsPageCategory 참고). Groq 무료 티어 일일 할당량을 메인 리포트 파이프라인과 공유하므로
+ * 페이지 방문마다 실시간 호출하면 안 되고, 이 함수를 하루 배치에서 딱 한 번만 호출해 DB
+ * (NewsPageHeadline)에 저장한다.
  */
-export async function computeAllNewsPageCategories(limit = 20): Promise<Record<NewsPageCategoryKey, CategoryHeadline[]>> {
-  const [worldPoliticsSplit, worldEconomySplit, domesticTopicItems, politicsSearchItems, economySearchItems, techItems] =
-    await Promise.all([
-      splitTopicByKorea(GOOGLE_NEWS_TOPIC_IDS["world-politics"]!),
-      splitTopicByKorea(GOOGLE_NEWS_TOPIC_IDS["world-economy"]!),
-      fetchGoogleNewsRss(`https://news.google.com/rss/topics/${DOMESTIC_TOPIC_ID}?hl=ko&gl=KR&ceid=KR:ko`),
-      fetchGoogleNewsRss(searchUrlFor("domestic-politics")),
-      fetchGoogleNewsRss(searchUrlFor("domestic-economy")),
-      fetchGoogleNewsRss(searchUrlFor("tech")),
-    ]);
-
-  const domesticPolitics = dedupByUrl(
-    dedupByUrl(domesticTopicItems, politicsSearchItems).filter((h) =>
-      DOMESTIC_RELEVANCE_KEYWORDS["domestic-politics"]!.some((kw) => h.title.includes(kw))
-    ),
-    worldPoliticsSplit.korea
-  );
-  const domesticEconomy = dedupByUrl(
-    dedupByUrl(domesticTopicItems, economySearchItems).filter((h) =>
-      DOMESTIC_RELEVANCE_KEYWORDS["domestic-economy"]!.some((kw) => h.title.includes(kw))
-    ),
-    worldEconomySplit.korea
+export async function computeAllNewsPageCategories(limit = 20): Promise<Record<FetchableCategoryKey, CategoryHeadline[]>> {
+  const results = await Promise.all(
+    FETCHABLE_CATEGORIES.map((c) => fetchGoogleNewsRss(searchUrlFor(c.query)))
   );
 
-  return {
-    "world-politics": worldPoliticsSplit.world.slice(0, limit),
-    "world-economy": worldEconomySplit.world.slice(0, limit),
-    "domestic-politics": domesticPolitics.slice(0, limit),
-    "domestic-economy": domesticEconomy.slice(0, limit),
-    tech: techItems.slice(0, limit),
-  };
+  // "속보"류 검색어는 같은 사건을 다룬 여러 매체의 사실상 동일한 제목이 우르르 몰려 나온다(실측:
+  // "전체"·"뉴스" 탭 상위 8건 중 7건이 같은 소송 기사였음) — url만 다른 별개 기사라 dedupByUrl로는
+  // 못 걸러진다. fetchCandidateHeadlines가 이미 쓰는 것과 같은 제목 유사도 dedup을 적용한다.
+  const out = {} as Record<FetchableCategoryKey, CategoryHeadline[]>;
+  FETCHABLE_CATEGORIES.forEach((c, i) => {
+    out[c.key] = dedupBySimilarTitle(dedupByUrl(results[i]), (h) => h.title).slice(0, limit);
+  });
+  return out;
 }

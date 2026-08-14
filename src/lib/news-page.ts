@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import {
   computeAllNewsPageCategories,
-  NEWS_PAGE_CATEGORIES,
+  FETCHABLE_CATEGORIES,
   type CategoryHeadline,
   type NewsPageCategoryKey,
 } from "@/lib/sources/news-feeds";
@@ -42,9 +42,11 @@ async function computeReactionsForHeadlines(
   return rows;
 }
 
-/** 하루 배치가 호출 — /news 페이지 5개 카테고리를 계산해 오늘 날짜로 저장하고, 매칭된 종목의
- * 시장 반응(NewsHeadlineTicker)도 함께 채운다. 종목·반응 계산은 기존 헤드라인 저장과 완전히
- * 분리된 추가 단계라 이 부분이 실패해도(예: Yahoo 전체 장애) 헤드라인 저장 자체는 그대로 성공한다. */
+/** 하루 배치가 호출 — /news 페이지의 실제 검색 카테고리 4개(주식/경제 발표/중앙은행/뉴스)를
+ * 계산해 오늘 날짜로 저장하고, 매칭된 종목의 시장 반응(NewsHeadlineTicker)도 함께 채운다.
+ * "전체"·"중요"는 저장 대상이 아니다(getNewsPageCategory가 이 4개를 읽어 조립하는 가상 뷰).
+ * 종목·반응 계산은 기존 헤드라인 저장과 완전히 분리된 추가 단계라 이 부분이 실패해도(예: Yahoo
+ * 전체 장애) 헤드라인 저장 자체는 그대로 성공한다. */
 export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: string[] }> {
   const errors: string[] = [];
   const today = kstToday();
@@ -55,7 +57,7 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
     const categories = await computeAllNewsPageCategories();
     await db.newsPageHeadline.deleteMany({ where: { date: new Date(today) } });
 
-    for (const { key } of NEWS_PAGE_CATEGORIES) {
+    for (const { key } of FETCHABLE_CATEGORIES) {
       const headlines = categories[key];
       if (headlines.length === 0) continue;
       await db.newsPageHeadline.createMany({
@@ -101,8 +103,45 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
   return { saved, errors };
 }
 
-/** /news 페이지가 호출 — 가장 최근에 저장된 날짜의 헤드라인을 읽기만 한다(실시간 조회·LLM 호출 없음). */
+function toCategoryHeadline(r: {
+  title: string;
+  url: string;
+  source: string;
+  category: string;
+  publishedAt: Date | null;
+  tickers: { ticker: string; changePct: number | null; asOfLabel: string | null }[];
+}): CategoryHeadline {
+  return {
+    title: r.title,
+    url: r.url,
+    source: r.source,
+    publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
+    tickers: r.tickers.map((t) => ({ ticker: t.ticker, changePct: t.changePct, asOfLabel: t.asOfLabel })),
+    category: r.category as CategoryHeadline["category"],
+  };
+}
+
+/** /news 페이지가 호출 — 가장 최근에 저장된 날짜의 헤드라인을 읽기만 한다(실시간 조회·LLM 호출 없음).
+ * "all"·"important"는 실제 저장된 카테고리가 아니라 4개 실카테고리를 최신 날짜 기준으로 합친
+ * 가상 뷰다 — "important"는 그중 종목이 매칭된(tickers 1건 이상) 것만. 두 뷰 다 시간순(최신
+ * publishedAt 먼저)으로 정렬한다(개별 카테고리는 구글 뉴스 자체 순위인 rank 순 유지). */
 export async function getNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
+  if (key === "all" || key === "important") {
+    const latest = await db.newsPageHeadline.findFirst({ orderBy: { date: "desc" }, select: { date: true } });
+    if (!latest) return [];
+
+    const rows = await db.newsPageHeadline.findMany({
+      where: {
+        date: latest.date,
+        ...(key === "important" ? { tickers: { some: {} } } : {}),
+      },
+      orderBy: { publishedAt: "desc" },
+      take: limit,
+      include: { tickers: true },
+    });
+    return rows.map(toCategoryHeadline);
+  }
+
   const latest = await db.newsPageHeadline.findFirst({
     where: { category: key },
     orderBy: { date: "desc" },
@@ -116,12 +155,5 @@ export async function getNewsPageCategory(key: NewsPageCategoryKey, limit = 20):
     take: limit,
     include: { tickers: true },
   });
-
-  return rows.map((r) => ({
-    title: r.title,
-    url: r.url,
-    source: r.source,
-    publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
-    tickers: r.tickers.map((t) => ({ ticker: t.ticker, changePct: t.changePct, asOfLabel: t.asOfLabel })),
-  }));
+  return rows.map(toCategoryHeadline);
 }

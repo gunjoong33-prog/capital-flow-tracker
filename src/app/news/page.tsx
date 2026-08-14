@@ -11,15 +11,15 @@ import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
-// valley.town 실시간 속보 테이블의 "분류" 열(카테고리 아이콘)과 동일한 역할 — 우리는 카테고리를
-// 탭으로 미리 나눠서 보여주므로 한 화면 안에서는 전부 같은 아이콘이지만, 표 구조 자체를
-// 그대로 맞추기 위해 유지한다.
-const CATEGORY_ICON: Record<NewsPageCategoryKey, string> = {
-  "world-politics": "🌐",
-  "world-economy": "💹",
-  "domestic-politics": "🏛",
-  "domestic-economy": "🏠",
-  tech: "💻",
+// valley.town 실시간 속보 탭·표의 아이콘과 동일한 역할. "전체"·"중요"는 여러 실카테고리가 섞인
+// 뷰라 행마다 실제 출처(h.category)로 아이콘을 고르고, 탭 아이콘 자체는 별도로 둔다.
+const TAB_ICON: Record<NewsPageCategoryKey, string> = {
+  all: "🗞",
+  important: "❗",
+  stock: "📊",
+  "econ-release": "📄",
+  "central-bank": "🏛",
+  news: "💬",
 };
 
 function formatTimeCell(pubDate: string | null): string {
@@ -84,12 +84,6 @@ export default async function NewsPage({
         </div>
 
         <div className={styles.panel}>
-          {/* "중요만 보기" — 관련종목이 매칭된(=추적 중인 자산에 실제 영향 있는) 헤드라인만 남긴다.
-              클라이언트 컴포넌트 없이 순수 CSS로 처리(ReportView.module.css의 checkbox+peer
-              패턴과 같은 원칙). input은 .panel의 직계 첫 자식이어야 형제 결합자(~)로 아래
-              .panelTop 안의 라벨과 .tableWrap 안의 행 둘 다에 닿는다 — 입력 자체는 시각적으로
-              숨겨(toggleInput) 위치가 레이아웃에 영향 안 준다. */}
-          <input type="checkbox" id="important-only" className={styles.toggleInput} />
           <div className={styles.panelTop}>
             <nav className={styles.tabs}>
               {NEWS_PAGE_CATEGORIES.map((c) => (
@@ -98,15 +92,10 @@ export default async function NewsPage({
                   href={`/news?category=${c.key}`}
                   className={`${styles.tab} ${c.key === active.key ? styles.tabActive : ""}`}
                 >
-                  {CATEGORY_ICON[c.key]} {c.label}
+                  {TAB_ICON[c.key]} {c.label}
                 </Link>
               ))}
             </nav>
-
-            <label htmlFor="important-only" className={styles.toggleLabel}>
-              <span className={styles.toggleBox} />
-              관련종목만
-            </label>
           </div>
 
           <div className={styles.panelMeta}>
@@ -131,14 +120,15 @@ export default async function NewsPage({
                 <tbody>
                   {headlines.map((h, i) => {
                     const tickers = h.tickers ?? [];
+                    const rowCategory = h.category ? NEWS_PAGE_CATEGORIES.find((c) => c.key === h.category) : undefined;
                     return (
-                      <tr key={i} data-has-tickers={tickers.length > 0}>
+                      <tr key={i}>
                         <td className={styles.timeCell}>
                           <span className={styles.timeCell__time}>{formatTimeCell(h.publishedAt)}</span>
                           <span className={styles.timeCell__date}>{formatDateCell(h.publishedAt)}</span>
                         </td>
-                        <td className={styles.categoryCell} aria-label={active.label}>
-                          {CATEGORY_ICON[active.key]}
+                        <td className={styles.categoryCell} aria-label={rowCategory?.label ?? active.label}>
+                          {h.category ? TAB_ICON[h.category] : TAB_ICON[active.key]}
                         </td>
                         <td className={styles.contentCell}>
                           <a href={h.url} target="_blank" rel="noopener noreferrer" className={styles.contentCell__title}>

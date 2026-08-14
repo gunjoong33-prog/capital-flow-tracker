@@ -62,12 +62,11 @@ export default async function LandingPage({
 }) {
   const { date: dateParam } = await searchParams;
 
-  const [usdkrwRecent, usdkrwYear, fearGreedMetric, worldEconomyNews, domesticEconomyNews] = await Promise.all([
+  const [usdkrwRecent, usdkrwYear, fearGreedMetric, allNews] = await Promise.all([
     getMetricHistoryByCount(METRICS.USDKRW, 15),
     getMetricHistory(METRICS.USDKRW, 365),
     getLatestMetric(METRICS.CNN_FEAR_GREED),
-    getNewsPageCategory("world-economy", 4),
-    getNewsPageCategory("domestic-economy", 4),
+    getNewsPageCategory("all", 8),
   ]);
 
   const isValidDateParam = dateParam !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(dateParam);
@@ -92,14 +91,9 @@ export default async function LandingPage({
   const fearGreedValue = fearGreedMetric?.value ?? null;
   const fearGreed = fearGreedValue !== null ? fearGreedLabel(fearGreedValue) : null;
 
-  const news = [...worldEconomyNews, ...domesticEconomyNews]
-    .filter((n) => isHomeNewsRelevant(n.title))
-    .sort((a, b) => {
-      const at = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const bt = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      return bt - at;
-    })
-    .slice(0, 4);
+  // getNewsPageCategory("all", ...)가 이미 여러 카테고리를 시간순으로 합쳐서 주므로 직접
+  // merge·sort할 필요는 없다 — 사회 이슈 기사 제외 필터만 홈 화면 전용으로 남긴다.
+  const news = allNews.filter((n) => isHomeNewsRelevant(n.title)).slice(0, 4);
 
   return (
     <div
