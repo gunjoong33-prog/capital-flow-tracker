@@ -211,6 +211,9 @@ export interface CategoryHeadline {
   url: string;
   source: string;
   publishedAt: string | null;
+  // DB(NewsPageHeadline.tickers)에서 읽을 때만 채워진다(computeAllNewsPageCategories의 라이브
+  // RSS 파싱 결과에는 없음) — news-page.ts의 getNewsPageCategory가 채워 넣는다.
+  tickers?: { ticker: string; changePct: number | null; asOfLabel: string | null }[];
 }
 
 function parseGoogleNewsItems(xml: string): CategoryHeadline[] {

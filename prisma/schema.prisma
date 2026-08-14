@@ -92,9 +92,25 @@ model NewsPageHeadline {
   source      String
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
+  tickers     NewsHeadlineTicker[]
 
   @@unique([date, category, url])
   @@index([date, category])
+}
+
+// 헤드라인과 연관된 종목/지수/원자재의 "속보 이후 시장 반응" — syncNewsPageHeadlines가 하루 1회
+// 배치로만 채운다(요청마다 계산하면 Yahoo 비공식 API 호출이 방문자 수만큼 불어난다). 매칭은
+// news-ticker-match.ts의 키워드 사전(LLM 아님, 결정론적)이 정한다.
+model NewsHeadlineTicker {
+  id         String           @id @default(cuid())
+  headlineId String
+  headline   NewsPageHeadline @relation(fields: [headlineId], references: [id], onDelete: Cascade)
+  ticker     String // 화면 표시용 코드(예: AAPL, KOSPI, WTI) — MetricValue.metric과 이름공간이 다를 수 있음
+  changePct  Float? // null = 계산 실패(장중봉 조회 불가 등) — "0%"와 구분, 지어내지 않는다
+  asOfLabel  String? // 예: "8/14 14:35 KST 기준" — 반응 계산에 쓴 실제 스냅샷 시각
+  createdAt  DateTime         @default(now())
+
+  @@index([headlineId])
 }
 
 // FOMC·CPI·고용지표 등 예정된 발표일. 1단계 "14일 내 큰 이벤트" 판정 + 사이트 캘린더 표시용.
