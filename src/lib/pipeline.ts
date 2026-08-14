@@ -19,6 +19,7 @@ import { sleep } from "@/lib/llm-clients";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { exportDailyReportNow } from "@/lib/obsidian-export";
+import { sendReportUploadedAlert } from "@/lib/discord-alert";
 import { syncMajorEvents } from "@/lib/major-events";
 import { syncNewsEvents } from "@/lib/news-events";
 import { syncNewsPageHeadlines } from "@/lib/news-page";
@@ -379,6 +380,12 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       await exportDailyReportNow(savedReport);
     } catch (err) {
       sourceErrors.push({ source: "옵시디언export", error: err instanceof Error ? err.message : String(err) });
+    }
+
+    try {
+      await sendReportUploadedAlert(marketDate, report.step8.finalDecision, report.step8.macroTrendScore);
+    } catch (err) {
+      sourceErrors.push({ source: "Discord알림", error: err instanceof Error ? err.message : String(err) });
     }
 
     // 5) 노션 기록 — 11개 하위 DB(상세) + Calender DB(시장 체크리스트 페이지에 실제로 보이는 항목)
