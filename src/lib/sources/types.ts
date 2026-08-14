@@ -23,7 +23,9 @@ export const METRICS = {
   US_NFP: "US_NFP", // 미국 비농업 고용자수(1단계 이벤트 서프라이즈 판정용)
   US_PPI: "US_PPI", // 미국 생산자물가지수(최종수요 기준, 계절조정 SA, 전월대비·서프라이즈 판정용). FRED PPIFIS.
   US_PPI_NSA: "US_PPI_NSA", // PPI 최종수요, 비계절조정(NSA), YoY 계산 전용(CPI와 같은 BLS 관례). FRED PPIFID.
-  US_PCE: "US_PCE", // 미국 PCE 물가지수(헤드라인) — 서프라이즈 판정용, 화면엔 안 씀(근원 PCE로 대체)
+  US_PPI_CORE: "US_PPI_CORE", // 근원(Core) PPI — 최종수요에서 식품·에너지 제외, 계절조정 SA. FRED PPIFES.
+  US_PPI_CORE_NSA: "US_PPI_CORE_NSA", // 근원 PPI, 비계절조정(NSA), YoY 계산 전용(CPI와 같은 BLS 관례). FRED PPICOR.
+  US_PCE: "US_PCE", // 미국 PCE 물가지수(헤드라인, 식품·에너지 포함) — CPI·PPI와 마찬가지로 헤드라인·근원 둘 다 표시. FRED PCEPI.
   US_PCE_CORE: "US_PCE_CORE", // 근원(Core) PCE — 식품·에너지 제외, 연준이 실제 목표(YoY 2%)로 삼는 지표. FRED PCEPILFE.
   FED_FUNDS_RATE: "FED_FUNDS_RATE", // 연준 기준금리 상단(FOMC 실제 결정 판정용)
 

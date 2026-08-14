@@ -264,13 +264,29 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
     // vintage 정확도가 중요한 지표들(CPI·NFP·PPI·PCE)은 report asOf가 아니라 이벤트가 실제로 발표된
     // 그 날짜(e.date)를 기준으로 FRED에 그 시점 스냅샷을 물어봐야 한다 — report asOf를 쓰면 리포트
     // 생성이 발표일보다 며칠 늦게 재구성되는 경우(백필 등) 그사이 또 다른 개정이 끼어들 수 있다.
+    // CPI·PPI·PCE는 헤드라인·근원을 한 줄에 억지로 합치지 않고 별도 행 두 개로 나눈다 — 사용자 요청
+    // (2026-08-13 CPI 최초 적용 "헤드라인 cpi, core cpi yoy,mom으로 표기 ... 앞으로 모든 cpi,ppi,pce
+    // 전부 다", 2026-08-14 PPI·PCE까지 확장 요청으로 완결). name·date는 원래 이벤트 이름 그대로 유지해
+    // run.ts의 "이미 결과 나온 이벤트는 예정 목록에서 제외" 중복제거 키(name|date)가 안 깨지게 하고,
+    // subLabel로만 행 라벨을 구분한다(run.ts가 `${o.name}${o.subLabel}(...)` 형태로 조립).
     if (e.name.includes("CPI")) {
-      // 헤드라인·근원 CPI를 한 줄에 억지로 합치지 않고 별도 행 두 개로 나눈다 — 사용자 요청
-      // (2026-08-13): "헤드라인 cpi, core cpi yoy,mom으로 표기, 기준에 따라 충족값 표기(v,x)".
-      // name·date는 원래 이벤트("미국 CPI 발표")로 유지해 중복제거 키가 안 깨지게 하고, subLabel로만
-      // 행 라벨을 구분한다(run.ts가 `${o.name}${o.subLabel}(...)` 형태로 조립).
       const headline = await priceIndexDetail(METRICS.US_CPI, 12, 1.5, e.date, METRICS.US_CPI_NSA);
       const core = await priceIndexDetail(METRICS.US_CPI_CORE, 12, 1.5, e.date, METRICS.US_CPI_CORE_NSA);
+      outcomes.push({ name: e.name, date: dateStr, risky: headline.risky, detail: headline.detail, subLabel: "(헤드라인)" });
+      outcomes.push({ name: e.name, date: dateStr, risky: core.risky, detail: core.detail, subLabel: "(근원)" });
+      continue;
+    }
+    if (e.name.includes("PPI")) {
+      const headline = await priceIndexDetail(METRICS.US_PPI, 12, 1.5, e.date, METRICS.US_PPI_NSA);
+      const core = await priceIndexDetail(METRICS.US_PPI_CORE, 12, 1.5, e.date, METRICS.US_PPI_CORE_NSA);
+      outcomes.push({ name: e.name, date: dateStr, risky: headline.risky, detail: headline.detail, subLabel: "(헤드라인)" });
+      outcomes.push({ name: e.name, date: dateStr, risky: core.risky, detail: core.detail, subLabel: "(근원)" });
+      continue;
+    }
+    if (e.name.includes("PCE")) {
+      // PCE는 BEA가 YoY도 SA로 발표하는 관례라(CPI·PPI와 반대) yoyMetric을 따로 안 넘긴다.
+      const headline = await priceIndexDetail(METRICS.US_PCE, 12, 1.5, e.date);
+      const core = await priceIndexDetail(METRICS.US_PCE_CORE, 12, 1.5, e.date);
       outcomes.push({ name: e.name, date: dateStr, risky: headline.risky, detail: headline.detail, subLabel: "(헤드라인)" });
       outcomes.push({ name: e.name, date: dateStr, risky: core.risky, detail: core.detail, subLabel: "(근원)" });
       continue;
@@ -281,13 +297,6 @@ export async function evaluateRecentEventOutcomes(daysBack: number, asOf: Date =
     // 아니라 YoY/MoM(%) 표기 대상이 아니므로 zScoreSurprise를 그대로 유지한다.
     if (e.name.includes("고용지표"))
       result = await zScoreSurprise(METRICS.US_NFP, 12, 1.5, false, e.date, (v) => `${Math.round(v * 1000).toLocaleString("en-US")}명`);
-    else if (e.name.includes("PPI")) result = await priceIndexDetail(METRICS.US_PPI, 12, 1.5, e.date, METRICS.US_PPI_NSA);
-    else if (e.name.includes("PCE")) {
-      const core = await priceIndexDetail(METRICS.US_PCE_CORE, 12, 1.5, e.date);
-      // 헤드라인 PCE(식품·에너지 포함)는 화면에 안 보여주고 BEA 원본 링크로 안내한다 — 연준이 실제로
-      // 목표(YoY 2%)로 삼는 건 근원 PCE라 서프라이즈 판정·표시 둘 다 근원 기준으로 통일한다.
-      result = { risky: core.risky, detail: `근원(Core) PCE ${core.detail} — 헤드라인·세부 항목은 링크 참고`, url: "https://www.bea.gov/data/personal-consumption-expenditures-price-index" };
-    }
     else if (e.name.includes("FOMC")) result = await fedRateChanged(e.date, asOf);
     else continue;
 
