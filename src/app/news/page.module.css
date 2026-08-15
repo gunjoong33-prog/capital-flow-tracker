@@ -2,10 +2,10 @@
   padding: 1.6rem 0 0.5rem;
 }
 .pageHead__eyebrow {
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-gothic), sans-serif;
+  font-weight: 700;
   font-size: 0.76rem;
   color: var(--accent-strong);
-  letter-spacing: 0.02em;
 }
 
 /* valley.town 실시간 속보와 같은 구조 — 필터 탭이 위에 있는 카드형 패널 하나에 표 전체를 담는다. */
