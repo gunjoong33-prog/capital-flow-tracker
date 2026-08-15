@@ -61,7 +61,7 @@ function Visual({ visual }: { visual: PptSlideVisual }) {
             <div className={styles.weightTrack}>
               <div className={styles.weightFill} style={{ width: `${Math.min(100, (row.score / 10) * 100)}%` }} />
             </div>
-            <span className={styles.weightScore}>{row.score.toFixed(1)}</span>
+            <span className={styles.weightScore}>{row.score.toFixed(2)}</span>
           </div>
         ))}
       </div>

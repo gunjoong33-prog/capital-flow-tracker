@@ -363,7 +363,7 @@ export function StepCard({
           )}
         </div>
         {score !== undefined && (
-          <span className="text-xs text-[var(--ink-faint)]">점수 {score.toFixed(1)}</span>
+          <span className="text-xs text-[var(--ink-faint)]">점수 {score.toFixed(2)}</span>
         )}
       </div>
       {tip && (

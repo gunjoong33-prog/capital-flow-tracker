@@ -139,7 +139,10 @@ export function Step7Gauge({ vix, fearGreed }: { vix: number | null; fearGreed: 
           />
         </svg>
         <div className="space-y-1.5 text-sm text-[var(--ink-dim)]">
-          {vix !== null && <div>VIX <b className="text-[var(--ink)]">{vix.toFixed(1)}</b></div>}
+          {/* 사이트 전체가 점수·VIX 등 지표값을 소수점 둘째 자리로 통일하기로 한 결정(run.ts의
+              step8 표시 정밀도 주석 참고)에 맞춘다 — 여기만 첫째 자리였던 게 요약 카드(14.3)와
+              종합판단 문구(14.25)가 서로 다른 값처럼 보이는 원인이었다. */}
+          {vix !== null && <div>VIX <b className="text-[var(--ink)]">{vix.toFixed(2)}</b></div>}
           {fearGreed !== null && <div>공포탐욕지수 <b className="text-[var(--ink)]">{fearGreed.toFixed(1)}</b></div>}
         </div>
       </div>
