@@ -103,7 +103,8 @@ export default async function NewsPage({
                   href={`/news?category=${c.key}`}
                   className={`${styles.tab} ${c.key === active.key ? styles.tabActive : ""}`}
                 >
-                  {TAB_ICON[c.key]} {c.label}
+                  {TAB_ICON[c.key]}
+                  <span>{c.label}</span>
                 </Link>
               ))}
             </nav>
