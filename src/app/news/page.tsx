@@ -92,7 +92,7 @@ export default async function NewsPage({
                   href={`/news?category=${c.key}`}
                   className={`${styles.tab} ${c.key === active.key ? styles.tabActive : ""}`}
                 >
-                  {TAB_ICON[c.key]} {c.label}
+                  <span className={styles.emoji}>{TAB_ICON[c.key]}</span> {c.label}
                 </Link>
               ))}
             </nav>
@@ -100,7 +100,7 @@ export default async function NewsPage({
 
           <div className={styles.panelMeta}>
             <span className={styles.panelMeta__date}>{todayLabel}</span>
-            <span className={styles.panelMeta__clock}>🕐 {nowLabel} 페이지 생성 시각(KST) · 헤드라인은 하루 1회 배치 갱신</span>
+            <span className={styles.panelMeta__clock}><span className={styles.emoji}>🕐</span> {nowLabel} 페이지 생성 시각(KST) · 헤드라인은 하루 1회 배치 갱신</span>
           </div>
 
           {error && <p className={styles.errorBox}>뉴스를 불러오지 못했습니다 — {error}</p>}
@@ -128,7 +128,7 @@ export default async function NewsPage({
                           <span className={styles.timeCell__date}>{formatDateCell(h.publishedAt)}</span>
                         </td>
                         <td className={styles.categoryCell} aria-label={rowCategory?.label ?? active.label}>
-                          {h.category ? TAB_ICON[h.category] : TAB_ICON[active.key]}
+                          <span className={styles.emoji}>{h.category ? TAB_ICON[h.category] : TAB_ICON[active.key]}</span>
                         </td>
                         <td className={styles.contentCell}>
                           {h.url.startsWith("/") ? (
