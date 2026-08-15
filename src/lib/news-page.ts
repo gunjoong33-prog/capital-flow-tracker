@@ -43,10 +43,16 @@ async function computeReactionsForHeadlines(
   return rows;
 }
 
-/** 하루 배치가 호출 — /news 페이지의 실제 검색 카테고리 4개(주식/경제 발표/중앙은행/뉴스)를
- * 계산해 오늘 날짜로 저장하고, 매칭된 종목의 시장 반응(NewsHeadlineTicker)도 함께 채운다.
- * "전체"·"중요"는 저장 대상이 아니다(getNewsPageCategory가 이 4개를 읽어 조립하는 가상 뷰).
- * 종목·반응 계산은 기존 헤드라인 저장과 완전히 분리된 추가 단계라 이 부분이 실패해도(예: Yahoo
+/** 하루 배치(그리고 이제 하루 여러 번 도는 실시간 보강 크론)가 호출 — /news 페이지의 실제 검색
+ * 카테고리 4개(주식/경제 발표/중앙은행/뉴스)를 다시 계산해, 오늘 날짜에 아직 없는 헤드라인(url
+ * 기준)만 증분 저장한다. "전체"·"중요"는 저장 대상이 아니다(getNewsPageCategory가 이 4개를
+ * 읽어 조립하는 가상 뷰).
+ *
+ * 예전엔 매 실행마다 오늘치를 통째로 지우고 다시 만들었는데, 실시간성을 높이려고 이 함수를
+ * 15~30분마다 돌리면 그 방식은 이미 처리된 헤드라인까지 매번 재매칭·재계산해 Yahoo 호출만
+ * 낭비한다 — 그래서 이미 저장된 url은 건너뛰고 새로 나타난 것만 처리한다. 하루 첫 실행(DB에
+ * 오늘치가 아직 없음)은 결과적으로 예전과 동일하게 동작한다(전부 "새 것"으로 처리됨).
+ * 종목·반응 계산은 헤드라인 저장과 완전히 분리된 추가 단계라 이 부분이 실패해도(예: Yahoo
  * 전체 장애) 헤드라인 저장 자체는 그대로 성공한다. */
 export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: string[] }> {
   const errors: string[] = [];
@@ -56,16 +62,24 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
 
   try {
     const categories = await computeAllNewsPageCategories();
-    await db.newsPageHeadline.deleteMany({ where: { date: new Date(today) } });
 
     for (const { key } of FETCHABLE_CATEGORIES) {
       const headlines = categories[key];
       if (headlines.length === 0) continue;
+
+      const existing = await db.newsPageHeadline.findMany({
+        where: { date: new Date(today), category: key },
+        select: { url: true },
+      });
+      const existingUrls = new Set(existing.map((r) => r.url));
+      const newHeadlines = headlines.filter((h) => !existingUrls.has(h.url));
+      if (newHeadlines.length === 0) continue;
+
       await db.newsPageHeadline.createMany({
-        data: headlines.map((h, i) => ({
+        data: newHeadlines.map((h, i) => ({
           date: new Date(today),
           category: key,
-          rank: i,
+          rank: i, // 더 이상 정렬 기준 아님(publishedAt desc로 정렬) — 배치 내 원 순서만 참고용 보존
           title: h.title,
           url: h.url,
           source: h.source,
@@ -73,21 +87,15 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
         })),
         skipDuplicates: true,
       });
-      saved += headlines.length;
+      saved += newHeadlines.length;
 
-      // 방금 저장한 행의 id가 필요해(createMany는 생성된 행을 안 돌려준다) 같은 순서(rank asc)로
-      // 다시 읽어와 원본 headlines 배열과 인덱스로 짝짓는다.
       try {
+        // 방금 넣은 신규 url들만 id 조회 — 이미 있던 헤드라인은 반응 재계산 안 함(Yahoo 호출 절약).
         const inserted = await db.newsPageHeadline.findMany({
-          where: { date: new Date(today), category: key },
-          orderBy: { rank: "asc" },
-          select: { id: true },
+          where: { date: new Date(today), category: key, url: { in: newHeadlines.map((h) => h.url) } },
+          select: { id: true, title: true, publishedAt: true },
         });
-        const withIds = inserted.map((row, i) => ({
-          headlineId: row.id,
-          title: headlines[i]?.title ?? "",
-          publishedAt: headlines[i]?.publishedAt ? new Date(headlines[i].publishedAt!) : null,
-        }));
+        const withIds = inserted.map((r) => ({ headlineId: r.id, title: r.title, publishedAt: r.publishedAt }));
         const reactionRows = await computeReactionsForHeadlines(withIds, reactionBudget);
         if (reactionRows.length > 0) {
           await db.newsHeadlineTicker.createMany({ data: reactionRows });
@@ -171,8 +179,11 @@ function toCategoryHeadline(r: {
 
 /** /news 페이지가 호출 — 가장 최근에 저장된 날짜의 헤드라인을 읽기만 한다(실시간 조회·LLM 호출 없음).
  * "all"·"important"는 실제 저장된 카테고리가 아니라 4개 실카테고리를 최신 날짜 기준으로 합친
- * 가상 뷰다 — "important"는 그중 종목이 매칭된(tickers 1건 이상) 것만. 두 뷰 다 시간순(최신
- * publishedAt 먼저)으로 정렬한다(개별 카테고리는 구글 뉴스 자체 순위인 rank 순 유지). */
+ * 가상 뷰다 — "important"는 그중 종목이 매칭된(tickers 1건 이상) 것만. 전부 시간순(최신
+ * publishedAt 먼저)으로 정렬한다 — syncNewsPageHeadlines가 증분 upsert로 바뀌면서 rank는 배치별로
+ * 매겨져 실행 간 비교가 불가능해졌으므로(예전엔 "오늘 전체를 한 번에" 만들어 rank가 곧 구글
+ * 검색순위였지만, 이제 여러 번에 걸쳐 나눠 들어옴) 개별 카테고리도 rank 대신 publishedAt으로
+ * 정렬한다. publishedAt이 없는(드묾) 행은 맨 뒤로 보낸다. */
 export async function getNewsPageCategory(key: NewsPageCategoryKey, limit = 20): Promise<CategoryHeadline[]> {
   if (key === "all" || key === "important") {
     const latest = await db.newsPageHeadline.findFirst({ orderBy: { date: "desc" }, select: { date: true } });
@@ -199,7 +210,7 @@ export async function getNewsPageCategory(key: NewsPageCategoryKey, limit = 20):
 
   const rows = await db.newsPageHeadline.findMany({
     where: { category: key, date: latest.date },
-    orderBy: { rank: "asc" },
+    orderBy: { publishedAt: { sort: "desc", nulls: "last" } },
     take: limit,
     include: { tickers: true },
   });

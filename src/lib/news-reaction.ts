@@ -6,10 +6,12 @@
 // 1) 실패해도 절대 숫자를 지어내지 않는다 — changePct: null로 돌려주고 화면은 "확인 못함"으로 표시.
 // 2) 한 종목 조회 실패가 다른 종목·페이지 전체에 번지지 않는다 — 호출부가 Promise.allSettled로 격리.
 // 3) 응답이 안 오는 요청이 무한정 남지 않는다 — AbortController로 타임아웃.
-// 4) 너무 오래된 뉴스는 계산 자체를 생략한다 — Yahoo 무료 5분봉 보관기간이 짧고, 오래될수록
+// 4) 너무 오래된 뉴스는 계산 자체를 생략한다 — Yahoo 무료 1분봉 보관기간이 짧고, 오래될수록
 //    "속보 반응"이라는 의미 자체가 흐려진다.
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_LOOKBACK_DAYS = 5;
+// 1분봉 실측 확인(2026-08-15): AAPL·^KS11 8일치까지 결측 없이 정상 응답 — 5일 룩백보다 여유
+// 있게 남아 5분봉 대신 안전하게 쓸 수 있다. 정밀도가 최대 5배(5분→1분) 개선된다.
 
 export interface NewsReaction {
   ticker: string;
@@ -33,7 +35,7 @@ async function fetchIntradayBars(yahooSymbol: string): Promise<IntradayBar[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=5d&interval=5m`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=5d&interval=1m`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: controller.signal });
     if (!res.ok) throw new Error(`Yahoo ${yahooSymbol} 요청 실패: ${res.status}`);
     const data = (await res.json()) as YahooChartResult;
