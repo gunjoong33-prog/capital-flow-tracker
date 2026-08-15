@@ -16,6 +16,15 @@
   opacity: 0.82;
 }
 
+/* 주식 아이콘(노션 아이콘 피커의 "stock"과 동일한 모양) — 컬러 이모지가 아닌 순수 SVG라
+   .emoji 필터 없이도 이미 currentColor(검은색) 선이라 항상 또렷하다. */
+.stockIcon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  opacity: 0.82;
+}
+
 /* valley.town 실시간 속보와 같은 구조 — 필터 탭이 위에 있는 카드형 패널 하나에 표 전체를 담는다. */
 .panel {
   border: 1px solid var(--border);
