@@ -173,6 +173,60 @@
   color: var(--neg);
 }
 
+/* 좁은 화면에서 4열 표가 그대로면 "출처" 열이 화면 밖으로 잘려 나간다(실측 확인, 390px 뷰포트
+   스크린샷) — 사이트 공통 브레이크포인트(site.module.css)에 맞춰, 표 구조(<table>/<tr>/<td>)는
+   그대로 두고 CSS Grid로 한 행을 "시간·분류·출처 한 줄 + 내용 한 줄"로 재배치한다. JSX를 안 바꿔도
+   되고, 스크린리더에는 여전히 표로 읽힌다. */
+@media (max-width: 640px) {
+  .panel {
+    padding: 0.85rem 0.9rem 0.3rem;
+  }
+  .table {
+    font-size: 0.82rem;
+  }
+  .table thead {
+    display: none;
+  }
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas: "time category source" "content content content";
+    column-gap: 0.5rem;
+    padding: 0.75rem 0;
+  }
+  .table td {
+    padding: 0;
+  }
+  .timeCell {
+    grid-area: time;
+  }
+  .timeCell__time,
+  .timeCell__date {
+    display: inline;
+    font-size: 0.74rem;
+  }
+  .timeCell__date::before {
+    content: " · ";
+  }
+  .categoryCell {
+    grid-area: category;
+    text-align: left;
+  }
+  .sourceCell {
+    grid-area: source;
+    justify-self: end;
+    white-space: normal;
+    text-align: right;
+  }
+  .contentCell {
+    grid-area: content;
+    margin-top: 0.5rem;
+  }
+  .contentCell__title {
+    font-size: 0.9rem;
+  }
+}
+
 .empty {
   font-size: 0.86rem;
   color: var(--ink-faint);
