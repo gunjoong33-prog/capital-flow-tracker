@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 const TAB_ICON: Record<NewsPageCategoryKey, string> = {
   all: "🗞",
   important: "❗",
-  stock: "📊",
+  stock: "📈",
   "econ-release": "📄",
   "central-bank": "🏛",
   news: "💬",
