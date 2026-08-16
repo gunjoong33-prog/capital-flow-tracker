@@ -148,16 +148,16 @@ function summarizeStep2(
   // 실제 곱셈("3.33 × 2.5 = 8.33")을 검산할 수 있게 하는데, 여기 종합판단 요약이 소수점 첫째 자리만
   // 보여주면("3.3") 같은 값이 페이지 안에서 두 가지로 보여 스스로 검산하려는 사용자를 헷갈리게 한다
   // (외부 감사 지적, 실제 확인). 두 자리로 맞춘다.
-  const lines = [`해외 유동성 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(2)}/10).`];
+  const lines = [`해외 유동성(시중에 도는 자금) 지표 ${q}/${t}개가 우호적 방향으로, 자본 흐름은 ${stance}입니다(2단계 점수 ${finalScore.toFixed(2)}/10).`];
 
   if (creditSpreadBp !== null) {
-    lines.push(`크레딧 스프레드는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}"입니다.`);
+    lines.push(`크레딧 스프레드(회사채와 국채의 금리 차이 — 좁을수록 시장이 위험을 덜 두려워한다는 뜻)는 ${creditSpreadBp.toFixed(0)}bp로 "${creditSpreadZone(creditSpreadBp)}"입니다.`);
   }
 
   const auxParts: string[] = [];
-  if (netLiqRising !== null) auxParts.push(`순유동성은 ${netLiqRising ? "상승" : "하락"} 추세`);
-  if (rrpDepleted !== null) auxParts.push(`RRP 방파제는 ${rrpDepleted ? "고갈 경고" : "정상"}`);
-  if (tgaWithinNormalRange !== null) auxParts.push(`TGA는 평균 대비 ${tgaWithinNormalRange ? "정상 범위" : "이탈"}`);
+  if (netLiqRising !== null) auxParts.push(`순유동성(연준 자산에서 정부 계좌·역레포 잔액을 뺀 값, 시중에 실제로 풀린 자금 규모)은 ${netLiqRising ? "상승" : "하락"} 추세`);
+  if (rrpDepleted !== null) auxParts.push(`RRP(역레포 — 연준이 시중 자금을 하루짜리로 빌려두는 창구) 방파제는 ${rrpDepleted ? "고갈 경고" : "정상"}`);
+  if (tgaWithinNormalRange !== null) auxParts.push(`TGA(재무부가 쓰기 전 은행에 넣어둔 돈, 줄어들수록 시중에 자금이 풀림)는 평균 대비 ${tgaWithinNormalRange ? "정상 범위" : "이탈"}`);
   if (auxParts.length > 0) lines.push(`${auxParts.join(", ")}입니다.`);
 
   if (reserveFlow !== null) lines.push(reserveFlow);
@@ -175,11 +175,17 @@ function summarizeStep3(
   jpySpike: { spike: boolean; zScore: number | null }
 ): string {
   const zoneDesc = step3Result.zone === "안정" ? "유지되기 쉬운" : step3Result.zone === "주의" ? "주의가 필요한" : "위태로운";
-  const lines = [`US10Y-JP10Y 스프레드가 ${step3Result.spreadBp}bp로 "${step3Result.zone}" 구간에 있어 엔 캐리 트레이드가 ${zoneDesc} 환경입니다.`];
+  const lines = [
+    `미국-일본 10년물 국채 금리차(스프레드)가 ${step3Result.spreadBp}bp(1bp=0.01%p)로 "${step3Result.zone}" 구간에 있어, ` +
+      `엔 캐리 트레이드(금리 낮은 엔화를 빌려 금리 높은 자산에 투자하는 전략 — 금리차가 좁아지면 원금 상환 압박으로 급하게 청산될 위험이 커짐)가 ${zoneDesc} 환경입니다.`,
+  ];
 
   if (spreadPercentile !== null && cftcPercentile !== null) {
     const activity = cftcPercentile < 50 ? "활발한" : "저조한";
-    lines.push(`최근 1년 스프레드 백분위는 ${spreadPercentile}%ile, CFTC 엔화 순포지션은 ${cftcPercentile}%ile로 캐리 트레이드가 ${activity} 편입니다.`);
+    lines.push(
+      `이 금리차는 최근 1년 값 중 ${spreadPercentile}%ile(백분위 — 숫자가 높을수록 최근 1년 중 상위권이라는 뜻) 수준이고, ` +
+        `CFTC(미국 선물거래위원회)에 신고된 엔화 선물 순포지션(캐리 트레이드 참여 규모의 대리 지표)은 ${cftcPercentile}%ile로 캐리 트레이드가 ${activity} 편입니다.`
+    );
   }
 
   if (jpySpike.zScore !== null) {
@@ -216,7 +222,10 @@ function summarizeStep4(
   }
 ): string {
   const lines: string[] = [];
-  lines.push(`현재 사분면은 "${step4Result.quadrant}"입니다(4단계 점수 ${step4Result.score}/10).`);
+  lines.push(
+    `금값 방향과 실질금리(명목금리에서 물가상승률을 뺀 값, 진짜 구매력 기준 금리) 방향의 조합을 4가지 국면(사분면)으로 나눠 보면, ` +
+      `지금은 그중 "${step4Result.quadrant}" 국면입니다(4단계 점수 ${step4Result.score}/10).`
+  );
   lines.push(...splitSentences(step4Result.note.endsWith(".") ? step4Result.note : `${step4Result.note}.`));
   lines.push(
     step4Result.dollarConfirms
@@ -240,11 +249,11 @@ function summarizeStep4(
   const oilSpike = bothOilSpike;
 
   const riskStance = oilSpike
-    ? "Risk-Off(유가 급등 — 지정학 리스크 우선 반영)"
+    ? "Risk-Off(위험자산 회피 — 유가 급등, 지정학 리스크 우선 반영)"
     : fxOilDirection.dollarDir === "up" && fxOilDirection.oilDir === "up"
-      ? "Risk-Off(자본이 미국에 갇힘)"
+      ? "Risk-Off(위험자산 회피 — 자본이 미국에 갇힘)"
       : fxOilDirection.dollarDir === "down"
-        ? "Risk-On(신흥국으로 자금 확산)"
+        ? "Risk-On(위험자산 선호 — 신흥국으로 자금 확산)"
         : "혼조";
 
   // 이전엔 여기서 1단계 거부권 발동 여부를 근거로 끌어다 썼는데, 거부권은 8단계에서 이미 한 번 더
@@ -307,7 +316,7 @@ function summarizeStep5(
     `나스닥100 ${ndxReturn20d.toFixed(2)}% / 러셀2000 ${rutReturn20d.toFixed(2)}%(20거래일)로 격차 ${step5Result.gapPp.toFixed(2)}%p — ${concentrationDesc}입니다.`
   );
   if (gapPercentile !== null) {
-    lines.push(`이 격차는 최근 1년 중 ${gapPercentile}%ile 수준입니다.`);
+    lines.push(`이 격차는 최근 1년 값 중 ${gapPercentile}%ile(백분위 — 숫자가 높을수록 최근 1년 중 상위권) 수준입니다.`);
   }
 
   const riskDesc = step5Result.riskAppetite === "위험선호"
@@ -427,20 +436,20 @@ function summarizeStep7(
 
   lines.push(
     vix === null
-      ? "VIX 데이터를 확인하지 못했습니다."
+      ? "VIX(S&P500의 향후 변동성을 예상한 지수, '공포지수'라고도 불림 — 높을수록 시장이 불안하다는 뜻) 데이터를 확인하지 못했습니다."
       : vix < VIX_OVERHEAT_BELOW
-        ? `VIX는 ${vix.toFixed(2)}로 과열 구간(${VIX_OVERHEAT_BELOW} 미만)입니다.`
+        ? `VIX(S&P500의 향후 변동성을 예상한 지수, '공포지수'라고도 불림)는 ${vix.toFixed(2)}로 과열 구간(${VIX_OVERHEAT_BELOW} 미만 — 시장이 위험을 너무 안 두려워하는 상태)입니다.`
         : vix > VIX_FEAR_ABOVE
-          ? `VIX는 ${vix.toFixed(2)}로 공포 구간(${VIX_FEAR_ABOVE} 초과)입니다.`
-          : `VIX는 ${vix.toFixed(2)}로 중립입니다.`
+          ? `VIX(S&P500의 향후 변동성을 예상한 지수, '공포지수'라고도 불림)는 ${vix.toFixed(2)}로 공포 구간(${VIX_FEAR_ABOVE} 초과)입니다.`
+          : `VIX(S&P500의 향후 변동성을 예상한 지수, '공포지수'라고도 불림)는 ${vix.toFixed(2)}로 중립입니다.`
   );
   lines.push(
     fearGreed === null
-      ? "공포탐욕지수를 확인하지 못했습니다."
+      ? "공포탐욕지수(시장 심리를 0~100으로 나타낸 CNN 지수)를 확인하지 못했습니다."
       // "~구간입니다"라고 쓰면 아래 표의 "공포 구간(역발상 매수용 극단 신호, <25 또는 VIX>25만 해당)"
       // 배지와 같은 문구로 오인돼 서로 다른 기준(CNN 5단계 vs 극단치)이 충돌해 보이는 문제가 있었다 —
       // 여기서는 CNN 자체 등급명을 인용한다는 걸 명확히 하려고 "~단계"로 구분한다.
-      : `공포탐욕지수는 ${fearGreed.toFixed(1)}로 CNN 기준 '${cnnFearGreedRating(fearGreed)}' 단계입니다.`
+      : `공포탐욕지수(시장 심리를 0~100으로 나타낸 CNN 지수)는 ${fearGreed.toFixed(1)}로 CNN 기준 '${cnnFearGreedRating(fearGreed)}' 단계입니다.`
   );
   lines.push(
     step7Result.bothOverheated
