@@ -229,3 +229,17 @@
   font-size: 0.78rem;
   color: var(--ink-faint);
 }
+
+.footerLinks {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.footerLinks a {
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+.footerLinks a:hover {
+  color: var(--ink-dim);
+  text-decoration: underline;
+}

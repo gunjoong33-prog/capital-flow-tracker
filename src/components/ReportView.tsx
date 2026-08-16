@@ -85,6 +85,11 @@ export function ReportView({
           {step8.positionSizePct !== null && (
             <span className="text-sm text-[var(--ink-dim)]">권장 매수 비중 {step8.positionSizePct}%</span>
           )}
+          {/* cashAllocationPct는 이 필드가 없는 과거 저장 리포트(JSON 컬럼)에선 undefined로 온다 —
+              null이 아니라 undefined라 !== null만으로는 안 걸러져 typeof로 명시 체크한다. */}
+          {typeof step8.cashAllocationPct === "number" && (
+            <span className="text-sm text-[var(--ink-dim)]">참고 현금 비중 {step8.cashAllocationPct}%</span>
+          )}
         </div>
         {/* 배지(rounded-full 알약 모양)는 상태 단문에만 쓴다 — 거부권 설명은 완전한 문장이라
             배지가 아니라 아래 트랙레코드 안내와 같은 캡션 스타일로 통일한다(디자인 일관성 정리). */}

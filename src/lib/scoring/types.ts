@@ -157,6 +157,7 @@ export interface Step8Result {
   finalDecision: "매수" | "지켜보기" | "현금비중늘리기";
   vetoApplied: boolean;
   positionSizePct: number | null; // 매수 시 배분 비율
+  cashAllocationPct: number | null; // 현금비중늘리기 시 권장 현금 비중(참고용, 투자자문 아님)
 }
 
 // 각 단계 판정에 실제로 쓰인 기준·수치를 UI 표로 보여주기 위한 행 단위 데이터.

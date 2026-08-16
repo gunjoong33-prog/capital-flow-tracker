@@ -255,6 +255,11 @@ export default async function LandingPage({
 
         <footer className={siteStyles.footer}>
           결정론적 규칙과 실시간 시장 데이터로만 계산합니다 · 투자 조언이 아닙니다 · © 2026 Macroeconomic Analysis
+          <nav className={siteStyles.footerLinks}>
+            <Link href="/about">소개</Link>
+            <Link href="/terms">이용약관</Link>
+            <Link href="/privacy">개인정보처리방침</Link>
+          </nav>
         </footer>
       </div>
     </div>

@@ -1,0 +1,25 @@
+.prose {
+  max-width: 42rem;
+}
+.prose h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+.prose h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+}
+.prose p {
+  color: var(--ink-dim);
+  line-height: 1.7;
+  margin-bottom: 0.4rem;
+}
+.prose a {
+  color: var(--accent);
+}
+.prose strong {
+  color: var(--ink);
+}

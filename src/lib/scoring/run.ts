@@ -41,6 +41,13 @@ const FINRA_SHORT_VOLUME_URL = "https://www.finra.org/finra-data/browse-catalog/
 const KRX_SHORT_URL = "https://short.krx.co.kr";
 const DART_EQUITY_URL = "https://opendart.fss.or.kr/disclosureinfo/qota/main.do";
 
+// 2·3·4단계 상세표의 "바로가기" 출처 링크 — 7단계(위 4개 상수)와 같은 목적, FRED/Yahoo/MOF는
+// 시리즈·티커별로 URL이 달라져서 상수 대신 헬퍼로 뺀다.
+const FRED_URL = (seriesId: string) => `https://fred.stlouisfed.org/series/${seriesId}`;
+const YAHOO_URL = (ticker: string) => `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
+const MOF_JAPAN_URL = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/index.htm";
+const CFTC_TFF_URL = "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm";
+
 /**
  * 하이일드(BAMLH0A0HYM2) 스프레드의 절대 수준 구간 — 월가 애널리스트들이 FRED로 신용위험을 읽을 때
  * 쓰는 임계점 그대로(3단계 캐리 트레이드 구간표와 같은 방식으로 추가). "3기간 연속 축소" 추세와는
@@ -905,26 +912,29 @@ export async function runDailyAnalysis(
     creditSpreadNarrowing: creditSpreadAlreadyTight ? true : creditSpread.met,
   });
   details.step2 = [
-    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met },
-    { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향\n(가속)", value: m2.detail, met: m2.met },
+    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met, url: FRED_URL("WALCL") },
+    { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향\n(가속)", value: m2.detail, met: m2.met, url: FRED_URL("M2SL") },
     {
       label: "기준잔액(WRESBAL)",
       criterion: "최근 4주 연속 증가\n(또는 자체 1년 분포 상위 25%=이미 ample)",
       value: `${fmt(reserves.latestValue, 0, "백만달러")}${reservesPercentile !== null ? ` — ${reservesPercentile}%ile` : ""}`,
       met: reservesAmple ? true : reserves.met,
+      url: FRED_URL("WRESBAL"),
     },
     {
       label: "RRP(역레포 잔액)",
       criterion: rrpStatus?.depleted ? "판정 무효(N/A)\n(방파제 고갈, 분모 제외)" : "최근 3기간 연속 감소",
       value: fmt(rrp.latestValue, 2, "십억달러"),
       met: rrpStatus?.depleted ? null : rrp.met,
+      url: FRED_URL("RRPONTTLD"),
     },
-    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met },
+    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met, url: FRED_URL("WTREGEN") },
     {
       label: "실질금리(10년)",
       criterion: "최근 3기간 연속 하락\n(또는 자체 이력 하위 25%=이미 낮은 수준)",
       value: `${fmt(realRate2.latestValue, 2, "%")}${realRatePercentile !== null ? ` — ${realRatePercentile}%ile` : " — 이력 부족(percentile 계산 불가)"}`,
       met: realRateAlreadyLow ? true : realRate2.met,
+      url: FRED_URL("REAINTRATREARAT10Y"),
     },
     {
       label: "크레딧 스프레드(하이일드 OAS)",
@@ -933,6 +943,7 @@ export async function runDailyAnalysis(
         ? `${(creditSpread.latestValue * 100).toFixed(0)}bp — ${creditSpreadZone(creditSpread.latestValue * 100)}`
         : "확인 못함",
       met: creditSpreadAlreadyTight ? true : creditSpread.met,
+      url: FRED_URL("BAMLH0A0HYM2"),
     },
   ];
 
@@ -948,6 +959,7 @@ export async function runDailyAnalysis(
     criterion: "200bp 초과 시 우량기업 차환 어려움 경고",
     value: bbbBp !== null ? `${bbbBp.toFixed(0)}bp` : "확인 못함",
     met: bbbBp !== null ? bbbBp <= 200 : null,
+    url: FRED_URL("BAMLC0A4CBBB"),
   });
 
   // 월가 순유동성 프레임워크(WALCL-TGA-RRP) 기반 보조 지표 3개.
@@ -968,6 +980,7 @@ export async function runDailyAnalysis(
       criterion: "50십억달러 미만이면 방파제 고갈 경고",
       value: `${fmt(rrp.latestValue, 2, "십억달러")} — ${rrpStatus.label}`,
       met: !rrpStatus.depleted,
+      url: FRED_URL("RRPONTTLD"),
     });
   }
 
@@ -977,6 +990,7 @@ export async function runDailyAnalysis(
     criterion: "최근 8기간 평균 대비 ±10%p 이탈 시 경계(공식 QRA 목표치 근사)",
     value: tgaDeviation.detail,
     met: tgaDeviation.withinNormalRange,
+    url: FRED_URL("WTREGEN"),
   });
 
   // 美 2Y-10Y 스프레드(FRED T10Y2Y): 신용·유동성보다 먼저 움직이는 선행 신호라 원본 프롬프트
@@ -999,6 +1013,7 @@ export async function runDailyAnalysis(
       ? `${t10y2yBp.toFixed(0)}bp${bearSteepening ? " — 베어 스티프닝 경계(30년물 동반 상승)" : ""}`
       : "확인 못함",
     met: t10y2yBp !== null ? (bearSteepening ? false : t10y2yBp >= 0) : null,
+    url: FRED_URL("T10Y2Y"),
   });
 
   // 美 30년물 국채금리(FRED DGS30): 장단기 스프레드(T10Y2Y)는 역전 여부만 보여줘서, 역전 없이
@@ -1014,6 +1029,7 @@ export async function runDailyAnalysis(
       ? `${us30y.value.toFixed(2)}%${us30yPercentile !== null ? ` — 최근 1년 ${us30yPercentile}%ile` : ""}`
       : "확인 못함",
     met: null,
+    url: FRED_URL("DGS30"),
   });
 
   // 美 2년물-기준금리 스프레드: 2년물은 향후 2년간 예상되는 정책금리 경로를 선반영하는 성격이 있어,
@@ -1027,6 +1043,7 @@ export async function runDailyAnalysis(
     criterion: "음수면 시장이 향후 금리 인하를, 양수면 인상을 가격에 반영 중으로 해석\n(방향성 참고용)",
     value: us2yFfrSpreadBp !== null ? `${us2yFfrSpreadBp >= 0 ? "+" : ""}${us2yFfrSpreadBp.toFixed(0)}bp` : "확인 못함",
     met: null,
+    url: FRED_URL("DGS2"),
   });
 
   const reserveFlow = await reserveFlowNote(asOf);
@@ -1068,8 +1085,8 @@ export async function runDailyAnalysis(
   // 수 있어 똑같이 "다른 지표와 날짜가 다를 수 있다"는 일반적 주의 문구를 쓴다.
   const asOfCriterion = "참고용\n(다른 지표와 발표 기준일이 다를 수 있어 실제 기준일 표시)";
   details.step3 = [
-    { label: "미국 10년물(US10Y)", criterion: asOfCriterion, value: `${fmt(us10y?.value ?? null, 2, "%")}${dateLabel(us10y?.date) ? ` (${dateLabel(us10y?.date)} 기준)` : ""}`, met: null },
-    { label: "일본 10년물(JP10Y)", criterion: asOfCriterion, value: `${fmt(jp10y?.value ?? null, 2, "%")}${dateLabel(jp10y?.date) ? ` (${dateLabel(jp10y?.date)} 기준)` : ""}`, met: null },
+    { label: "미국 10년물(US10Y)", criterion: asOfCriterion, value: `${fmt(us10y?.value ?? null, 2, "%")}${dateLabel(us10y?.date) ? ` (${dateLabel(us10y?.date)} 기준)` : ""}`, met: null, url: FRED_URL("DGS10") },
+    { label: "일본 10년물(JP10Y)", criterion: asOfCriterion, value: `${fmt(jp10y?.value ?? null, 2, "%")}${dateLabel(jp10y?.date) ? ` (${dateLabel(jp10y?.date)} 기준)` : ""}`, met: null, url: MOF_JAPAN_URL },
     {
       // 절대구간(안정/주의/위험)은 실제 3단계 점수(scoreStep3)에는 안 쓰이고 아래 백분위 행 하나로만
       // 채점된다 — 그런데도 여기 met을 true/false로 보여주면 같은 스프레드 값을 두 행에서 두 번
@@ -1084,6 +1101,7 @@ export async function runDailyAnalysis(
       // 폭탄이 커진다는 8단계 서술과도 같은 방향이다. met을 점수·서술과 같은 방향으로 맞춘다:
       // 포지션이 정상화(50%ile 이상)돼 청산 압박이 낮을 때만 충족으로 본다.
       label: "CFTC 엔화 순포지션 백분위", criterion: "50%ile 이상 시 충족\n(숏 쏠림 완화, 청산 압박 낮음)", value: cftcPercentile !== null ? `${cftcPercentile}%ile` : "데이터 부족(1년 미만)", met: cftcPercentile !== null ? cftcPercentile >= 50 : null,
+      url: CFTC_TFF_URL,
     },
     {
       label: "엔화 변동성 급등(USD/JPY 종가)",
@@ -1092,6 +1110,7 @@ export async function runDailyAnalysis(
         ? `${jpySpike.latestReturnPct}% (z=${jpySpike.zScore})`
         : "데이터 부족(21거래일 미만)",
       met: jpySpike.zScore !== null ? !jpySpike.spike : null,
+      url: YAHOO_URL("JPY=X"),
     },
     {
       // 마지막 확정 종가 이후 장중 크론(USDJPY_INTRADAY)이 감지한 변동 — 다음날 09시 종가 확정을
@@ -1101,6 +1120,7 @@ export async function runDailyAnalysis(
       criterion: "마지막 확정 종가 대비 ±1.5% 초과 시 경계",
       value: jpySpike.intradayReturnPct !== null ? `${jpySpike.intradayReturnPct}%` : "확인 못함",
       met: jpySpike.intradayReturnPct !== null ? Math.abs(jpySpike.intradayReturnPct) <= 1.5 : null,
+      url: YAHOO_URL("JPY=X"),
     },
   ];
 
@@ -1130,6 +1150,7 @@ export async function runDailyAnalysis(
       criterion: "하락 시 충족\n(사분면 최고점 조합의 방향)",
       value: gold.stale ? "확인 못함" : `${dirLabel(goldDir)}${staleSuffix(gold.daysOld, gold.stale)}`,
       met: gold.stale ? null : goldDir === "down",
+      url: YAHOO_URL("GC=F"),
     },
     {
       // 이전엔 여기서도 "상승 시 충족"으로 met을 매겼는데, 2단계에 이미 "실질금리 3기간 연속 하락(또는
@@ -1137,12 +1158,14 @@ export async function runDailyAnalysis(
       // 안에서 두 번, 서로 반대로 채점되는 셈이다(하락=2단계 충족, 상승=4단계 충족). 실질금리 단독
       // 평가는 2단계에만 남기고, 여기서는 사분면(quadrant) 조합을 구성하는 참고 정보로만 보여준다.
       label: "실질금리 방향", criterion: "참고용\n(사분면 조합의 한 축 — 단독 충족/미충족 판정은 2단계에서)", value: dirLabel(realRateDir), met: null,
+      url: FRED_URL("REAINTRATREARAT10Y"),
     },
     {
       label: "달러 방향(DXY)",
       criterion: "보조 확인\n(실질금리와 같은 방향이면 신호 강함)",
       value: dollar.stale ? "확인 못함" : `${dirLabel(dollarDir)}${staleSuffix(dollar.daysOld, dollar.stale)}`,
       met: dollar.stale ? null : step4.dollarConfirms,
+      url: YAHOO_URL("DX-Y.NYB"),
     },
     { label: "사분면 판정", criterion: "위험선호 우호적 조합 시 충족\n(금↓/보합+실질금리↑ 또는 금↑+실질금리↓/보합)", value: `${step4.quadrant} — 점수 ${step4.score}/10`, met: step4.score >= 5 },
   ];
@@ -1165,7 +1188,7 @@ export async function runDailyAnalysis(
       : null;
 
   details.step4Aux = [
-    { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표\n(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null },
+    { label: "USD·KRW", criterion: "한국 투자자 관점 보조 지표\n(한국 고유 수급 영향 커서 달러 방향 판정엔 DXY를 씀)", value: fmtDailyChange(usdKrwChange, "원"), met: null, url: YAHOO_URL("KRW=X") },
     {
       label: "외국인 순매수(코스피)",
       criterion: "5거래일 누적 순매수 — USD/KRW 변동의 원인 참고용",
@@ -1174,10 +1197,10 @@ export async function runDailyAnalysis(
         : "확인 못함",
       met: null,
     },
-    { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null },
-    { label: "코스피", criterion: "한국 투자자 관점 보조 지표(전일 대비 변동만 참고용)", value: fmtDailyChange(kospiChange, "포인트"), met: null },
-    { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null },
-    { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null },
+    { label: "USD·JPY", criterion: "강달러(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(usdJpyChange, "엔"), met: null, url: YAHOO_URL("JPY=X") },
+    { label: "코스피", criterion: "한국 투자자 관점 보조 지표(전일 대비 변동만 참고용)", value: fmtDailyChange(kospiChange, "포인트"), met: null, url: YAHOO_URL("^KS11") },
+    { label: "WTI유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(wtiChange, "달러"), met: null, url: YAHOO_URL("CL=F") },
+    { label: "브렌트유 선물", criterion: "고유가(상승)면 Risk-Off 쪽 신호", value: fmtDailyChange(brentChange, "달러"), met: null, url: YAHOO_URL("BZ=F") },
   ];
 
   details.step4Summary = summarizeStep4(

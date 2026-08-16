@@ -10,7 +10,7 @@ function baseInput() {
   const step5: Step5Result = { gapPp: -2.25, concentrationWarning: false, riskAppetite: "위험선호", score: 3.0, cryptoAlignsWithRisk: null };
   const step6: Step6Result = { qualifying: [], score: 0 };
   const step7: Step7Result = { bothOverheated: false, oneOverheated: true, fearZone: false, positionSizeMultiplier: 1.0 };
-  const step8: Step8Result = { macroTrendScore: 2.95, finalDecision: "현금비중늘리기", vetoApplied: true, positionSizePct: null };
+  const step8: Step8Result = { macroTrendScore: 2.95, finalDecision: "현금비중늘리기", vetoApplied: true, positionSizePct: null, cashAllocationPct: 70 };
   return {
     step1, step2, step3, step4, step5, step6, step7, step8,
     step2Summary: "해외 유동성 지표 2/6개가 우호적 방향입니다.",

@@ -279,5 +279,18 @@ export function scoreStep8(input: Step8Input): Step8Result {
     positionSizePct = Math.round(base * input.step7.positionSizeMultiplier);
   }
 
-  return { macroTrendScore, finalDecision, vetoApplied, positionSizePct };
+  // "현금비중늘리기"엔 positionSizePct 같은 정량 가이드가 없어 "그러면 몇 %를?"에 답을 못 했다
+  // (외부 감사 지적, 실제 확인 — 관찰된 표본에서 이 결론이 압도적으로 자주 나오는데도 구체적 비중이
+  // 없었다). macroTrendScore 구간별로 참고용 현금 비중을 매긴다 — 매수 사이징과 대칭 구조.
+  // 거부권으로 강등된 경우(점수는 5.0 이상인데 지정학 리스크로 다운그레이드)는 점수 구간과 무관하게
+  // 급성 리스크로 보고 최고 구간(80%)을 적용한다.
+  let cashAllocationPct: number | null = null;
+  if (finalDecision === "현금비중늘리기") {
+    if (vetoApplied && macroTrendScore >= 5.0) cashAllocationPct = 80;
+    else if (macroTrendScore < 2.0) cashAllocationPct = 80;
+    else if (macroTrendScore < 3.5) cashAllocationPct = 70;
+    else cashAllocationPct = 60;
+  }
+
+  return { macroTrendScore, finalDecision, vetoApplied, positionSizePct, cashAllocationPct };
 }

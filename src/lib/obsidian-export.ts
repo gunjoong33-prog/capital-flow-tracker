@@ -42,7 +42,7 @@ export function buildDailyReportMarkdown(row: DailyReport): string {
   const step4 = row.step4 as unknown as { score: number };
   const step5 = row.step5 as unknown as { score: number };
   const step6 = row.step6 as unknown as { score: number };
-  const step8 = row.step8 as unknown as { macroTrendScore: number; finalDecision: string; vetoApplied: boolean; positionSizePct: number | null };
+  const step8 = row.step8 as unknown as { macroTrendScore: number; finalDecision: string; vetoApplied: boolean; positionSizePct: number | null; cashAllocationPct?: number | null };
 
   let md = `# ${dateStr} 자본흐름 리포트\n\n`;
   md += `- marketDate(실제 반영 미국장 거래일): ${marketDateStr}\n`;
@@ -50,6 +50,7 @@ export function buildDailyReportMarkdown(row: DailyReport): string {
   md += `- 투자 적합도 점수: **${step8.macroTrendScore.toFixed(2)}**\n`;
   md += `- 거부권 발동: ${step8.vetoApplied ? "예" : "아니오"}\n`;
   if (step8.positionSizePct !== null) md += `- 권장 매수 비중: ${step8.positionSizePct}%\n`;
+  if (step8.cashAllocationPct != null) md += `- 참고 현금 비중: ${step8.cashAllocationPct}%\n`;
   md += "\n";
 
   if (details.comprehensiveReport) {
