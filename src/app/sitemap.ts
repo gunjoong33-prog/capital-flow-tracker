@@ -12,6 +12,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/reports/weekly",
     "/reports/monthly",
     "/reports/yearly",
+    "/track-record",
+    "/about",
+    "/terms",
+    "/privacy",
   ];
 
   return staticRoutes.map((route) => ({

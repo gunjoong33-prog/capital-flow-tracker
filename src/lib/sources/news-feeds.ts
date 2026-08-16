@@ -199,7 +199,11 @@ export const FETCHABLE_CATEGORIES: FetchableCategory[] = [
   { key: "stock", label: "주식", query: "주식시장 증시" },
   { key: "econ-release", label: "경제 발표", query: "경제지표 발표" },
   { key: "central-bank", label: "중앙은행", query: "연준 한국은행 기준금리 통화정책" },
-  { key: "news", label: "뉴스", query: "속보" },
+  // 예전엔 "속보" 단독 검색어라 경제와 무관한 국내 정치·스포츠 뉴스까지 잡혔다(외부 감사 지적,
+  // 실제 확인 — "군 복무 축구 부상 보훈 판결", "홍준표 국힘 경선" 같은 기사가 섞여 나옴). 다른 3개
+  // 탭처럼 경제·시장 스코프를 명시해 좁힌다 — "속보"라는 성격(포괄적 최신 사건)은 유지하되 주제를
+  // 거시경제·국제정세·시장으로 한정한다.
+  { key: "news", label: "뉴스", query: "속보 경제 OR 금융 OR 국제정세 OR 시장" },
 ];
 
 // 탭 표시 순서 그대로 — valley.town 화면과 동일한 순서(전체/중요/주식/경제 발표/중앙은행/뉴스).

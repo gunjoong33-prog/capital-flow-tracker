@@ -23,7 +23,12 @@ export default async function CalendarDayPage({
   // marketDate(실제 데이터 기준 미국장 마감 거래일)가 리포트 생성일과 다르면(휴장일 등) 병기 —
   // "8/1 리포트인데 실제로는 7/31 데이터"처럼 두 날짜가 섞여 혼동되는 걸 막는다(외부 감사 지적).
   const marketDateLabel = report.marketDate?.toISOString().slice(0, 10);
-  const dateLabel = marketDateLabel && marketDateLabel !== date ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel;
+  const createdAtLabel = report.createdAt.toLocaleTimeString("ko-KR", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul",
+  });
+  const dateLabel =
+    (marketDateLabel && marketDateLabel !== date ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel) +
+    ` · 생성 ${createdAtLabel}(KST)`;
 
   const reportData: ReportViewData = {
     step1: report.step1 as unknown as ReportViewData["step1"],

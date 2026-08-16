@@ -71,8 +71,14 @@ export default async function ReportPage() {
   // "8/1 리포트인데 실제로는 7/31 데이터"처럼 두 날짜가 섞여 혼동되는 걸 막는다(외부 감사 지적).
   const marketDateLabel = reportRow.marketDate?.toISOString().slice(0, 10);
   const dateOnlyStr = reportRow.date.toISOString().slice(0, 10);
+  // 화면 상단 "3.38점"이 정확히 언제 계산된 값인지 알 수 없다는 지적(외부 감사) — 날짜만 있고 시각이
+  // 없었다. DB엔 createdAt이 이미 있어(스키마 변경 없음) 생성 시각(KST, 분 단위)만 병기한다.
+  const createdAtLabel = reportRow.createdAt.toLocaleTimeString("ko-KR", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul",
+  });
   const dateLabel =
-    marketDateLabel && marketDateLabel !== dateOnlyStr ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel;
+    (marketDateLabel && marketDateLabel !== dateOnlyStr ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel) +
+    ` · 생성 ${createdAtLabel}(KST)`;
 
   const reportData: ReportViewData = {
     step1: reportRow.step1 as unknown as ReportViewData["step1"],

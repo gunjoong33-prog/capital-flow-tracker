@@ -1,3 +1,4 @@
+import Link from "next/link";
 import styles from "@/components/ReportView.module.css";
 import { StepCard, Field } from "@/components/StepCard";
 import { ScoreBadge, DecisionBadge } from "@/components/ScoreBadge";
@@ -106,7 +107,12 @@ export function ReportView({
             페이지가 없는 것도 확인). 나중에 트랙레코드 페이지가 생기면 이 문구를 그 페이지 링크로
             바꾸거나 조건부로(표본이 쌓이면) 없앤다. */}
         <p className="[word-break:keep-all] text-xs text-[var(--ink-faint)]">
-          ⚠ 이 결론의 과거 적중률은 아직 추적되지 않았습니다(2026년 7월 27일부터 운영 시작, 표본 부족) — 투자 신호가 아니라 참고 자료로만 활용하세요.
+          ⚠ 이 결론의 과거 적중률은{" "}
+          <Link href="/track-record" className="underline">
+            여기서 확인
+          </Link>
+          할 수 있습니다(2026년 7월 27일부터 운영 시작, 표본 아직 적음) — 투자 신호가 아니라 참고
+          자료로만 활용하세요.
         </p>
       </header>
 
