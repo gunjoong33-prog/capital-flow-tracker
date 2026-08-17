@@ -1,5 +1,6 @@
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { BIG_TECH_TICKERS } from "@/lib/sources/types";
+import { callGroq, extractJsonArray } from "@/lib/llm-clients";
 
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
 // Google News RSS: 검색어 기반 공개 RSS(비공식이지만 안정적으로 유지돼온 포맷).
@@ -268,11 +269,10 @@ function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
 
 // 구글 뉴스 검색은 쿼리에 없는 주제(날씨·재난·사건사고·연예·스포츠 등)도 종종 함께 반환한다(실측:
 // "뉴스" 탭에 거제 폭우·산사태 속보, "중앙은행" 탭에 블랙잭 관련 글이 섞여 나온 사례). 검색어
-// narrowing만으로는 못 막아서, 4개 카테고리 전부에 경제/정치/기술 주제 화이트리스트를 한 번 더
-// 적용한다 — capital_flow_tracker_korean_keyword_substring_bug 메모리 교훈대로 짧고 애매한
-// 어근(예: "재정" 단독, "통화" 단독)은 피하고 긴 합성어 위주로 구성한다.
-// ponytail: 단순 부분일치 화이트리스트라 경계 사례(예: SEO성 환율계산기 글)는 완벽히 못 거른다 —
-// 실제로 더 문제되면 하루 배치 안에서 LLM 판정으로 업그레이드.
+// narrowing만으로는 못 막아서 경제/정치/기술 주제 관련성 판정이 필요하다 — 주 판정은 아래
+// judgeRelevanceByLLM(문맥을 보므로 substring 오탐/누락이 적다), 이 화이트리스트는 LLM 호출이
+// 실패했을 때만 쓰는 폴백이다(capital_flow_tracker_korean_keyword_substring_bug 메모리 교훈대로
+// 짧고 애매한 어근은 피하고 긴 합성어 위주로 구성).
 const ECONOMY_TOPIC_KEYWORDS = [
   "경제", "금융", "증시", "증권", "주식", "코스피", "코스닥", "나스닥", "다우존스", "S&P", "stock",
   "환율", "금리", "물가", "인플레이션", "CPI", "PPI", "GDP", "FOMC", "기준금리", "성장률", "USD",
@@ -295,10 +295,38 @@ const TECH_TOPIC_KEYWORDS = [
 const RELEVANT_TOPIC_KEYWORDS = [...ECONOMY_TOPIC_KEYWORDS, ...POLITICS_TOPIC_KEYWORDS, ...TECH_TOPIC_KEYWORDS];
 
 /** 제목에 경제/정치/기술 관련 키워드가 하나라도 있으면 관련 기사로 본다(화이트리스트 방식 —
- * 블랙리스트보다 "무관한 기사가 남는" 실패보다 "애매한 기사가 걸러지는" 실패 쪽이 낫다는 판단). */
+ * 블랙리스트보다 "무관한 기사가 남는" 실패보다 "애매한 기사가 걸러지는" 실패 쪽이 낫다는 판단).
+ * judgeRelevanceByLLM이 실패했을 때의 폴백 전용 — 정상 경로에서는 안 쓴다. */
 export function isEconPoliticsTechRelevant(title: string): boolean {
   const lower = title.toLowerCase();
   return RELEVANT_TOPIC_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
+/** Groq로 헤드라인 목록의 경제/정치/기술 관련성을 한 번에 판정한다 — 헤드라인마다 개별 호출하면
+ * 동기화가 하루 여러 번(15~30분 간격) 도는 만큼 요청 수가 금방 불어나므로, 한 배치(대개 신규
+ * 헤드라인 몇~몇십 건)를 한 번의 프롬프트로 묶어 보낸다. 대부분 관련 있는 기사라 "무관한 것의
+ * 번호만" 답하게 해 응답 토큰을 아낀다. 실패(네트워크·429·파싱 실패)하면 예외를 던지므로 호출부가
+ * isEconPoliticsTechRelevant로 폴백해야 한다. */
+export async function judgeRelevanceByLLM(headlines: { title: string }[]): Promise<boolean[]> {
+  if (headlines.length === 0) return [];
+
+  const list = headlines.map((h, i) => `${i + 1}. ${h.title}`).join("\n");
+  const prompt = `아래는 매크로 투자 사이트에 표시될 뉴스 헤드라인 후보 목록이다. 각 헤드라인이
+경제·정치·기술 중 하나와 명확히 관련 있는지 판정해라. 날씨·재난·사건사고·범죄·연예·스포츠·
+개인 신상 기사는 관련 없음으로 판정한다. 애매하면 관련 없음으로 판정한다.
+
+관련 없다고 판정한 번호만 JSON 배열로 답해라(예: [3,7,12]). 전부 관련 있으면 빈 배열 []만 답해라.
+설명 없이 JSON 배열만 답해라.
+
+헤드라인 목록:
+${list}`;
+
+  const text = await callGroq(prompt, { maxTokens: 512, reasoningEffort: "low" });
+  const irrelevantIndices = extractJsonArray<number>(text);
+  if (irrelevantIndices === null) throw new Error("Groq 관련성 판정 응답 파싱 실패");
+
+  const irrelevantSet = new Set(irrelevantIndices);
+  return headlines.map((_, i) => !irrelevantSet.has(i + 1));
 }
 
 /**
@@ -318,8 +346,7 @@ export async function computeAllNewsPageCategories(limit = 20): Promise<Record<F
   // 못 걸러진다. fetchCandidateHeadlines가 이미 쓰는 것과 같은 제목 유사도 dedup을 적용한다.
   const out = {} as Record<FetchableCategoryKey, CategoryHeadline[]>;
   FETCHABLE_CATEGORIES.forEach((c, i) => {
-    const relevant = results[i].filter((h) => isEconPoliticsTechRelevant(h.title));
-    out[c.key] = dedupBySimilarTitle(dedupByUrl(relevant), (h) => h.title).slice(0, limit);
+    out[c.key] = dedupBySimilarTitle(dedupByUrl(results[i]), (h) => h.title).slice(0, limit);
   });
   return out;
 }

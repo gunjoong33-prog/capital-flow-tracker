@@ -2,7 +2,10 @@ import { db } from "@/lib/db";
 import {
   computeAllNewsPageCategories,
   FETCHABLE_CATEGORIES,
+  isEconPoliticsTechRelevant,
+  judgeRelevanceByLLM,
   type CategoryHeadline,
+  type FetchableCategoryKey,
   type NewsPageCategoryKey,
 } from "@/lib/sources/news-feeds";
 import { matchTickers } from "@/lib/sources/news-ticker-match";
@@ -63,6 +66,9 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
   try {
     const categories = await computeAllNewsPageCategories();
 
+    // 카테고리별 신규(url 기준 미저장) 헤드라인을 먼저 모으고, 관련성 판정은 이번 실행 전체에서
+    // 딱 한 번만 호출한다(카테고리마다 호출하면 15~30분 간격 크론에서 Groq 요청 수가 불어난다).
+    const perCategoryNew: { key: FetchableCategoryKey; headlines: CategoryHeadline[] }[] = [];
     for (const { key } of FETCHABLE_CATEGORIES) {
       const headlines = categories[key];
       if (headlines.length === 0) continue;
@@ -73,6 +79,23 @@ export async function syncNewsPageHeadlines(): Promise<{ saved: number; errors: 
       });
       const existingUrls = new Set(existing.map((r) => r.url));
       const newHeadlines = headlines.filter((h) => !existingUrls.has(h.url));
+      if (newHeadlines.length > 0) perCategoryNew.push({ key, headlines: newHeadlines });
+    }
+
+    const allNew = perCategoryNew.flatMap((c) => c.headlines);
+    let relevantFlags: boolean[];
+    try {
+      relevantFlags = await judgeRelevanceByLLM(allNew);
+    } catch (err) {
+      // LLM 판정 실패(네트워크·429·응답 파싱 실패)해도 동기화 전체를 막지 않는다 — 결정론적
+      // 키워드 화이트리스트로 폴백한다(news-feeds.ts 주석 참고).
+      errors.push(`관련성 LLM 판정 실패, 키워드 폴백 사용: ${err instanceof Error ? err.message : String(err)}`);
+      relevantFlags = allNew.map((h) => isEconPoliticsTechRelevant(h.title));
+    }
+    const relevantUrls = new Set(allNew.filter((_, i) => relevantFlags[i]).map((h) => h.url));
+
+    for (const { key, headlines: candidateHeadlines } of perCategoryNew) {
+      const newHeadlines = candidateHeadlines.filter((h) => relevantUrls.has(h.url));
       if (newHeadlines.length === 0) continue;
 
       await db.newsPageHeadline.createMany({
