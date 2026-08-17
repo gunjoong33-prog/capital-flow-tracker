@@ -266,6 +266,41 @@ function dedupByUrl(...lists: CategoryHeadline[][]): CategoryHeadline[] {
   return out;
 }
 
+// 구글 뉴스 검색은 쿼리에 없는 주제(날씨·재난·사건사고·연예·스포츠 등)도 종종 함께 반환한다(실측:
+// "뉴스" 탭에 거제 폭우·산사태 속보, "중앙은행" 탭에 블랙잭 관련 글이 섞여 나온 사례). 검색어
+// narrowing만으로는 못 막아서, 4개 카테고리 전부에 경제/정치/기술 주제 화이트리스트를 한 번 더
+// 적용한다 — capital_flow_tracker_korean_keyword_substring_bug 메모리 교훈대로 짧고 애매한
+// 어근(예: "재정" 단독, "통화" 단독)은 피하고 긴 합성어 위주로 구성한다.
+// ponytail: 단순 부분일치 화이트리스트라 경계 사례(예: SEO성 환율계산기 글)는 완벽히 못 거른다 —
+// 실제로 더 문제되면 하루 배치 안에서 LLM 판정으로 업그레이드.
+const ECONOMY_TOPIC_KEYWORDS = [
+  "경제", "금융", "증시", "증권", "주식", "코스피", "코스닥", "나스닥", "다우존스", "S&P", "stock",
+  "환율", "금리", "물가", "인플레이션", "CPI", "PPI", "GDP", "FOMC", "기준금리", "성장률", "USD",
+  "고용지표", "실업률", "수출", "무역수지", "통상교섭", "통상마찰", "관세", "재정정책", "통화정책", "예산안",
+  "연준", "한국은행", "한은", "중앙은행", "채권", "국채", "달러", "엔화", "위안화",
+  "유가", "금값", "금시세", "비트코인", "암호화폐", "가상자산", "디지털자산", "스테이블코인", "토큰증권",
+  "IPO", "상장", "인수합병", "부동산", "가계부채", "경상수지", "소비자물가", "생산자물가",
+  "실적", "영업이익", "순이익", "브로커리지", "자사주", "ETF", "원자재",
+];
+const POLITICS_TOPIC_KEYWORDS = [
+  "정치", "대통령", "국회", "여당", "야당", "정당", "총리", "내각", "선거", "경선", "지지율",
+  "전당대회", "당원투표", "최고위원", "외교", "정상회담", "국제정세", "백악관", "국무부", "제재", "협정",
+  "북한", "안보", "국방", "군사", "전쟁", "트럼프", "청와대", "탄핵", "개헌", "경질",
+  "정부", "장관", "국정감사", "여야", "與", "野",
+];
+const TECH_TOPIC_KEYWORDS = [
+  "기술", "AI", "인공지능", "반도체", "빅테크", "스타트업", "소프트웨어", "클라우드",
+  "빅데이터", "로봇", "우주산업", "전기차", "배터리", "데이터센터", "메타버스", "자율주행",
+];
+const RELEVANT_TOPIC_KEYWORDS = [...ECONOMY_TOPIC_KEYWORDS, ...POLITICS_TOPIC_KEYWORDS, ...TECH_TOPIC_KEYWORDS];
+
+/** 제목에 경제/정치/기술 관련 키워드가 하나라도 있으면 관련 기사로 본다(화이트리스트 방식 —
+ * 블랙리스트보다 "무관한 기사가 남는" 실패보다 "애매한 기사가 걸러지는" 실패 쪽이 낫다는 판단). */
+export function isEconPoliticsTechRelevant(title: string): boolean {
+  const lower = title.toLowerCase();
+  return RELEVANT_TOPIC_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
 /**
  * /news 페이지의 실제 검색 카테고리(주식/경제 발표/중앙은행/뉴스) 4개만 구글 뉴스에서 가져온다 —
  * "전체"·"중요"는 이 4개를 DB에서 조합해 만드는 가상 뷰라 여기선 안 다룬다(news-page.ts의
@@ -283,7 +318,8 @@ export async function computeAllNewsPageCategories(limit = 20): Promise<Record<F
   // 못 걸러진다. fetchCandidateHeadlines가 이미 쓰는 것과 같은 제목 유사도 dedup을 적용한다.
   const out = {} as Record<FetchableCategoryKey, CategoryHeadline[]>;
   FETCHABLE_CATEGORIES.forEach((c, i) => {
-    out[c.key] = dedupBySimilarTitle(dedupByUrl(results[i]), (h) => h.title).slice(0, limit);
+    const relevant = results[i].filter((h) => isEconPoliticsTechRelevant(h.title));
+    out[c.key] = dedupBySimilarTitle(dedupByUrl(relevant), (h) => h.title).slice(0, limit);
   });
   return out;
 }
