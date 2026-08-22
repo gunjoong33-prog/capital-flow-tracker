@@ -87,6 +87,53 @@ await db.dailyReport.update({
 3. Discord 채널에 실패 알림이 실제로 오는지 확인한다.
 4. `GITHUB_EXPORT_TOKEN`을 원래 값으로 복구한다.
 
+## 추가 — 알림 문구 비전공자 수준으로 번역 (2026-08-22, 로컬 테스트 후 사용자 요청)
+
+로컬 테스트에서 실제 알림 문구가 `GET 401: {"message":"Bad credentials",...}`처럼 GitHub API
+원문(HTTP 상태 코드 + JSON)을 그대로 보여준다는 게 확인됨 — 비전공자는 못 알아봄. DB 감사
+흔적(`dataCompleteness`)은 원문 그대로 유지하되(정확한 디버깅용), **Discord 알림에만** 흔한
+패턴을 쉬운 한국어 문장으로 바꾸는 번역 함수를 `obsidian-export/route.ts`에 추가한다.
+
+```ts
+function friendlyDetail(detail: string): string {
+  if (/^(GET|PUT) 401/.test(detail)) return "GitHub 접속 열쇠(토큰)가 잘못됐거나 만료됨";
+  if (/^(GET|PUT) 403/.test(detail)) return "GitHub 요청이 너무 잦아 잠깐 막힘(사용량 제한) 또는 권한 부족";
+  if (/^(GET|PUT) 5\d\d/.test(detail)) return "GitHub 서버 자체에 일시적 문제 발생";
+  return `GitHub 연결 문제(${detail.slice(0, 80)})`;
+}
+```
+
+`formatErrorAlert`가 `e.detail` 대신 `friendlyDetail(e.detail)`을 쓰도록 바꾼다. 데일리 파이프라인
+전체 실패 알림(`daily/route.ts`)의 `err.message`는 원인이 너무 다양해(Groq/Prisma/네트워크 등)
+일반화된 매핑이 불가능해 범위에서 제외 — 필요해지면 실제로 반복되는 패턴이 쌓인 뒤에 추가한다.
+
+## 추가 — 옵시디언 실패 알림에 "재시도" 버튼 (2026-08-22, 사용자 요청)
+
+**조사 결과**: `DISCORD_WEBHOOK_URL`을 ai-macro-company와 이미 공유 중인데("같은 채널 재사용"),
+그 프로젝트가 이미 이 웹훅(=같은 Discord Application, 일명 "크론봇")으로 버튼 달린 알림 전송 +
+클릭 처리를 하고 있다(`sendCronStaleAlert`/`retry-daily-cron`,
+`ai-macro-company/src/app/api/discord/interactions/route.ts`). Discord 개발자 포털에서 새로
+Application을 만들 필요가 전혀 없다 — 그 Application의 Interactions Endpoint URL이 이미
+ai-macro-company 쪽 라우트로 등록돼 있어, 이번 것도 그 라우트에 분기 하나만 추가하면 된다.
+
+**변경 범위 (두 저장소):**
+
+1. **capital-flow-tracker** — `src/lib/discord-alert.ts`: `postToDiscord`가 `components` 옵션 인자를
+   받게 확장, 새 함수 `sendObsidianExportFailureAlert(message)`가 `custom_id: "retry-obsidian-export"`
+   버튼을 붙여 보낸다. `src/app/api/cron/obsidian-export/route.ts`가 실패 알림을 이 함수로 바꿔 호출.
+2. **ai-macro-company** — `src/app/api/discord/interactions/route.ts`: `retryDailyCron`과 같은
+   패턴으로 `retryObsidianExport()` 추가, `https://capital-flow-tracker.vercel.app/api/cron/
+   obsidian-export`를 새 환경변수 `CAPITAL_FLOW_TRACKER_CRON_SECRET`으로 인증 호출. 커스텀ID→핸들러
+   룩업 테이블로 분기(기존 if 하나 늘리는 대신 확장 가능한 구조로).
+
+**필요한 새 시크릿**: ai-macro-company Vercel 프로덕션에 `CAPITAL_FLOW_TRACKER_CRON_SECRET`
+(capital-flow-tracker의 실제 `CRON_SECRET`과 동일 값) 추가 — 프로덕션 시크릿 등록은 자동 모드
+분류기가 막을 수 있어(2026-08-22 GITHUB_EXPORT_TOKEN 테스트 때 실측), 막히면 사용자에게 직접
+등록을 요청한다.
+
+**범위 밖**: `retry-daily-cron`을 포함해 기존 ai-macro-company 기능은 건드리지 않는다(룩업 테이블
+추가만, 기존 분기 로직 동작 그대로 유지).
+
 ## 범위 밖(하지 않는 것)
 
 - health-check 크론 시각 변경 없음(09:10 유지) — 즉시 알림 경로가 생겨서 재조정할 이유가 없어짐.
