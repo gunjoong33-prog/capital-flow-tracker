@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { buildDailyReportMarkdown, buildPeriodReportMarkdown, dailyReportFileName, periodReportFileName, upsertObsidianFile, type UpsertResult } from "@/lib/obsidian-export";
 import { requireCronAuth } from "@/lib/cron-auth";
-import { sendHealthCheckAlert, sendObsidianExportFailureAlert } from "@/lib/discord-alert";
+import { sendHealthCheckAlert } from "@/lib/discord-alert";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
   for (const status of Object.values(results)) summary[status as keyof typeof summary]++;
 
   if (errorDetails.length > 0) {
-    await sendObsidianExportFailureAlert(formatErrorAlert(errorDetails));
+    await sendHealthCheckAlert(formatErrorAlert(errorDetails));
   }
 
   return NextResponse.json({ summary, errors: errorDetails, results });

@@ -148,6 +148,24 @@ Application에 봇을 추가하고(사용자가 개발자 포털에서 직접 �
 `DISCORD_BOT_TOKEN`·`DISCORD_CHANNEL_ID`를 capital-flow-tracker 프로덕션에 등록(2026-08-22 완료).
 다른 알림 함수(`sendReportUploadedAlert`, `sendHealthCheckAlert`)는 버튼이 필요 없어 웹훅 그대로 둠.
 
+## 되돌림 — 재시도 버튼 기능 전체 폐기 (2026-08-22, 사용자 결정)
+
+봇 초대(OAuth2 code grant 설정, 서버 ID/채널 ID 혼동), 인터랙션 라우팅(ai-macro-company 크로스
+저장소 호출) 등 여러 단계에서 계속 막혀 디버깅에 시간이 많이 들었다 — 사용자가 "ai-macro-company는
+보류, 코드 자체 삭제"로 결정해 위 "재시도 버튼" 기능(바로 위 두 절) 전체를 되돌렸다:
+
+- **capital-flow-tracker**: `sendObsidianExportFailureAlert` 함수 삭제, `obsidian-export/route.ts`가
+  다시 `sendHealthCheckAlert(formatErrorAlert(errorDetails))`를 직접 호출하도록 원복(버튼 없이 텍스트
+  알림만, ①·②·③ 단계는 그대로 유지 — 진단 정보 포함 텍스트 알림은 살아있음). `postToDiscord`의
+  `components` 옵션 인자도 제거(더 쓰는 곳 없음). 프로덕션 Vercel의 `DISCORD_BOT_TOKEN`·
+  `DISCORD_CHANNEL_ID`도 삭제.
+- **ai-macro-company**: 손대지 않음(보류) — `retryObsidianExport`/`RETRY_HANDLERS` 룩업 테이블 추가
+  건은 별도로 그 저장소에서 되돌릴지 결정 필요(이 스펙 범위 밖).
+
+**남겨두는 이유**: 위 두 절(웹훅이 인터랙티브 컴포넌트를 못 보낸다는 Discord 공식 문서 근거, OAuth2
+code grant 문제, 서버ID/채널ID 구분 등)은 나중에 이 기능을 다시 시도할 때 같은 시행착오를 반복하지
+않게 해주는 조사 기록이라 삭제하지 않고 남긴다.
+
 ## 범위 밖(하지 않는 것)
 
 - health-check 크론 시각 변경 없음(09:10 유지) — 즉시 알림 경로가 생겨서 재조정할 이유가 없어짐.
