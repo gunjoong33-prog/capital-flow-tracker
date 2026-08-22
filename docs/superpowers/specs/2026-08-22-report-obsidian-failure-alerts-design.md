@@ -134,6 +134,20 @@ ai-macro-company 쪽 라우트로 등록돼 있어, 이번 것도 그 라우트�
 **범위 밖**: `retry-daily-cron`을 포함해 기존 ai-macro-company 기능은 건드리지 않는다(룩업 테이블
 추가만, 기존 분기 로직 동작 그대로 유지).
 
+## 정정 — 웹훅으론 버튼 못 보냄, 봇으로 전환 (2026-08-22, 실측 후 수정)
+
+실제로 테스트해보니 `DISCORD_WEBHOOK_URL`(Incoming Webhook)로 보낸 버튼이 화면에 안 떴다. Discord
+공식 문서 확인 결과: "non-owned webhooks cannot send interactive components, and the `components`
+field will be ignored" — Application이 소유하지 않은 일반 웹훅은 요청은 성공(204)하지만 버튼만
+조용히 무시된다. `sendCronStaleAlert`(ai-macro-company)도 같은 방식이라 실제로는 한 번도 작동한
+적 없었을 가능성이 높다는 것도 이번에 확인.
+
+**실제 적용한 수정**: `sendObsidianExportFailureAlert`만 웹훅 대신 Discord Bot API
+(`POST /channels/{id}/messages`, `Authorization: Bot ...`)로 전환. 이를 위해 기존 "크론봇"
+Application에 봇을 추가하고(사용자가 개발자 포털에서 직접 진행), 서버에 초대, 새 환경변수
+`DISCORD_BOT_TOKEN`·`DISCORD_CHANNEL_ID`를 capital-flow-tracker 프로덕션에 등록(2026-08-22 완료).
+다른 알림 함수(`sendReportUploadedAlert`, `sendHealthCheckAlert`)는 버튼이 필요 없어 웹훅 그대로 둠.
+
 ## 범위 밖(하지 않는 것)
 
 - health-check 크론 시각 변경 없음(09:10 유지) — 즉시 알림 경로가 생겨서 재조정할 이유가 없어짐.
