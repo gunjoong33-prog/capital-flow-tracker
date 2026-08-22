@@ -158,13 +158,17 @@ export async function fetchBigTechHeadlines(asOf: Date = new Date()): Promise<{
 
   const daysBehind = Math.max(1, Math.ceil((Date.now() - asOf.getTime()) / 86_400_000) + 1);
 
+  // limit 3→6(2026-08-22) — 종목당 상위 3건만 보다 보니 실제 그날 주가를 움직인 기사가 4~6위권에
+  // 있어서 아예 놓친 실측 사례가 있었다(8/17 MSFT·META, 8/19 AAPL — 웹 검색으로 직접 원인 기사를
+  // 찾아 대조해 확인). judgeBigTechReasons 프롬프트의 "최근 1~2일 이내 사건만 인정" 규칙은 그대로라
+  // 헤드라인을 더 보여준다고 오래된 기사를 원인으로 지어내진 않는다 — 후보 풀만 넓히는 변경.
   const results = await Promise.allSettled(
     BIG_TECH_TICKERS.map((ticker) =>
       fetchRss(
         `https://news.google.com/rss/search?q=${encodeURIComponent(BIG_TECH_QUERY_TEXT[ticker])}+when:${daysBehind}d&hl=en-US&gl=US&ceid=US:en`,
         `google-news-${ticker}`,
         "general",
-        3
+        6
       ).then((headlines) => ({ ticker, headlines }))
     )
   );

@@ -63,9 +63,17 @@ ${sections}`;
   // gpt-oss-120b는 내부적으로 thinking 모델이라 reasoning_effort를 낮춰(low) 답변 예산을
   // 추론에 뺏기지 않게 한다 — 헤드라인·등락률을 보고 1문장 요약하는 단순 판단이라 깊은 추론이
   // 필요 없다("none"은 이 모델이 거부해서 최소값인 "low"를 쓴다).
-  const text = await callGroq(prompt, { maxTokens: 4096, reasoningEffort: "low" });
+  // maxTokens는 4096→8192로 상향(2026-08-22) — "low"로 낮춰도 thinking 모델은 내부 추론에 토큰을
+  // 일부 쓰고 남은 예산으로 7종목치 JSON을 완성해야 하는데, 예산이 빠듯한 날은 배열이 중간에 잘려
+  // extractJsonArray가 파싱 실패하는 사례가 실제로 있었다(8/17·8/20 리포트에서 7종목이 한꺼번에
+  // "명확한 원인 확인 안 됨"으로 뜬 원인 — 개별 판정 7건이 아니라 그날 응답 전체가 깨진 것).
+  const text = await callGroq(prompt, { maxTokens: 8192, reasoningEffort: "low" });
   const parsed = extractJsonArray<{ ticker: string; reason: string }>(text);
-  if (!parsed) return {};
+  // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 7종목이 한꺼번에 "명확한 원인 확인 안 됨"으로
+  // 뜨는데도 sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가
+  // 깨진 것을 화면에서 구분할 수 없었음) — 던져서 호출부(computeBigTechReasons)의 try/catch가
+  // errors 배열에 남기게 한다.
+  if (!parsed) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(응답 앞부분: ${text.slice(0, 300)})`);
 
   const result: Record<string, string> = {};
   for (const p of parsed) result[p.ticker] = p.reason;
