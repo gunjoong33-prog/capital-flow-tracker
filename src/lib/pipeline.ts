@@ -437,6 +437,21 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     sourceErrors.push({ source: "주기별리포트", error: err instanceof Error ? err.message : String(err) });
   }
 
+  // 위 377번 줄의 upsert 이후(옵시디언export·Discord알림·Notion·주기별리포트) push된 sourceErrors는
+  // 지금까지 DB에 한 번도 다시 반영되지 않아 health-check가 절대 못 봤다(2026-08-22 감사로 확인) —
+  // 감사 흔적용으로 최종 상태를 한 번 더 저장한다. 알림 트리거는 이 update가 아니라 각 실패 지점의
+  // 즉시 알림(daily/route.ts, obsidian-export/route.ts)이 담당하므로, 이 update 자체가 실패해도
+  // 조용히 넘어간다(리포트 저장은 이미 끝난 상태라 파이프라인을 막을 이유가 없다).
+  try {
+    const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
+    await db.dailyReport.update({
+      where: { date: new Date(today) },
+      data: { dataCompleteness: asJson({ sourceErrors }) },
+    });
+  } catch {
+    // DB 순단 등으로 이 마지막 저장까지 실패하면, 위에서 이미 시도한 즉시 알림 경로만 남는다.
+  }
+
   return {
     date: today,
     metricsSaved,
