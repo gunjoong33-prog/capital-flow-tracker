@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { buildDailyReportMarkdown, buildPeriodReportMarkdown, dailyReportFileName, periodReportFileName, upsertObsidianFile, type UpsertResult } from "@/lib/obsidian-export";
 import { requireCronAuth } from "@/lib/cron-auth";
-import { sendHealthCheckAlert } from "@/lib/discord-alert";
+import { sendHealthCheckAlert, sendObsidianExportFailureAlert } from "@/lib/discord-alert";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,9 +34,19 @@ async function upsertFile(repoPath: string, content: string): Promise<UpsertResu
 const DEFAULT_DAILY_LOOKBACK_DAYS = 60;
 const DEFAULT_PERIOD_LOOKBACK_COUNT = 12;
 
+// DB(dataCompleteness) 감사 흔적은 GitHub 원문(HTTP 상태·JSON)을 그대로 남기지만, Discord 알림은
+// 비전공자가 읽으므로 흔한 패턴만 쉬운 한국어 문장으로 바꾼다 — 못 알아본 패턴은 원문 앞부분만
+// 잘라서 덧붙인다(완전히 감추지 않음, 필요하면 뒤에서 더 조사 가능하게).
+function friendlyDetail(detail: string): string {
+  if (/^(GET|PUT) 401/.test(detail)) return "GitHub 접속 열쇠(토큰)가 잘못됐거나 만료됨";
+  if (/^(GET|PUT) 403/.test(detail)) return "GitHub 요청이 너무 잦아 잠깐 막힘(사용량 제한) 또는 권한 부족";
+  if (/^(GET|PUT) 5\d\d/.test(detail)) return "GitHub 서버 자체에 일시적 문제 발생";
+  return `GitHub 연결 문제(${detail.slice(0, 80)})`;
+}
+
 // Discord 메시지 2000자 제한 고려 — 실패 목록은 최대 5건만 본문에 담고 나머지는 건수로 요약한다.
 function formatErrorAlert(errorDetails: { path: string; detail: string }[]): string {
-  const shown = errorDetails.slice(0, 5).map((e) => `- ${e.path}: ${e.detail}`).join("\n");
+  const shown = errorDetails.slice(0, 5).map((e) => `- ${e.path}: ${friendlyDetail(e.detail)}`).join("\n");
   const rest = errorDetails.length > 5 ? `\n외 ${errorDetails.length - 5}건 더` : "";
   return `옵시디언 안전망 크론에서 ${errorDetails.length}건 실패:\n${shown}${rest}`;
 }
@@ -80,7 +90,7 @@ export async function GET(request: Request) {
   for (const status of Object.values(results)) summary[status as keyof typeof summary]++;
 
   if (errorDetails.length > 0) {
-    await sendHealthCheckAlert(formatErrorAlert(errorDetails));
+    await sendObsidianExportFailureAlert(formatErrorAlert(errorDetails));
   }
 
   return NextResponse.json({ summary, errors: errorDetails, results });
