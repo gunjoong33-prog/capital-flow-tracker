@@ -96,7 +96,9 @@ async function githubRequest(path: string, token: string, init?: RequestInit): P
 
 /** 내용이 실제로 바뀐 파일만 커밋한다 — api/cron/obsidian-export와 exportDailyReportNow가 공유해서
  * GitHub Contents API 호출부가 두 곳에서 따로 어긋나지 않게 한다. */
-export async function upsertObsidianFile(repoPath: string, content: string, token: string): Promise<"created" | "updated" | "unchanged" | "error"> {
+export type UpsertResult = { status: "created" | "updated" | "unchanged" | "error"; detail?: string };
+
+export async function upsertObsidianFile(repoPath: string, content: string, token: string): Promise<UpsertResult> {
   const encodedPath = repoPath.split("/").map(encodeURIComponent).join("/");
   const contentBase64 = Buffer.from(content, "utf8").toString("base64");
 
@@ -105,10 +107,10 @@ export async function upsertObsidianFile(repoPath: string, content: string, toke
   if (getRes.ok) {
     const existing = (await getRes.json()) as { sha: string; content: string };
     const existingContent = Buffer.from(existing.content, "base64").toString("utf8");
-    if (existingContent === content) return "unchanged";
+    if (existingContent === content) return { status: "unchanged" };
     sha = existing.sha;
   } else if (getRes.status !== 404) {
-    return "error";
+    return { status: "error", detail: `GET ${getRes.status}: ${(await getRes.text()).slice(0, 200)}` };
   }
 
   const putRes = await githubRequest(encodedPath, token, {
@@ -120,7 +122,10 @@ export async function upsertObsidianFile(repoPath: string, content: string, toke
       ...(sha ? { sha } : {}),
     }),
   });
-  return putRes.ok ? (sha ? "updated" : "created") : "error";
+  if (!putRes.ok) {
+    return { status: "error", detail: `PUT ${putRes.status}: ${(await putRes.text()).slice(0, 200)}` };
+  }
+  return { status: sha ? "updated" : "created" };
 }
 
 /**
@@ -134,8 +139,8 @@ export async function exportDailyReportNow(row: DailyReport): Promise<void> {
   const token = process.env.GITHUB_EXPORT_TOKEN;
   if (!token) throw new Error("GITHUB_EXPORT_TOKEN 환경변수 없음");
   const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
-  const status = await upsertObsidianFile(repoPath, buildDailyReportMarkdown(row), token);
-  if (status === "error") throw new Error(`GitHub 커밋 실패: ${repoPath}`);
+  const { status, detail } = await upsertObsidianFile(repoPath, buildDailyReportMarkdown(row), token);
+  if (status === "error") throw new Error(`GitHub 커밋 실패: ${repoPath}${detail ? ` (${detail})` : ""}`);
 }
 
 export function periodReportFileName(row: Pick<PeriodReport, "periodType" | "periodStart">): string {
