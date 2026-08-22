@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { buildDailyReportMarkdown, buildPeriodReportMarkdown, dailyReportFileName, periodReportFileName, upsertObsidianFile } from "@/lib/obsidian-export";
+import { buildDailyReportMarkdown, buildPeriodReportMarkdown, dailyReportFileName, periodReportFileName, upsertObsidianFile, type UpsertResult } from "@/lib/obsidian-export";
 import { requireCronAuth } from "@/lib/cron-auth";
+import { sendHealthCheckAlert } from "@/lib/discord-alert";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,7 +22,7 @@ export const maxDuration = 60;
  * 추가) — 그래서 이 크론은 이제 "그래도 당일 커밋이 실패했거나 크론이 안 돈 날"을 다음 실행에서
  * 따라잡는 안전망 역할이고, 단독 반영 경로가 아니다.
  */
-async function upsertFile(repoPath: string, content: string): Promise<"created" | "updated" | "unchanged" | "error"> {
+async function upsertFile(repoPath: string, content: string): Promise<UpsertResult> {
   const token = process.env.GITHUB_EXPORT_TOKEN!;
   return upsertObsidianFile(repoPath, content, token);
 }
@@ -33,16 +34,25 @@ async function upsertFile(repoPath: string, content: string): Promise<"created" 
 const DEFAULT_DAILY_LOOKBACK_DAYS = 60;
 const DEFAULT_PERIOD_LOOKBACK_COUNT = 12;
 
+// Discord 메시지 2000자 제한 고려 — 실패 목록은 최대 5건만 본문에 담고 나머지는 건수로 요약한다.
+function formatErrorAlert(errorDetails: { path: string; detail: string }[]): string {
+  const shown = errorDetails.slice(0, 5).map((e) => `- ${e.path}: ${e.detail}`).join("\n");
+  const rest = errorDetails.length > 5 ? `\n외 ${errorDetails.length - 5}건 더` : "";
+  return `옵시디언 안전망 크론에서 ${errorDetails.length}건 실패:\n${shown}${rest}`;
+}
+
 export async function GET(request: Request) {
   const unauthorized = requireCronAuth(request);
   if (unauthorized) return unauthorized;
   if (!process.env.GITHUB_EXPORT_TOKEN) {
-    return NextResponse.json({ error: "GITHUB_EXPORT_TOKEN 환경변수 없음" }, { status: 500 });
+    const message = "GITHUB_EXPORT_TOKEN 환경변수 없음";
+    await sendHealthCheckAlert(`옵시디언 안전망 크론 실행 불가: ${message}`);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
   const full = new URL(request.url).searchParams.get("full") === "1";
 
   const results: Record<string, string> = {};
-  const errors: string[] = [];
+  const errorDetails: { path: string; detail: string }[] = [];
 
   const dailyRows = await db.dailyReport.findMany({
     orderBy: { date: "asc" },
@@ -50,9 +60,9 @@ export async function GET(request: Request) {
   });
   for (const row of dailyRows) {
     const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
-    const status = await upsertFile(repoPath, buildDailyReportMarkdown(row));
+    const { status, detail } = await upsertFile(repoPath, buildDailyReportMarkdown(row));
     results[repoPath] = status;
-    if (status === "error") errors.push(repoPath);
+    if (status === "error") errorDetails.push({ path: repoPath, detail: detail ?? "알 수 없는 오류" });
   }
 
   const periodRows = await db.periodReport.findMany({
@@ -61,13 +71,17 @@ export async function GET(request: Request) {
   });
   for (const row of periodRows) {
     const repoPath = `obsidian-export/주기별 리포트/${periodReportFileName(row)}`;
-    const status = await upsertFile(repoPath, buildPeriodReportMarkdown(row));
+    const { status, detail } = await upsertFile(repoPath, buildPeriodReportMarkdown(row));
     results[repoPath] = status;
-    if (status === "error") errors.push(repoPath);
+    if (status === "error") errorDetails.push({ path: repoPath, detail: detail ?? "알 수 없는 오류" });
   }
 
   const summary = { created: 0, updated: 0, unchanged: 0, error: 0 };
   for (const status of Object.values(results)) summary[status as keyof typeof summary]++;
 
-  return NextResponse.json({ summary, errors, results });
+  if (errorDetails.length > 0) {
+    await sendHealthCheckAlert(formatErrorAlert(errorDetails));
+  }
+
+  return NextResponse.json({ summary, errors: errorDetails, results });
 }
