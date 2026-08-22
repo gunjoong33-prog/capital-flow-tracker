@@ -13,7 +13,7 @@
 - Discord 메시지 1건 2000자 제한 — 실패 목록은 최대 5건만 본문에 담고 초과분은 "외 N건 더"로 요약한다(스펙 3번).
 - 옵시디언 1차 시도(같은 요청 내 `exportDailyReportNow`) 실패는 알림 대상 아님 — 09:30 안전망 크론이 실패했을 때만 알린다(스펙 "커버 범위" 표).
 - `sendHealthCheckAlert`는 내부에서 이미 자기 실패를 삼킨다 — 호출부에서 추가 try/catch 불필요, 그냥 `await`만 하면 된다.
-- `upsertObsidianFile`의 유일한 호출부는 `src/app/api/cron/obsidian-export/route.ts`뿐이다(2026-08-22 확인, grep으로 다른 호출부 없음 검증됨) — 반환 타입을 바꿔도 그 파일 한 곳만 맞추면 된다.
+- `upsertObsidianFile`의 호출부는 2곳이다(2026-08-22 재확인, Task 1 실행 직전 발견 — 최초 조사 때 놓침): `src/app/api/cron/obsidian-export/route.ts`와 같은 파일 안의 `exportDailyReportNow`(133-139번 줄). 둘 다 Task 1에서 같이 고친다.
 - 이 프로젝트는 웹훅/크론 라우트에 vitest를 안 쓴다(기존 관례) — 검증은 `tsc --noEmit` 타입체크 + 배포 후 수동 트리거로 한다(스펙 "테스트 계획").
 
 ---
@@ -95,12 +95,39 @@ export async function upsertObsidianFile(repoPath: string, content: string, toke
 }
 ```
 
-- [ ] **Step 2: 타입체크로 이 파일 자체는 통과하되, 호출부(route.ts)에서 에러가 나는지 확인**
+- [ ] **Step 2: 같은 파일 안의 두 번째 호출부(`exportDailyReportNow`)도 새 반환 타입에 맞게 고친다**
+
+현재 코드(133-139번 줄):
+
+```ts
+export async function exportDailyReportNow(row: DailyReport): Promise<void> {
+  const token = process.env.GITHUB_EXPORT_TOKEN;
+  if (!token) throw new Error("GITHUB_EXPORT_TOKEN 환경변수 없음");
+  const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
+  const status = await upsertObsidianFile(repoPath, buildDailyReportMarkdown(row), token);
+  if (status === "error") throw new Error(`GitHub 커밋 실패: ${repoPath}`);
+}
+```
+
+다음으로 교체(고치지 않으면 `status`가 객체가 돼 `status === "error"`가 항상 거짓이 되고, 진짜
+실패를 영원히 못 잡는 새 버그가 생긴다 — Task 1 실행 직전 리뷰에서 발견):
+
+```ts
+export async function exportDailyReportNow(row: DailyReport): Promise<void> {
+  const token = process.env.GITHUB_EXPORT_TOKEN;
+  if (!token) throw new Error("GITHUB_EXPORT_TOKEN 환경변수 없음");
+  const repoPath = `obsidian-export/일일 리포트/${dailyReportFileName(row)}`;
+  const { status, detail } = await upsertObsidianFile(repoPath, buildDailyReportMarkdown(row), token);
+  if (status === "error") throw new Error(`GitHub 커밋 실패: ${repoPath}${detail ? ` (${detail})` : ""}`);
+}
+```
+
+- [ ] **Step 3: 타입체크로 이 파일 자체는 통과하되, 아직 안 고친 호출부(route.ts)에서 에러가 나는지 확인**
 
 Run: `cd "C:\Users\김건중\capital-flow-tracker" && npx tsc --noEmit -p tsconfig.json 2>&1 | grep "obsidian-export"`
 Expected: `src/app/api/cron/obsidian-export/route.ts`에서 타입 불일치 에러 여러 건(아직 Task 2를 안 했으므로 정상) — `src/lib/obsidian-export.ts` 자체는 에러 없어야 한다.
 
-- [ ] **Step 3: 커밋**
+- [ ] **Step 4: 커밋**
 
 ```bash
 cd "C:\Users\김건중\capital-flow-tracker"
@@ -271,7 +298,7 @@ git commit -m "feat: 옵시디언 안전망 크론 실패 시 진단 정보 포�
 - Modify: `src/lib/pipeline.ts:429` 근처(현재 `return { date: today, ... }` 직전)
 
 **Interfaces:**
-- Consumes: 함수 내부 스코프에 이미 있는 `db`, `today`(string), `sourceErrors`(배열), `asJson`(370번 줄에 정의된 로컬 헬퍼) — 새 import 불필요.
+- Consumes: 함수 내부 스코프에 이미 있는 `db`, `today`(string), `sourceErrors`(배열). `asJson`(370번 줄)은 `if(isRepeatMarketDay)` 블록 안에서만 유효해 이 위치에선 못 씀 — Task 3 실행 중 타입체크로 발견, 새 블록 안에 `const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;`을 다시 선언해서 해결(1줄, 새 import 불필요, `Prisma` 타입은 이미 파일 상단에서 import돼 있음).
 
 - [ ] **Step 1: 현재 코드(429~450번 줄 부근)**
 
