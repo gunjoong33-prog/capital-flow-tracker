@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runDailyPipeline } from "@/lib/pipeline";
 import { requireCronAuth } from "@/lib/cron-auth";
+import { sendHealthCheckAlert } from "@/lib/discord-alert";
 
 export const dynamic = "force-dynamic";
 // Fluid Compute가 켜져 있어 Hobby 플랜에서도 최대 300초까지 가능하다. 파이프라인이 뉴스 판정(Gemini)·
@@ -17,9 +18,8 @@ export async function GET(request: Request) {
     const result = await runDailyPipeline();
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    await sendHealthCheckAlert(`데일리 파이프라인 전체 실패: ${message}`);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
