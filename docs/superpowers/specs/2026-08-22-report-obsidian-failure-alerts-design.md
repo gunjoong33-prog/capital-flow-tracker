@@ -52,11 +52,18 @@ await db.dailyReport.update({
 }
 ```
 
-### 3. 옵시디언 안전망 크론 실패 → 즉시 알림 — `src/app/api/cron/obsidian-export/route.ts`
+### 3. 옵시디언 안전망 크론 실패 → 즉시 알림(진단 정보 포함) — `src/app/api/cron/obsidian-export/route.ts`
 
 - `GITHUB_EXPORT_TOKEN` 없어서 조기 반환하는 경로(40번 줄)에도 알림 추가.
 - `errors` 배열이 채워지면(하나라도 `upsertFile`이 "error" 반환) 응답 직전에 알림 추가 — 실패한
   경로 목록과 건수를 요약해서 보낸다.
+- **진단 정보 부족 문제 발견 및 수정**: `src/lib/obsidian-export.ts`의 `upsertObsidianFile`이
+  실패해도 지금은 `"error"` 문자열만 반환하고 실제 원인(HTTP 상태 코드·GitHub 응답 본문)은
+  버려진다 — 알림에 "5건 실패"만 뜨고 401(토큰 무효)인지 403(레이트리밋)인지 500(GitHub 장애)인지
+  알 수 없어 자동조사 필요성이 그대로 남는다. 반환 타입을 `{ status: "created"|"updated"|
+  "unchanged"|"error"; detail?: string }`로 바꿔 실패 시 `detail`에 `${res.status} ${본문 일부}`를
+  담는다. Discord 메시지에는 실패 경로별 detail을 최대 5건까지 붙이고(Discord 메시지 2000자 제한
+  고려), 5건 초과면 "외 N건 더"로 요약한다.
 
 ### 커버 범위 정리
 
