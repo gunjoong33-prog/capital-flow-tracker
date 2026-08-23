@@ -17,7 +17,7 @@ import type {
   Step8Result,
 } from "./types";
 import {
-  NEWS_RISK_SCORE_THRESHOLD,
+  NEWS_RISK_INTENSITY_THRESHOLD,
   VIX_OVERHEAT_BELOW,
   VIX_FEAR_ABOVE,
   FEAR_GREED_EXTREME_FEAR_BELOW,
@@ -32,15 +32,16 @@ import {
 // 반대로 전쟁 발발 같은 단일 사건은 다른 뉴스 2건이 더 나올 때까지 기다려야 하는 문제가 있었다.
 // 가중점수 계산은 news-events.ts의 newsItemWeight()가 담당한다.
 export function scoreStep1(input: Step1Input): Step1Result {
-  const vetoTriggered =
-    input.newsRiskScore >= NEWS_RISK_SCORE_THRESHOLD || input.hasRecentEventSurprise || input.hasSevereNewsInWindow;
+  const intensity = input.newsRiskIntensity ?? 0;
+  const intensityHigh = intensity >= NEWS_RISK_INTENSITY_THRESHOLD;
+  const vetoTriggered = intensityHigh || input.hasRecentEventSurprise || input.hasSevereNewsInWindow;
   return {
     vetoTriggered,
     reason: vetoTriggered
       ? input.hasSevereNewsInWindow
-        ? "최근 7일 내 단독으로도 시장을 크게 흔들 수준의 뉴스 발생"
-        : input.newsRiskScore >= NEWS_RISK_SCORE_THRESHOLD
-          ? `최근 7일 내 리스크 뉴스 가중점수 ${input.newsRiskScore.toFixed(1)}점(기준 ${NEWS_RISK_SCORE_THRESHOLD}점 이상)`
+        ? "최근 2일 내 공식·내부 출처발 시장 충격 뉴스 발생"
+        : intensityHigh
+          ? `최근 7일 리스크 뉴스 강도 ${intensity.toFixed(2)}(기준 ${NEWS_RISK_INTENSITY_THRESHOLD} 이상, 0~10 척도)`
           : "최근 발표된 FOMC/CPI/고용지표 결과가 예상 밖(서프라이즈)"
       : "특이사항 없음",
   };

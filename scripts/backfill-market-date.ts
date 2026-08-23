@@ -10,8 +10,12 @@ async function main() {
   const reports = await db.dailyReport.findMany({ where: { marketDate: null }, orderBy: { date: "asc" } });
   let updated = 0;
   for (const r of reports) {
+    // lte가 아니라 lt여야 한다. 이 스크립트는 나중에 돌기 때문에 lte로 조회하면 "리포트 발행 시점엔
+    // 아직 존재하지 않던 당일 종가"가 잡힌다 — 실제로 7/27~7/31 다섯 건이 marketDate == date로
+    // 잘못 채워졌고, 그중 7/31행이 8/1행과 같은 거래일을 가리켜 중복까지 만들었다.
+    // 리포트는 09:00 KST(= 전날 저녁 ET)에 발행되므로 반영 가능한 최신 종가는 항상 "전날 이전"이다.
     const spx = await db.metricValue.findFirst({
-      where: { metric: METRICS.SPX, date: { lte: r.date } },
+      where: { metric: METRICS.SPX, date: { lt: r.date } },
       orderBy: { date: "desc" },
     });
     if (!spx) {

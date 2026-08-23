@@ -1,5 +1,12 @@
 import { getLatestMetric, getMetricHistory, getMetricHistoryByCount, calculatePercentile, calculatePercentileByCount, calculateCumulativeReturn } from "@/lib/metrics";
-import { getRecentRiskyNews, newsItemWeight, getNewsRiskScorePercentile } from "@/lib/news-events";
+import {
+  getRecentRiskyNews,
+  newsItemWeight,
+  getNewsRiskScorePercentile,
+  computeNewsRiskIntensity,
+  SEVERE_NEWS_WINDOW_DAYS,
+  SEVERE_NEWS_MAX_PRIORITY,
+} from "@/lib/news-events";
 import { getUpcomingMajorEvents } from "@/lib/major-events";
 import { evaluateRecentEventOutcomes } from "@/lib/event-outcomes";
 import { METRICS, SECTOR_ETFS, BIG_TECH_TICKERS, BIG_TECH_LABELS } from "@/lib/sources/types";
@@ -809,14 +816,34 @@ export async function runDailyAnalysis(
     (e) => !evaluatedKeys.has(`${e.name}|${e.date.toISOString().slice(0, 10)}`)
   );
   const hasEventSurprise = recentOutcomes.some((o) => o.risky);
-  const hasSevereNews = riskyNews.some((n) => n.severity === "high");
+  // "단독으로도 시장을 크게 흔들 수준"(severity=high) 판정은 LLM이 내리는데, 실측 결과 이 라벨이
+  // 하루 1~2건씩 상시로 붙어 거부권이 21일 중 15일을 이 경로 하나로 발동시키고 있었다. 원인은
+  // 라벨의 출처 분포다 — 저장된 high 44건 중 43건이 priority 2(일반 지정학 뉴스)이고 백악관·연준
+  // 공식 발표발 high는 0건이었다. 즉 LLM이 일반 기사에 최고 심각도를 남발한다.
+  //
+  // 그래서 "단독 즉시발동"은 출처가 공식(0) 또는 권력네트워크 유출(1)인 high로 한정한다 — BGRI가
+  // 브로커리지 리포트에 일반 매체보다 큰 비중을 두는 것과 같은 원리. 일반 매체발 high는 즉시발동
+  // 대신 강도 점수(severity 가중치 3)로만 반영된다. 창도 7일 -> 2일로 좁힌다: 6일 전의 "충격 뉴스"가
+  // 오늘의 결론을 뒤집는 건 최근성 감쇠를 쓰는 점수 경로와 앞뒤가 안 맞았다.
+  // 실측 발동률: 71% -> 10%.
+  const severeCutoff = new Date(asOf);
+  severeCutoff.setUTCDate(severeCutoff.getUTCDate() - (SEVERE_NEWS_WINDOW_DAYS - 1));
+  const hasSevereNews = riskyNews.some(
+    (n) => n.severity === "high" && n.priority <= SEVERE_NEWS_MAX_PRIORITY && n.date >= severeCutoff
+  );
   const newsRiskScore = riskyNews.reduce((sum, n) => sum + newsItemWeight(n, asOf), 0);
+  const { intensity: newsRiskIntensity, usedCount: newsRiskItemsUsed, totalCount: newsRiskItemsTotal } =
+    computeNewsRiskIntensity(riskyNews, asOf);
   const step1 = {
     ...scoreStep1({
       newsRiskScore,
+      newsRiskIntensity,
       hasRecentEventSurprise: hasEventSurprise,
       hasSevereNewsInWindow: hasSevereNews,
     }),
+    newsRiskIntensity,
+    newsRiskItemsUsed,
+    newsRiskItemsTotal,
     // 종합 보고서 LLM이 riskyNews 배열(많으면 100건 이상)을 직접 세다가 자릿수를 틀린 사례가
     // 실제로 있었다(148건을 39건으로 서술) — 미리 센 값을 별도 필드로 줘서 옮겨적기만 하면 되게 한다.
     riskyNewsCount: riskyNews.length,

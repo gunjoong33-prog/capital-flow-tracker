@@ -14,10 +14,16 @@ export default async function CalendarDayPage({
   params: Promise<{ date: string }>;
 }) {
   const { date } = await params;
-  const report = await db.dailyReport.findUnique({ where: { date: new Date(date) } });
+  // URL의 날짜는 이제 "미국장 거래일"(marketDate)이다 — 캘린더·적중률 표가 그 기준으로 바뀌었다.
+  // 다만 예전 링크(한국 발행일)가 북마크·노션·옵시디언에 이미 퍼져 있으므로 둘 다 받는다.
+  // marketDate 일치를 먼저 찾고, 없으면 date로 폴백한다.
+  const target = new Date(date);
+  const report =
+    (await db.dailyReport.findFirst({ where: { marketDate: target } })) ??
+    (await db.dailyReport.findUnique({ where: { date: target } }));
   if (!report) notFound();
 
-  const dateOnlyLabel = new Date(date).toLocaleDateString("ko-KR", {
+  const dateOnlyLabel = (report.marketDate ?? report.date).toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric", weekday: "long", timeZone: "UTC",
   });
   // marketDate(실제 데이터 기준 미국장 마감 거래일)가 리포트 생성일과 다르면(휴장일 등) 병기 —
@@ -26,9 +32,11 @@ export default async function CalendarDayPage({
   const createdAtLabel = report.createdAt.toLocaleTimeString("ko-KR", {
     hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul",
   });
+  const publishedLabel = report.date.toISOString().slice(0, 10);
   const dateLabel =
-    (marketDateLabel && marketDateLabel !== date ? `${dateOnlyLabel} · 기준: ${marketDateLabel} 미국장 마감` : dateOnlyLabel) +
-    ` · 생성 ${createdAtLabel}(KST)`;
+    (marketDateLabel && marketDateLabel !== publishedLabel
+      ? `${dateOnlyLabel} 미국장 마감 기준 · 발행 ${publishedLabel} ${createdAtLabel}(KST)`
+      : `${dateOnlyLabel} · 생성 ${createdAtLabel}(KST)`);
 
   const reportData: ReportViewData = {
     step1: report.step1 as unknown as ReportViewData["step1"],

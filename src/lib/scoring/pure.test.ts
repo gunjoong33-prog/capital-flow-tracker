@@ -11,30 +11,40 @@ import {
   WEIGHTS,
   TOTAL_WEIGHT,
 } from "./pure";
-import { NEWS_RISK_SCORE_THRESHOLD } from "./types";
+import { NEWS_RISK_INTENSITY_THRESHOLD } from "./types";
 
 describe("scoreStep1", () => {
-  it("가중점수가 임계값 미만이면 거부권 미발동", () => {
-    const result = scoreStep1({
-      newsRiskScore: NEWS_RISK_SCORE_THRESHOLD - 0.1,
-      hasRecentEventSurprise: false,
-      hasSevereNewsInWindow: false,
-    });
+  const base = { newsRiskScore: 0, hasRecentEventSurprise: false, hasSevereNewsInWindow: false };
+
+  it("강도가 임계값 미만이면 거부권 미발동", () => {
+    const result = scoreStep1({ ...base, newsRiskIntensity: NEWS_RISK_INTENSITY_THRESHOLD - 0.01 });
     expect(result.vetoTriggered).toBe(false);
   });
 
-  it("가중점수가 임계값 이상이면 거부권 발동", () => {
-    const result = scoreStep1({
-      newsRiskScore: NEWS_RISK_SCORE_THRESHOLD,
-      hasRecentEventSurprise: false,
-      hasSevereNewsInWindow: false,
-    });
+  it("강도가 임계값 이상이면 거부권 발동", () => {
+    const result = scoreStep1({ ...base, newsRiskIntensity: NEWS_RISK_INTENSITY_THRESHOLD });
     expect(result.vetoTriggered).toBe(true);
   });
 
+  // 옛 합계 점수(수집량에 비례해 200점대까지 치솟던 값)는 더 이상 판정에 관여하지 않는다.
+  // 이 회귀 테스트가 없으면 두 필드를 헷갈려 다시 합계로 판정하는 실수가 조용히 통과한다.
+  it("옛 합계 점수(newsRiskScore)는 아무리 커도 단독으로 거부권을 발동시키지 않는다", () => {
+    const result = scoreStep1({ ...base, newsRiskScore: 200.9, newsRiskIntensity: 1.0 });
+    expect(result.vetoTriggered).toBe(false);
+  });
+
+  it("강도가 없는 과거 리포트는 0으로 취급해 점수 경로로는 발동하지 않는다", () => {
+    expect(scoreStep1(base).vetoTriggered).toBe(false);
+  });
+
   it("단독 즉시발동 뉴스가 있으면 점수와 무관하게 거부권 발동", () => {
-    const result = scoreStep1({ newsRiskScore: 0, hasRecentEventSurprise: false, hasSevereNewsInWindow: true });
+    const result = scoreStep1({ ...base, hasSevereNewsInWindow: true });
     expect(result.vetoTriggered).toBe(true);
+    expect(result.reason).toContain("공식");
+  });
+
+  it("이벤트 서프라이즈만으로도 발동한다", () => {
+    expect(scoreStep1({ ...base, hasRecentEventSurprise: true }).vetoTriggered).toBe(true);
   });
 });
 
