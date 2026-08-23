@@ -10,6 +10,13 @@ export type Direction = "up" | "down" | "flat";
 // 이 이유로 보류했었다), 실측 7일 표본만 봐도 조용한 날 2점, 약간 시끄러운 날 5.6~6.4점,
 // 전쟁급 뉴스는 93.6~107점으로 그 사이가 완전히 비어 있어 옛 기준(5)은 "약간 시끄러운 날"조차
 // 거부권을 걸었다 — 사용자가 직접 상향을 지시해 20으로 조정(보수적 선택지). 표본이 늘면 재검토.
+// 뉴스 위험 강도 임계값(0~10 척도, computeNewsRiskIntensity 산출값 기준).
+// 예전 상수는 "가중치 합계 20점"이었는데 분모가 없어 수집량이 4건->139건으로 늘자 점수가 그대로
+// 10배 뛰어 7/31 이후 단 하루도 임계 아래로 내려오지 않았다(실측). 강도는 상위 20건만 쓰고
+// 이론상 최대치로 나눈 유계 척도라 수집량과 무관하다 — 관측 21일 분포(4.46~5.40)의 85%ile.
+// 표본 30건이 쌓이면 이 고정값 대신 자체 이력 백분위로 전환할 것(계획은 아래 주석 참고).
+export const NEWS_RISK_INTENSITY_THRESHOLD = 5.3;
+/** @deprecated 합계 기반 옛 임계값. 저장된 과거 리포트 해석용으로만 남긴다. */
 export const NEWS_RISK_SCORE_THRESHOLD = 20;
 
 // 7단계 VIX·공포탐욕지수 과열/공포 임계값. pure.ts(채점)와 run.ts(화면 표시 문구·표)가 같은
@@ -21,7 +28,10 @@ export const FEAR_GREED_EXTREME_FEAR_BELOW = 25;
 export const FEAR_GREED_EXTREME_GREED_ABOVE = 75;
 
 export interface Step1Input {
-  newsRiskScore: number; // 최근 7일 내 리스크 뉴스의 (심각도 × 출처 가중치 × 최근성 감쇠) 합산 점수
+  newsRiskScore: number; // 최근 7일 내 리스크 뉴스의 (심각도 × 출처 가중치 × 최근성 감쇠) 합산 점수 — 참고 기록용
+  /** 0~10 유계 강도(상위 20건만 사용, 이론상 최대치로 정규화). 거부권 점수 경로는 이 값을 본다.
+   *  선택 필드인 이유: 저장된 과거 리포트에는 없다(그 시절엔 합계뿐) — 없으면 0으로 취급한다. */
+  newsRiskIntensity?: number;
   hasRecentEventSurprise: boolean; // 최근 발표된 FOMC/CPI/고용지표의 실제 결과가 통계적 서프라이즈였는지
   hasSevereNewsInWindow: boolean; // 최근 7일 내 단독으로도 즉시 거부권 발동 수준(severity: high)인 뉴스가 있는지
 }
@@ -51,6 +61,9 @@ export interface Step1Result {
   riskyNews?: RiskyNewsItem[]; // LLM이 리스크로 판정한 뉴스(있으면 UI에 요약+링크로 표시)
   upcomingEvents?: UpcomingEventItem[]; // 14일 내 예정된 FOMC·CPI·고용지표 등(정보용, 거부권과 무관)
   recentEventOutcomes?: EventOutcomeItem[]; // 최근 발표된 이벤트의 실제 결과 서프라이즈 판정(거부권 근거)
+  newsRiskIntensity?: number; // 0~10 유계 강도(거부권 점수 경로의 실제 입력)
+  newsRiskItemsUsed?: number; // 강도 계산에 실제로 쓴 항목 수(상한 20)
+  newsRiskItemsTotal?: number; // 그날 창 안의 리스크 뉴스 총 건수(수집량 추이 확인용)
   newsRiskScore?: number; // 최근 7일 리스크 뉴스 가중점수 원값(파이프라인이 MetricValue로 저장해
   // 시계열을 쌓는다 — 표본이 쌓이면 절대 임계값(NEWS_RISK_SCORE_THRESHOLD) 대신 백분위 기반
   // 거부권으로 전환 가능해진다. calculatePercentile은 30개 미만 표본이면 null을 반환하므로

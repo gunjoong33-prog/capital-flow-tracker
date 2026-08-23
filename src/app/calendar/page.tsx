@@ -49,11 +49,21 @@ export default async function CalendarPage({
   const gridEnd = new Date(monthEnd);
   gridEnd.setUTCDate(gridEnd.getUTCDate() + (6 - gridEnd.getUTCDay()));
 
+  // 캘린더 칸은 "리포트가 다룬 미국장 거래일"(marketDate)에 붙인다. 예전엔 date(한국 발행일)를
+  // 썼는데, 파이프라인이 09:00 KST에 돌면서 직전 미국장 종가를 반영하므로 date = marketDate + 1일이다
+  // — 그 결과 금요일 미국장 리포트가 토요일 칸에 뜨고 월요일 칸이 비어 보였다(사용자 지적).
+  // 조회 범위를 하루씩 넓히는 이유: 그리드 경계일의 리포트는 date가 범위 밖일 수 있다.
+  const fetchStart = new Date(gridStart);
+  fetchStart.setUTCDate(fetchStart.getUTCDate() - 1);
+  const fetchEnd = new Date(gridEnd);
+  fetchEnd.setUTCDate(fetchEnd.getUTCDate() + 2);
   const reports = await db.dailyReport.findMany({
-    where: { date: { gte: gridStart, lte: gridEnd } },
-    select: { date: true, step8: true },
+    where: { date: { gte: fetchStart, lte: fetchEnd } },
+    select: { date: true, marketDate: true, step8: true },
   });
-  const byDate = new Map(reports.map((r) => [toDateKey(r.date), r.step8 as unknown as Step8Result]));
+  const byDate = new Map(
+    reports.map((r) => [toDateKey(r.marketDate ?? r.date), r.step8 as unknown as Step8Result])
+  );
 
   // 주간 리포트는 일요일 셀에 배지를 달아준다. periodStart(월요일, 일요일 기준 -6일)로 조회하는데
   // 그 월요일이 이번 달 그리드보다 앞설 수 있어(예: 그리드 첫 줄의 일요일) gridStart보다 넓게 잡는다.

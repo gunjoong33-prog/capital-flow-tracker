@@ -31,7 +31,10 @@ model MetricValue {
 model DailyReport {
   id                String   @id @default(cuid())
   date              DateTime @unique @db.Date
-  marketDate        DateTime? @db.Date // 실제 데이터 기준 미국장 마감 거래일(Yahoo SPX 종가일) — date(크론 실행일)와
+  marketDate        DateTime? @unique @db.Date // 실제 데이터 기준 미국장 마감 거래일(Yahoo SPX 종가일) — date(크론 실행일)와
+  // @unique: 같은 거래일이 두 행에 들어가면 적중률 분모가 그 하루를 두 번 센다(실제로 7/31·8/1이
+  // 그랬다). 파이프라인의 "휴장일 스킵" 가드는 직전 1건만 비교하므로 DB 레벨 방어가 더 확실하다.
+  // Postgres는 NULL을 유일성 검사에서 제외하므로 marketDate 미기록 행은 영향받지 않는다.
   // 다를 수 있다(주말·휴장일). 백테스트에서 같은 거래일 데이터가 여러 date로 중복 계상되는 걸 막는 데 쓴다.
   step1             Json // 글로벌 환경: {newsCount, hasBigEvent, vetoTriggered}
   step2             Json // 유동성: {overseasScore, domesticAdjustment, finalScore, details}

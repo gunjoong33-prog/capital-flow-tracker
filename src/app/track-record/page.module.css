@@ -73,3 +73,65 @@
 .pending {
   color: var(--ink-faint);
 }
+
+/* 등락 색과 적중 여부를 분리한다 — 예전엔 .hit/.miss가 --pos/--neg(가격 등락 색)를 그대로 써서
+   상승(+11.49%)한 날이 미적중이라는 이유로 하락색으로 찍혔다. 한국 관행상 빨강=상승이라 정반대로
+   읽힌다. 숫자는 등락 색, 적중 여부는 무채색 배지로 옮긴다. */
+.hitCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.up {
+  color: var(--neg); /* 한국 관행: 상승=빨강. --neg가 빨강 토큰이다 */
+  font-variant-numeric: tabular-nums;
+}
+.down {
+  color: var(--pos); /* 한국 관행: 하락=파랑 계열 */
+  font-variant-numeric: tabular-nums;
+}
+.badgeHit,
+.badgeMiss {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.badgeHit {
+  border-color: color-mix(in srgb, var(--ink-dim) 45%, transparent);
+  font-weight: 600;
+}
+.badgeMiss {
+  opacity: 0.7;
+}
+
+.summaryPct {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+  margin-left: 0.45rem;
+}
+.summaryContext {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin-top: 0.3rem;
+}
+.summaryValue {
+  font-variant-numeric: tabular-nums;
+}
+.caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0.7rem 0.9rem 0.2rem;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  line-height: 1.5;
+}
+.subDate {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  margin-top: 0.15rem;
+}

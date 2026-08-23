@@ -33,6 +33,42 @@ function recencyWeight(daysAgo: number): number {
   return 0.4;
 }
 
+/** "단독 즉시발동" high 뉴스로 인정할 최근성 창(일). 7일이면 6일 전 뉴스가 오늘 결론을 뒤집는다. */
+export const SEVERE_NEWS_WINDOW_DAYS = 2;
+
+/** "단독 즉시발동"으로 인정할 최대 출처 우선순위(0=백악관·연준 공식, 1=권력네트워크 유출).
+ *  일반 지정학 뉴스(2)의 high는 즉시발동에서 제외하고 강도 점수로만 반영한다 — 실측상 high 44건
+ *  중 43건이 여기에 몰려 있어 이 경로 하나가 거부권을 상시 켜두고 있었다. */
+export const SEVERE_NEWS_MAX_PRIORITY = 1;
+
+/** 한 항목이 받을 수 있는 최대 가중치 = 심각도 high(3) × 출처 백악관·연준(1.5) × 당일(1.0). */
+export const MAX_ITEM_WEIGHT = 3 * 1.5 * 1.0;
+
+/** 위험점수 계산에 쓸 최대 항목 수. 한국은행 뉴스심리지수(NSI)가 매일 정확히 1만 문장을 뽑아
+ * 수집량 변화와 무관한 지수를 만드는 것과 같은 원리 — 상위 N건만 쓰면 그물을 넓혀도 눈금이 안 흔들린다. */
+export const RISK_ITEM_CAP = 20;
+
+/**
+ * 뉴스 위험 강도(0~10). 예전 newsRiskScore는 리스크 뉴스 가중치를 "전부 더한" 값이라 분모가 없었고,
+ * 수집 범위를 넓히자(하루 4건 -> 139건) 점수가 그대로 10배 뛰어 임계값 20이 상시 초과 상태가 됐다
+ * (7/31 이후 단 하루도 임계 아래로 내려온 적 없음 — 실측). 세상이 위험해진 게 아니라 그물이 커진 것이다.
+ *
+ * 그래서 두 가지를 동시에 적용한다:
+ *  - 상위 RISK_ITEM_CAP건만 사용(고정 표본 — 한국은행 NSI 방식)
+ *  - 이론상 최대치(CAP × MAX_ITEM_WEIGHT)로 나눠 0~10으로 정규화(비중화 — 연준 GPR 방식)
+ * 결과적으로 수집량이 20건을 넘어서면 점수가 수집량에 반응하지 않는다.
+ */
+export function computeNewsRiskIntensity(
+  items: { priority: number; severity: string; date: Date }[],
+  asOf: Date
+): { intensity: number; usedCount: number; totalCount: number } {
+  const weights = items.map((i) => newsItemWeight(i, asOf)).sort((a, b) => b - a);
+  const top = weights.slice(0, RISK_ITEM_CAP);
+  const sum = top.reduce((a, b) => a + b, 0);
+  const intensity = Math.round((sum / (RISK_ITEM_CAP * MAX_ITEM_WEIGHT)) * 1000) / 100;
+  return { intensity, usedCount: top.length, totalCount: weights.length };
+}
+
 /** 개별 뉴스 항목의 리스크 가중치(심각도 × 출처 × 최근성). */
 export function newsItemWeight(item: { priority: number; severity: string; date: Date }, asOf: Date): number {
   const daysAgo = Math.floor((asOf.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24));
