@@ -4,78 +4,25 @@ import { callMistral, extractJsonArray } from "@/lib/llm-clients";
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { kstToday } from "@/lib/date";
 
+import {
+  newsItemWeight,
+  capDailyHighSeverity,
+  capScheduledPolicyMeetingSeverity,
+  downgradeUnsupportedHigh,
+  type NewsSeverity,
+} from "./news-severity";
+
+// 순수 판정 로직은 news-severity.ts로 옮겼다(테스트가 DB 없이 돌아야 해서). 기존 import 경로를
+// 깨지 않도록 여기서 그대로 재수출한다.
+export * from "./news-severity";
+
+
 // 사용자 지정 최종 우선순위: 0=백악관·연준 공식 발표, 1=권력 네트워크·엘리트 그룹 유출/폭로, 2=일반 지정학.
 const CATEGORY_PRIORITY: Record<NewsCategory, number> = {
   official: 0,
   "power-network": 1,
   general: 2,
 };
-
-export type NewsSeverity = "high" | "medium" | "low";
-
-// 월가 리스크 지수(Fed GPR: Threats/Acts 구분, BlackRock BGRI: 출처·최근성 가중)를 참고해
-// "건수"가 아니라 "심각도 × 출처 신뢰도 × 최근성"을 곱한 가중점수로 거부권을 판단한다.
-// 심각도 가중치. "normal"은 심각도가 2단계(high/normal)였던 과거 데이터와의 호환용 — 새 분류에서는
-// 나오지 않지만, 전환 시점엔 최근 7일 창에 예전 방식으로 저장된 기록이 섞여 있을 수 있어 medium과
-// 동일하게 취급한다(7일이 지나면 창에서 자연히 빠짐).
-const SEVERITY_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1, normal: 2 };
-
-// 출처 가중치(NewsEvent.priority 기준: 0=백악관·연준, 1=권력 네트워크 유출, 2=일반). BGRI가 브로커리지
-// 리포트(전문 소스)에 일반 뉴스보다 더 큰 비중을 두는 것과 같은 원리 — 백악관·연준의 공식 발표가 같은
-// 심각도라도 일반 뉴스보다 신뢰도·직접성이 높다고 보고 더 크게 반영한다.
-const PRIORITY_WEIGHT: Record<number, number> = { 0: 1.5, 1: 1.2, 2: 1.0 };
-
-/** 발행일로부터 지난 일수에 따른 최근성 감쇠. BGRI가 최근 뉴스에 더 큰 비중을 두는 것과 같은 원리 —
- * 6일 전 소소한 뉴스가 오늘 뉴스와 똑같은 무게로 누적되는 걸 막는다. */
-function recencyWeight(daysAgo: number): number {
-  if (daysAgo <= 1) return 1.0;
-  if (daysAgo <= 4) return 0.7;
-  return 0.4;
-}
-
-/** "단독 즉시발동" high 뉴스로 인정할 최근성 창(일). 7일이면 6일 전 뉴스가 오늘 결론을 뒤집는다. */
-export const SEVERE_NEWS_WINDOW_DAYS = 2;
-
-/** "단독 즉시발동"으로 인정할 최대 출처 우선순위(0=백악관·연준 공식, 1=권력네트워크 유출).
- *  일반 지정학 뉴스(2)의 high는 즉시발동에서 제외하고 강도 점수로만 반영한다 — 실측상 high 44건
- *  중 43건이 여기에 몰려 있어 이 경로 하나가 거부권을 상시 켜두고 있었다. */
-export const SEVERE_NEWS_MAX_PRIORITY = 1;
-
-/** 한 항목이 받을 수 있는 최대 가중치 = 심각도 high(3) × 출처 백악관·연준(1.5) × 당일(1.0). */
-export const MAX_ITEM_WEIGHT = 3 * 1.5 * 1.0;
-
-/** 위험점수 계산에 쓸 최대 항목 수. 한국은행 뉴스심리지수(NSI)가 매일 정확히 1만 문장을 뽑아
- * 수집량 변화와 무관한 지수를 만드는 것과 같은 원리 — 상위 N건만 쓰면 그물을 넓혀도 눈금이 안 흔들린다. */
-export const RISK_ITEM_CAP = 20;
-
-/**
- * 뉴스 위험 강도(0~10). 예전 newsRiskScore는 리스크 뉴스 가중치를 "전부 더한" 값이라 분모가 없었고,
- * 수집 범위를 넓히자(하루 4건 -> 139건) 점수가 그대로 10배 뛰어 임계값 20이 상시 초과 상태가 됐다
- * (7/31 이후 단 하루도 임계 아래로 내려온 적 없음 — 실측). 세상이 위험해진 게 아니라 그물이 커진 것이다.
- *
- * 그래서 두 가지를 동시에 적용한다:
- *  - 상위 RISK_ITEM_CAP건만 사용(고정 표본 — 한국은행 NSI 방식)
- *  - 이론상 최대치(CAP × MAX_ITEM_WEIGHT)로 나눠 0~10으로 정규화(비중화 — 연준 GPR 방식)
- * 결과적으로 수집량이 20건을 넘어서면 점수가 수집량에 반응하지 않는다.
- */
-export function computeNewsRiskIntensity(
-  items: { priority: number; severity: string; date: Date }[],
-  asOf: Date
-): { intensity: number; usedCount: number; totalCount: number } {
-  const weights = items.map((i) => newsItemWeight(i, asOf)).sort((a, b) => b - a);
-  const top = weights.slice(0, RISK_ITEM_CAP);
-  const sum = top.reduce((a, b) => a + b, 0);
-  const intensity = Math.round((sum / (RISK_ITEM_CAP * MAX_ITEM_WEIGHT)) * 1000) / 100;
-  return { intensity, usedCount: top.length, totalCount: weights.length };
-}
-
-/** 개별 뉴스 항목의 리스크 가중치(심각도 × 출처 × 최근성). */
-export function newsItemWeight(item: { priority: number; severity: string; date: Date }, asOf: Date): number {
-  const daysAgo = Math.floor((asOf.getTime() - item.date.getTime()) / (1000 * 60 * 60 * 24));
-  const severityWeight = SEVERITY_WEIGHT[item.severity] ?? 1;
-  const priorityWeight = PRIORITY_WEIGHT[item.priority] ?? 1.0;
-  return severityWeight * priorityWeight * recencyWeight(Math.max(0, daysAgo));
-}
 
 interface JudgedItem {
   title: string;
@@ -118,21 +65,28 @@ async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
 
 골라낸 항목마다 심각도(severity)도 함께 매겨라(3단계):
 - "high": 이 사건 하나만으로도 시장이 즉시 크게 흔들릴 수준(예: 실제 무력 충돌·전쟁 발발, 국가 디폴트,
-  예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴). "high"는 매우 드물어야 한다 — 일주일에
-  실제로 이 정도 사건이 여러 건 겹치는 경우는 거의 없다. 확전 "가능성", 긴장 "고조", 발언·경고 수준은
-  아무리 자극적으로 보도돼도 high가 아니라 medium/low다.
+  예상 밖 긴급 금리 결정, 주요 은행·금융기관 파산, 정부 붕괴).
+  ★ 배정 한도: 이 목록 전체에서 high는 0건이 정상이고, 최대 1건이다. 2건 이상 매기지 마라.
+    실제 운영 기록상 이 등급을 받을 사건은 몇 달에 한 번 나온다. 오늘 목록에 그런 사건이 없다면
+    0건이 정답이며, 그게 대부분의 날이다.
+  ★ 금지: 아래 표현이 헤드라인의 핵심이면 아무리 자극적이어도 high가 아니라 medium/low다.
+    가능성 · 전망 · 우려 · 경고 · 촉구 · 요구 · 검토 · 예정 · 계획 · 시사 · 압박 · 위협 · 긴장 고조 ·
+    "~할 수도" · may · could · plan · threaten · warn · urge · consider · risk of
+  ★ 자기검증: high를 매기기 전에 "이 사건 때문에 오늘 S&P500이 2% 이상 움직이는가"를 자문해라.
+    아니면 medium이다.
 - "medium": 명확한 리스크 요인이고 시장이 반응할 만하지만, 이미 진행 중인 사안의 추가 조치·확전 신호
   수준(예: 관세 "인상 발표·시행"처럼 실제 조치, 새로운 제재, 무력 충돌 관련 긴장 고조)
 - "low": 리스크 요인이긴 하나 아직 경고·발언·우려 표명 수준이라 단독 영향은 제한적인 경우(정책 발언,
   경고성 언급, 무역분쟁 "우려" 등 — 여러 건이 쌓여야 리스크로 볼 만한 것들)
 
-"high"로 매긴 항목은 evidence 필드에 "어떤 국가/기관이 무엇을 했는가"를 사실 하나로 구체적으로 적어라
-(예: "이스라엘군이 이란 나탄즈 핵시설을 공습했다"). 헤드라인이 그 정도로 구체적인 실제 행동을 담고
-있지 않으면(전망·우려·경고·가능성 언급뿐이면) 애초에 high로 매기지 마라. medium/low는 evidence를
-빈 문자열로 둬도 된다.
+"high"로 매긴 항목은 evidence 필드에 "누가 · 무엇을 · 어디에 했는가"를 이미 벌어진 사실로 적어라
+(예: "이스라엘군이 이란 나탄즈 핵시설을 공습했다"). 아직 안 벌어진 일, 누가 한 건지 없는 서술,
+헤드라인을 그대로 옮긴 문장은 근거가 아니다 — 그런 경우 애초에 high로 매기지 마라.
+medium/low는 evidence를 빈 문자열로 둬도 된다.
 
 각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라:
 [{"index": 번호, "summary": "한국어 1문장 요약", "risky": true, "severity": "medium", "evidence": ""}]
+severity가 "high"인 항목이 2건 이상이면 스스로 다시 검토해 1건만 남기고 나머지는 medium으로 내려라.
 
 risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게 없으면 빈 배열 []만 답해라.
 
@@ -169,7 +123,7 @@ ${list}`;
   // LLM의 근접중복 병합 지침(위 프롬프트)이 대부분 걸러내지만 temperature>0라 완전히 결정론적이진
   // 않다 — 제목 유사도 기반으로 한 번 더 걸러 대표 1건만 남긴다(news-feeds.ts dedupOfficialHeadlines와
   // 같은 안전망 원리).
-  const deduped = dedupBySimilarTitle(judged, (j) => j.title);
+  const deduped = capDailyHighSeverity(dedupBySimilarTitle(judged, (j) => j.title));
 
   // dedupBySimilarTitle은 제목 토큰 겹침(Jaccard)으로 판단하는데, 같은 사건이라도 백악관 공식
   // 발표문 제목("Adjusting Imports of Polysilicon...")과 그걸 보도한 언론 헤드라인("Trump
@@ -258,26 +212,6 @@ ${list}`;
 
   if (drop.size === 0) return items;
   return items.filter((_, idx) => !drop.has(idx + 1));
-}
-
-/** high인데 evidence가 구체적 사실 없이 비어있거나 짧으면(전망·우려 수준일 가능성) medium으로 강등. */
-export function downgradeUnsupportedHigh(severity: NewsSeverity, evidence: string | undefined): NewsSeverity {
-  if (severity !== "high") return severity;
-  if (!evidence || evidence.trim().length < 8) return "medium";
-  return severity;
-}
-
-// FOMC·BOJ 통화정책 회의는 날짜가 미리 공개된 정기 일정(major-events.ts FOMC_DATES_2026·
-// BOJ_DATES_2026 참고)이라, 사이트의 "high" 정의("예상 밖 긴급" 사건)에 구조적으로 해당하지
-// 않는다 — 실제 서프라이즈 여부(반대표 수 등)는 event-outcomes.ts의 fedRateChanged()가 성명서
-// 원문을 직접 읽어 별도로(EventOutcome.risky) 정확히 판단한다. Gemini의 severity 판정은
-// temperature>0라 완전히 결정론적이지 않아 같은 "FOMC statement 발표" 헤드라인이 실행마다
-// medium/high를 오갈 수 있어, 여기서 상한을 강제한다.
-const SCHEDULED_POLICY_MEETING_PATTERN = /FOMC|Federal Open Market Committee|Bank of Japan.{0,20}(monetary policy|rate decision)/i;
-
-export function capScheduledPolicyMeetingSeverity(title: string, severity: NewsSeverity): NewsSeverity {
-  if (severity === "high" && SCHEDULED_POLICY_MEETING_PATTERN.test(title)) return "medium";
-  return severity;
 }
 
 /**
