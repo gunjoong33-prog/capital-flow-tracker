@@ -4,7 +4,7 @@ import type { Step1Result, Step2Result, Step3Result, Step4Result, Step5Result, S
 
 function baseInput() {
   const step1: Step1Result = { vetoTriggered: true, reason: "테스트 사유" };
-  const step2: Step2Result = { overseasScore: 3.3, overseasQualifyingCount: 2, overseasTotalCount: 6, finalScore: 3.3 };
+  const step2: Step2Result = { overseasScore: 3.3, overseasQualifyingCount: 2, overseasTotalCount: 6, overseasStrengthSum: 2, finalScore: 3.3 };
   const step3: Step3Result = { zone: "위험", score: 4.2, warning: null, spreadBp: 192 };
   const step4: Step4Result = { quadrant: "금↑ 실질금리↑", score: 2, note: "", dollarConfirms: false };
   const step5: Step5Result = { gapPp: -2.25, concentrationWarning: false, riskAppetite: "위험선호", score: 3.0, cryptoAlignsWithRisk: null };

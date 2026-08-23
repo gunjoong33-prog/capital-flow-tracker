@@ -49,20 +49,43 @@ describe("scoreStep1", () => {
 });
 
 describe("scoreStep2", () => {
-  it("해외 지표 7/7 충족이면 10점", () => {
-    const flags = { walclIncreasing: true, m2GrowthRising2Months: true, reservesRising4Weeks: true, rrpDeclining: true, tgaDeclining: true, realRateFallingOrLowFlat: true, creditSpreadNarrowing: true };
-    expect(scoreStep2(flags).overseasScore).toBe(10);
+  const all = (v: number | null) => ({
+    walclIncreasing: v, m2GrowthRising2Months: v, reservesRising4Weeks: v,
+    rrpDeclining: v, tgaDeclining: v, realRateFallingOrLowFlat: v, creditSpreadNarrowing: v,
+  });
+
+  it("해외 지표 7/7 완전 충족이면 10점", () => {
+    expect(scoreStep2(all(1)).overseasScore).toBe(10);
+  });
+
+  it("전부 완전히 어긋나면 0점", () => {
+    expect(scoreStep2(all(0)).overseasScore).toBe(0);
   });
 
   it("null 지표는 분모에서 제외한다(결측을 미충족으로 세지 않음)", () => {
-    const result = scoreStep2({ walclIncreasing: true, m2GrowthRising2Months: null, reservesRising4Weeks: null, rrpDeclining: null, tgaDeclining: null, realRateFallingOrLowFlat: null, creditSpreadNarrowing: null });
+    const result = scoreStep2({ ...all(null), walclIncreasing: 1 });
     expect(result.overseasTotalCount).toBe(1);
     expect(result.overseasScore).toBe(10);
   });
 
   it("전부 null이면 중립 5점", () => {
-    const result = scoreStep2({ walclIncreasing: null, m2GrowthRising2Months: null, reservesRising4Weeks: null, rrpDeclining: null, tgaDeclining: null, realRateFallingOrLowFlat: null, creditSpreadNarrowing: null });
-    expect(result.overseasScore).toBe(5);
+    expect(scoreStep2(all(null)).overseasScore).toBe(5);
+  });
+
+  // 이 눈금이 거칠어서 21일 내내 3.33/5.00 두 값만 나왔고 총점 천장을 만들었다 — 회귀 방지.
+  it("부분 충족이 점수에 반영된다(옛 이진 방식이면 둘 다 같은 점수였다)", () => {
+    const partial = scoreStep2({ ...all(null), walclIncreasing: 0.5, tgaDeclining: 0 });
+    const none = scoreStep2({ ...all(null), walclIncreasing: 0, tgaDeclining: 0 });
+    expect(partial.overseasScore).toBeGreaterThan(none.overseasScore);
+    expect(partial.overseasScore).toBeCloseTo(2.5, 5);
+  });
+
+  it("완전 충족 개수와 강도 합계를 따로 보고한다", () => {
+    const r = scoreStep2({ ...all(null), walclIncreasing: 1, tgaDeclining: 0.5, m2GrowthRising2Months: 0 });
+    expect(r.overseasQualifyingCount).toBe(1); // 화면의 ✓ 개수
+    expect(r.overseasTotalCount).toBe(3);
+    expect(r.overseasStrengthSum).toBeCloseTo(1.5, 5);
+    expect(r.overseasScore).toBeCloseTo(5, 5);
   });
 });
 
@@ -93,8 +116,10 @@ describe("scoreStep3", () => {
 });
 
 describe("scoreStep4", () => {
+  const q = { dollarDirection: "up" as const, us30yPercentile: null };
+
   it("금 하락·실질금리 상승이면 만점(성장주 유리 국면)", () => {
-    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
+    const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", ...q });
     expect(result.score).toBe(10);
     expect(result.dollarConfirms).toBe(true);
   });
@@ -104,7 +129,7 @@ describe("scoreStep4", () => {
     expect(result.dollarConfirms).toBe(false);
   });
 
-  it("30년물 급등(90%ile+)에 달러 디커플링까지 겹치면 텀프리미엄 급등으로 보고 만점을 절반으로 낮춘다", () => {
+  it("30년물 급등(90%ile+)에 달러 디커플링까지 겹치면 텀프리미엄 급등으로 보고 상한을 절반으로", () => {
     const result = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "down", us30yPercentile: 95 });
     expect(result.score).toBe(5);
   });
@@ -114,20 +139,40 @@ describe("scoreStep4", () => {
     expect(result.score).toBe(10);
   });
 
-  // 금이 "flat"(직전과 정확히 동일)일 때 else 분기로 떨어지며 "금↓"라고 실제로 안 내려갔는데
-  // 잘못 표시하던 버그(코드 감사로 발견) — gold===down과 gold===flat이 같은 버킷·점수를 받는 건
-  // 의도한 설계지만, 라벨은 "금↓/보합"으로 정직하게 나와야 한다.
-  it("금이 flat이어도 down과 같은 버킷 점수를 받고 라벨은 '금↓/보합'으로 정직하게 표시한다", () => {
-    const flat = scoreStep4({ goldDirection: "flat", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
-    const down = scoreStep4({ goldDirection: "down", realRateDirection: "up", dollarDirection: "up", us30yPercentile: null });
-    expect(flat.score).toBe(down.score);
-    expect(flat.quadrant).toBe("금↓/보합 실질금리↑");
+  // 변화량 없이 방향 enum만 주면 옛 꼭짓점 점수를 그대로 재현해야 한다(과거 리포트 재계산 호환).
+  it("변화량이 없으면 옛 사분면 꼭짓점 점수와 동일하다", () => {
+    expect(scoreStep4({ goldDirection: "up", realRateDirection: "up", ...q }).score).toBe(2);
+    expect(scoreStep4({ goldDirection: "up", realRateDirection: "down", ...q }).score).toBe(5);
+    expect(scoreStep4({ goldDirection: "down", realRateDirection: "up", ...q }).score).toBe(10);
+    expect(scoreStep4({ goldDirection: "down", realRateDirection: "down", ...q }).score).toBe(3);
   });
 
-  it("금이 flat이고 실질금리도 flat이면 3점 버킷, 라벨은 두 축 다 '/보합'", () => {
-    const result = scoreStep4({ goldDirection: "flat", realRateDirection: "flat", dollarDirection: "up", us30yPercentile: null });
-    expect(result.score).toBe(3);
-    expect(result.quadrant).toBe("금↓/보합 실질금리↓/보합");
+  // 예전엔 2/3/5/10 네 값뿐이라 21일 중 15일이 최하값 2.00에 고정됐다 — 연속화 회귀 방지.
+  it("변화량이 작으면 꼭짓점 사이 중간값이 나온다", () => {
+    const tiny = scoreStep4({
+      goldDirection: "up", realRateDirection: "up", ...q,
+      goldChangePct: 0.01, realRateChangeBp: 0.1,
+    });
+    expect(tiny.score).toBeGreaterThan(2);
+    expect(tiny.score).toBeLessThan(10);
+    // 변화가 거의 0이면 네 꼭짓점의 평균(2+5+10+3)/4 = 5에 수렴한다.
+    expect(tiny.score).toBeCloseTo(5, 1);
+  });
+
+  it("변화량이 크면 해당 꼭짓점 값에 수렴한다", () => {
+    const strong = scoreStep4({
+      goldDirection: "down", realRateDirection: "up", ...q,
+      goldChangePct: -5, realRateChangeBp: 80,
+    });
+    expect(strong.score).toBeGreaterThan(9.5);
+  });
+
+  it("사분면 라벨은 방향 enum이 정하고 크기에 흔들리지 않는다", () => {
+    const r = scoreStep4({
+      goldDirection: "up", realRateDirection: "down", ...q,
+      goldChangePct: 0.02, realRateChangeBp: -0.5,
+    });
+    expect(r.quadrant).toBe("금↑ 실질금리↓/보합");
   });
 });
 
@@ -191,7 +236,7 @@ describe("scoreStep7", () => {
 
 describe("scoreStep8", () => {
   const perfectSteps = {
-    step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, finalScore: 10 },
+    step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, overseasStrengthSum: 7, finalScore: 10 },
     step3: { spreadBp: 400, zone: "안정" as const, score: 10, warning: null },
     step4: { quadrant: "금↓/보합 실질금리↑", score: 10, note: "", dollarConfirms: true },
     step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 10, cryptoAlignsWithRisk: null },

@@ -71,20 +71,25 @@ export interface Step1Result {
 }
 
 export interface Step2Input {
-  // 해외 7개 — 각 항목이 "유동성 우호 방향"이면 true
-  walclIncreasing: boolean | null;
-  m2GrowthRising2Months: boolean | null;
-  reservesRising4Weeks: boolean | null;
-  rrpDeclining: boolean | null;
-  tgaDeclining: boolean | null;
-  realRateFallingOrLowFlat: boolean | null;
-  creditSpreadNarrowing: boolean | null;
+  // 각 항목은 0~1 "충족 강도"다. 예전엔 boolean이었는데, "최근 N기간 연속 증가"를 전부 만족해야만
+  // 1점이고 한 기간이라도 어긋나면 0점이라 눈금이 지나치게 거칠었다 — 실측 21일 동안 2단계 점수가
+  // 3.33 아니면 5.00 두 값밖에 안 나왔고(가중치 33%짜리 최대 항목), 그 탓에 총점이 구조적으로
+  // 상단에 못 닿았다. 이제 "N기간 중 몇 기간이 방향에 맞았는가"의 비율을 쓴다.
+  // 1 = 전 기간 충족(옛 true), 0 = 전 기간 어긋남(옛 false), null = 데이터 부족(분모에서 제외).
+  walclIncreasing: number | null;
+  m2GrowthRising2Months: number | null;
+  reservesRising4Weeks: number | null;
+  rrpDeclining: number | null;
+  tgaDeclining: number | null;
+  realRateFallingOrLowFlat: number | null;
+  creditSpreadNarrowing: number | null;
 }
 export interface Step2Result {
-  overseasScore: number; // 0~10
-  overseasQualifyingCount: number;
-  overseasTotalCount: number;
-  finalScore: number; // overseasScore와 동일(0~10)
+  overseasScore: number;
+  overseasQualifyingCount: number; // 완전 충족(강도 1) 항목 수 — 화면의 ✓ 개수와 일치
+  overseasTotalCount: number; // 판정 가능한 항목 수(결측 제외)
+  overseasStrengthSum: number; // 강도 합계(부분 충족 포함) — 점수의 실제 분자
+  finalScore: number;
 }
 
 export interface Step3Input {
@@ -106,10 +111,14 @@ export interface Step4Input {
   realRateDirection: Direction;
   dollarDirection: Direction; // 보조 확인용
   us30yPercentile: number | null; // 美 30년물 국채금리의 최근 1년 백분위(텀프리미엄 급등 판별용)
+  // 아래 두 값은 사분면 "안에서의 위치"를 정하는 크기다. 없으면(과거 리포트 재계산 등) 방향
+  // enum만으로 꼭짓점 점수를 그대로 쓴다 — 옛 동작과 동일해 하위호환이 깨지지 않는다.
+  goldChangePct?: number | null; // 금값 직전 대비 변화율(%)
+  realRateChangeBp?: number | null; // 실질금리 직전 대비 변화(bp)
 }
 export interface Step4Result {
   quadrant: string;
-  score: number; // 0, 2, 3, 5, 10 중 하나(코드 내 매핑표 참고)
+  score: number; // 0~10 연속값(사분면 꼭짓점 2·5·10·3 사이를 이중선형 보간)
   note: string;
   dollarConfirms: boolean; // 달러가 실질금리와 같은 방향이면 true(신호 강함)
 }

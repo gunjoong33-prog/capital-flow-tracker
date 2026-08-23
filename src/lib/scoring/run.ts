@@ -520,6 +520,11 @@ function fmtDailyChange(c: DailyChange, unit: string, decimals = 2): string {
 interface TrendCheck {
   met: boolean | null;
   latestValue: number | null;
+  /** 0~1 충족 강도 — 검사한 스텝 중 방향이 맞은 비율. met=true면 1, 데이터 부족이면 null.
+   *  2단계가 "전 기간 연속" 이진 판정에서 부분 점수로 넘어가면서 필요해졌다. */
+  strength: number | null;
+  /** "3기간 중 2기간 충족" 식 표시용. */
+  detail: string;
 }
 
 /**
@@ -536,13 +541,21 @@ async function trendCheck(
 ): Promise<TrendCheck> {
   const history = await getMetricHistoryByCount(metric, periods + 1, asOf);
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
-  if (history.length < periods + 1) return { met: null, latestValue };
-  let met = true;
+  if (history.length < periods + 1) return { met: null, latestValue, strength: null, detail: "데이터 부족" };
+  // 예전엔 어긋나는 스텝을 하나라도 만나면 즉시 false로 끝냈다 — "3기간 중 2기간 충족"과
+  // "3기간 전부 어긋남"이 똑같이 0점이 되어 눈금이 지나치게 거칠었다. 이제 전부 세서 비율을 낸다.
+  let ok = 0;
   for (let i = 1; i < history.length; i++) {
-    const brokeTrend = direction === "rising" ? history[i].value <= history[i - 1].value : history[i].value >= history[i - 1].value;
-    if (brokeTrend) { met = false; break; }
+    const followed = direction === "rising" ? history[i].value > history[i - 1].value : history[i].value < history[i - 1].value;
+    if (followed) ok += 1;
   }
-  return { met, latestValue };
+  const steps = history.length - 1;
+  return {
+    met: ok === steps,
+    latestValue,
+    strength: ok / steps,
+    detail: `${steps}기간 중 ${ok}기간 ${direction === "rising" ? "증가" : "감소"}`,
+  };
 }
 
 async function risingCheck(metric: string, periods: number, asOf: Date = new Date()): Promise<TrendCheck> {
@@ -562,13 +575,13 @@ async function m2YoyAcceleration(asOf: Date = new Date()): Promise<TrendCheck & 
   const history = await getMetricHistoryByCount(METRICS.M2, 20, asOf); // 3개월치 YoY 계산에 최소 15개월 필요, 여유 있게 20개
   const latestValue = history.length > 0 ? history[history.length - 1].value : null;
   const n = history.length;
-  if (n < 15) return { met: null, latestValue, detail: "데이터 부족" };
+  if (n < 15) return { met: null, latestValue, strength: null, detail: "데이터 부족" };
 
   const yoy: number[] = [];
   for (let offset = 2; offset >= 0; offset--) {
     const idx = n - 1 - offset;
     const idxPrevYear = idx - 12;
-    if (idxPrevYear < 0) return { met: null, latestValue, detail: "데이터 부족(12개월 전 값 필요)" };
+    if (idxPrevYear < 0) return { met: null, latestValue, strength: null, detail: "데이터 부족(12개월 전 값 필요)" };
     const curr = history[idx].value;
     const prevYear = history[idxPrevYear].value;
     yoy.push(((curr - prevYear) / prevYear) * 100);
@@ -577,8 +590,11 @@ async function m2YoyAcceleration(asOf: Date = new Date()): Promise<TrendCheck & 
   // 감속해도(측정 노이즈 범위 안) "미충족"으로 떨어진다(외부 감사 지적, 실제 확인). 최소 변화폭
   // 이내(±TOLERANCE)의 하락은 "사실상 유지"로 보고 감속으로 치지 않는다.
   const TOLERANCE_PP = 0.1;
-  const met = yoy[1] - yoy[0] > -TOLERANCE_PP && yoy[2] - yoy[1] > -TOLERANCE_PP && yoy[2] > yoy[0];
-  return { met, latestValue, detail: `YoY 증가율 ${yoy.map((v) => `${v.toFixed(2)}%`).join(" → ")}` };
+  const legs = [yoy[1] - yoy[0] > -TOLERANCE_PP, yoy[2] - yoy[1] > -TOLERANCE_PP];
+  const met = legs.every(Boolean) && yoy[2] > yoy[0];
+  // 두 구간 중 하나만 가속했으면 절반 점수. 전체 방향(yoy[2] > yoy[0])이 아니면 상한을 0.5로 둔다.
+  const strength = Math.min(legs.filter(Boolean).length / legs.length, yoy[2] > yoy[0] ? 1 : 0.5);
+  return { met, latestValue, strength, detail: `YoY 증가율 ${yoy.map((v) => `${v.toFixed(2)}%`).join(" → ")}` };
 }
 
 /**
@@ -710,6 +726,21 @@ async function freshDirection(
   const fresh = await directionOfWithFreshness(metric, asOf);
   const stale = fresh.daysOld !== null && fresh.daysOld >= STALE_UNKNOWN_DAYS;
   return { dir: stale ? "flat" : fresh.direction ?? "flat", stale, daysOld: fresh.daysOld };
+}
+
+/** 직전 데이터포인트 대비 변화율(%). 4단계가 사분면 "안에서의 위치"를 정하는 데 쓴다 —
+ *  방향 enum(up/down/flat)만으로는 0.01% 움직임과 3% 급등이 같은 값이 된다. */
+async function changePctOf(metric: string, asOf: Date): Promise<number | null> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
+  if (!prev || !curr || prev.value === 0) return null;
+  return ((curr.value - prev.value) / prev.value) * 100;
+}
+
+/** 직전 데이터포인트 대비 변화(bp). 금리처럼 값 자체가 %인 지표는 변화율이 아니라 변화폭을 본다. */
+async function changeBpOf(metric: string, asOf: Date): Promise<number | null> {
+  const [prev, curr] = await getMetricHistoryByCount(metric, 2, asOf);
+  if (!prev || !curr) return null;
+  return (curr.value - prev.value) * 100;
 }
 
 /**
@@ -938,22 +969,23 @@ export async function runDailyAnalysis(
   // 재사용 — 화면에 표시되는 구간 라벨과 점수 판정이 서로 다른 기준을 쓰던 불일치를 없앤다.
   const creditSpreadAlreadyTight = creditSpreadBp !== null && creditSpreadBp < CREDIT_SPREAD_TIGHT_BP;
 
+  // "이미 충분히 우호적인 수준" 예외는 강도 1.0(완전 충족)으로 넘긴다 — 트렌드가 어떻든 만점.
   const step2 = scoreStep2({
-    walclIncreasing: walcl.met,
-    m2GrowthRising2Months: m2.met,
-    reservesRising4Weeks: reservesAmple ? true : reserves.met,
-    rrpDeclining: rrpStatus?.depleted ? null : rrp.met,
-    tgaDeclining: tga.met,
-    realRateFallingOrLowFlat: realRateAlreadyLow ? true : realRate2.met,
-    creditSpreadNarrowing: creditSpreadAlreadyTight ? true : creditSpread.met,
+    walclIncreasing: walcl.strength,
+    m2GrowthRising2Months: m2.strength,
+    reservesRising4Weeks: reservesAmple ? 1 : reserves.strength,
+    rrpDeclining: rrpStatus?.depleted ? null : rrp.strength,
+    tgaDeclining: tga.strength,
+    realRateFallingOrLowFlat: realRateAlreadyLow ? 1 : realRate2.strength,
+    creditSpreadNarrowing: creditSpreadAlreadyTight ? 1 : creditSpread.strength,
   });
   details.step2 = [
-    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: fmt(walcl.latestValue, 0, "백만달러"), met: walcl.met, url: FRED_URL("WALCL") },
+    { label: "Fed 대차대조표(WALCL)", criterion: "최근 2기간 연속 증가", value: `${fmt(walcl.latestValue, 0, "백만달러")} — ${walcl.detail}`, met: walcl.met, url: FRED_URL("WALCL") },
     { label: "M2 통화량", criterion: "YoY 증가율 2개월 연속 상향\n(가속)", value: m2.detail, met: m2.met, url: FRED_URL("M2SL") },
     {
       label: "기준잔액(WRESBAL)",
       criterion: "최근 4주 연속 증가\n(또는 자체 1년 분포 상위 25%=이미 ample)",
-      value: `${fmt(reserves.latestValue, 0, "백만달러")}${reservesPercentile !== null ? ` — ${reservesPercentile}%ile` : ""}`,
+      value: `${fmt(reserves.latestValue, 0, "백만달러")}${reservesPercentile !== null ? ` — ${reservesPercentile}%ile` : ""}${reservesAmple ? "" : ` · ${reserves.detail}`}`,
       met: reservesAmple ? true : reserves.met,
       url: FRED_URL("WRESBAL"),
     },
@@ -964,11 +996,11 @@ export async function runDailyAnalysis(
       met: rrpStatus?.depleted ? null : rrp.met,
       url: FRED_URL("RRPONTTLD"),
     },
-    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: fmt(tga.latestValue, 0, "백만달러"), met: tga.met, url: FRED_URL("WTREGEN") },
+    { label: "TGA(재무부 일반계정)", criterion: "최근 3기간 연속 감소", value: `${fmt(tga.latestValue, 0, "백만달러")} — ${tga.detail}`, met: tga.met, url: FRED_URL("WTREGEN") },
     {
       label: "실질금리(10년)",
       criterion: "최근 3기간 연속 하락\n(또는 자체 이력 하위 25%=이미 낮은 수준)",
-      value: `${fmt(realRate2.latestValue, 2, "%")}${realRatePercentile !== null ? ` — ${realRatePercentile}%ile` : " — 이력 부족(percentile 계산 불가)"}`,
+      value: `${fmt(realRate2.latestValue, 2, "%")}${realRatePercentile !== null ? ` — ${realRatePercentile}%ile` : " — 이력 부족(percentile 계산 불가)"}${realRateAlreadyLow ? "" : ` · ${realRate2.detail}`}`,
       met: realRateAlreadyLow ? true : realRate2.met,
       url: FRED_URL("REAINTRATREARAT10Y"),
     },
@@ -1171,11 +1203,17 @@ export async function runDailyAnalysis(
   // 글로벌 달러 강약의 대리변수로 부적합하다(위 METRICS.DXY 주석 참고).
   const dollar = await freshDirection(METRICS.DXY, asOf);
   const dollarDir = dollar.dir;
+  // 사분면 안에서의 위치를 정하는 크기. 소스가 막혀 방향이 stale이면 크기도 신뢰할 수 없으므로
+  // null로 넘겨 옛 꼭짓점 동작으로 떨어뜨린다.
+  const goldChangePct = gold.stale ? null : await changePctOf(METRICS.GOLD, asOf);
+  const realRateChangeBp = await changeBpOf(METRICS.REAL_RATE, asOf);
   const step4 = scoreStep4({
     goldDirection: goldDir,
     realRateDirection: realRateDir,
     dollarDirection: dollarDir,
     us30yPercentile,
+    goldChangePct,
+    realRateChangeBp,
   });
   const dirLabel = (d: Direction) => (d === "up" ? "상승" : d === "down" ? "하락" : "보합");
   const staleSuffix = (daysOld: number | null, stale: boolean) =>

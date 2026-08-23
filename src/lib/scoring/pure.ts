@@ -1,4 +1,5 @@
 import type {
+  Direction,
   Step1Input,
   Step1Result,
   Step2Input,
@@ -58,14 +59,18 @@ export function scoreStep2(input: Step2Input): Step2Result {
     input.realRateFallingOrLowFlat,
     input.creditSpreadNarrowing,
   ];
-  const known = overseasFlags.filter((f) => f !== null) as boolean[];
-  const qualifyingCount = known.filter(Boolean).length;
-  const overseasScore = known.length > 0 ? (qualifyingCount / known.length) * 10 : 5;
+  const known = overseasFlags.filter((f): f is number => f !== null);
+  // 강도 평균 × 10. 전 항목이 완전 충족이면 10점, 전 항목이 완전히 어긋나면 0점 — 옛 이진 방식의
+  // 양 끝값과 동일하고, 그 사이가 연속으로 채워진다.
+  const strengthSum = known.reduce((a, b) => a + b, 0);
+  const overseasScore = known.length > 0 ? (strengthSum / known.length) * 10 : 5;
+  const qualifyingCount = known.filter((v) => v >= 1).length;
 
   return {
     overseasScore,
     overseasQualifyingCount: qualifyingCount,
     overseasTotalCount: known.length,
+    overseasStrengthSum: Math.round(strengthSum * 100) / 100,
     finalScore: overseasScore,
   };
 }
@@ -112,36 +117,56 @@ export function scoreStep3(input: Step3Input): Step3Result {
 // 달러는 보조 확인(같은 방향=신호 강함, 반대 방향=디커플링 경계)으로만 쓴다.
 // 사분면별 점수는 원래 3변수 표(좋음10/보통5/나쁨0)의 취지를 2x2로 옮긴 것 —
 // 본문에 숫자로 명시되지 않았던 부분이라 이식 시 직접 매긴 값임을 밝혀둔다.
+/** 변화량을 -1~+1로 눌러 담는다. scale은 "이 정도면 뚜렷한 움직임"으로 보는 크기. */
+function squash(change: number, scale: number): number {
+  return Math.tanh(change / scale);
+}
+const GOLD_SCALE_PCT = 1.0; // 금 1% 변동이면 뚜렷
+const REAL_RATE_SCALE_BP = 15; // 실질금리 15bp 변동이면 뚜렷
+
+/** 사분면 꼭짓점 점수. 축 순서는 (금↑?, 실질금리↑?). */
+const Q_GOLD_UP_RATE_UP = 2;
+const Q_GOLD_UP_RATE_DOWN = 5;
+const Q_GOLD_DOWN_RATE_UP = 10;
+const Q_GOLD_DOWN_RATE_DOWN = 3;
+
 export function scoreStep4(input: Step4Input): Step4Result {
   const { goldDirection: gold, realRateDirection: rate, dollarDirection: dollar, us30yPercentile } = input;
-  let score: number;
+
   let quadrant: string;
   let note: string;
-
-  // gold/rate는 "up이냐 아니냐"의 2분법으로 4버킷을 나눈다 — rate 쪽은 원래부터 "down 아니면
-  // flat이나 어차피 같은 버킷"이라 라벨에 "↓/보합"이라고 정직하게 밝혀왔는데, gold 쪽은
-  // else 분기로 떨어지면서 flat도 "금↓"라고 실제로 안 내려갔는데 내려간 것처럼 잘못 표시하고
-  // 있었다(코드 감사로 발견 — gold==="flat"이면 rate 값과 무관하게 무조건 else로 떨어져 score=3
-  // 라벨까지 나오는, 사실상 두 버그가 겹친 상태였다). gold도 rate와 똑같이 "up 아니면 결과가
-  // 같은 버킷"이라는 사실을 명시적 분기(rate === "up"으로 판정)로 바꾸고, 라벨도 "금↓/보합"으로
-  // 통일해서 실제 방향과 표시가 항상 맞게 한다.
   if (gold === "up" && rate === "up") {
-    score = 2;
     quadrant = "금↑ 실질금리↑";
     note = "흔치 않은 조합(인플레 우려+안전자산 수요 동시). 1단계부터 재확인 필요";
   } else if (gold === "up") {
-    score = 5;
     quadrant = "금↑ 실질금리↓/보합";
     note = "안전자산 매력 유지, 위험도 커지는 중 — 원자재·가치주 유리";
   } else if (rate === "up") {
-    score = 10;
     quadrant = "금↓/보합 실질금리↑";
     note = "안전자산에서 금융자산으로 이동 중 — 성장주·기술주 유리";
   } else {
-    score = 3;
     quadrant = "금↓/보합 실질금리↓/보합";
     note = "안전자산 매력도 하락, 위험선호도 약함(디플레·경기위축 우려일 수 있음)";
   }
+
+  // 점수는 네 꼭짓점 사이를 이중선형 보간한다. 예전엔 2/3/5/10 네 값만 나와서 미세한 변화를
+  // 전혀 반영하지 못했고(실측 21일 중 15일이 최하값 2.00에 고정), 2단계와 함께 총점 천장을
+  // 만드는 두 축이었다. 방향이 바뀌는 경계에서 점수가 계단처럼 튀는 것도 같은 원인이다.
+  //
+  // 축 위치 g, r은 각각 0(완전히 하락)~1(완전히 상승). 변화량이 없으면 방향 enum으로 꼭짓점을
+  // 그대로 재현한다(하위호환).
+  const axis = (changed: number | null | undefined, dir: Direction, scale: number): number => {
+    if (changed === null || changed === undefined || Number.isNaN(changed)) {
+      return dir === "up" ? 1 : 0;
+    }
+    return (squash(changed, scale) + 1) / 2;
+  };
+  const g = axis(input.goldChangePct, gold, GOLD_SCALE_PCT);
+  const r = axis(input.realRateChangeBp, rate, REAL_RATE_SCALE_BP);
+
+  const scoreRateDown = Q_GOLD_DOWN_RATE_DOWN * (1 - g) + Q_GOLD_UP_RATE_DOWN * g;
+  const scoreRateUp = Q_GOLD_DOWN_RATE_UP * (1 - g) + Q_GOLD_UP_RATE_UP * g;
+  let score = Math.round((scoreRateDown * (1 - r) + scoreRateUp * r) * 100) / 100;
 
   const dollarConfirms = dollar === rate;
 
@@ -149,11 +174,11 @@ export function scoreStep4(input: Step4Input): Step4Result {
   // 장기물 금리 자체가 급등(텀프리미엄, 금융여건 긴축)해서 오른 경우를 같은 칸에 넣는다(외부 감사
   // 지적, 코드 확인 결과 실제 그랬다). 30년물이 자체 1년 분포 상단(90%ile 이상)까지 급등하면서
   // 동시에 달러가 실질금리와 다른 방향으로 가는(디커플링) 경우는 "성장 기대"보다 "텀프리미엄 급등"
-  // 신호에 가깝다고 보고 점수를 절반(5)으로 낮춘다. 두 조건 모두 필요 — 30Y 백분위만으로는 원인을
-  // 못 가리므로(고금리가 오래 지속되면 항상 상단에 있을 수 있다) 디커플링과 함께 볼 때만 조정한다.
+  // 신호에 가깝다고 보고 상한을 절반(5)으로 누른다. 연속 점수로 바뀌었으므로 대입이 아니라
+  // 상한(min)으로 건다 — 원래 점수가 5보다 낮으면 더 깎지 않는다.
   if (gold !== "up" && rate === "up" && us30yPercentile !== null && us30yPercentile >= 90 && !dollarConfirms) {
-    score = 5;
-    note = "실질금리 상승이 성장 기대보다 장기물 금리 급등(텀프리미엄·금융여건 긴축)에 의한 것으로 보여 성장주 호재로 보기 어려움 — 점수 하향 조정";
+    score = Math.min(score, 5);
+    note = "실질금리 상승이 성장 기대보다 장기물 금리 급등(텀프리미엄·금융여건 긴축)에 의한 것으로 보여 성장주 호재로 보기 어려움 — 점수 상한 조정";
   }
 
   return { quadrant, score, note, dollarConfirms };
