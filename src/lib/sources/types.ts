@@ -82,8 +82,6 @@ export const METRICS = {
   KRX_SHORT_BALANCE_RATIO: "KRX_SHORT_BALANCE_RATIO", // KOSPI 전종목 시가총액가중 공매도 잔고비중(%), 참고 정보(미채점)
 } as const;
 
-export type MetricId = (typeof METRICS)[keyof typeof METRICS];
-
 // 빅테크 7(Magnificent 7) — 5단계 개별 종목 드릴다운 + 등락 원인 판정(news-feeds.ts, bigtech-reasons.ts)에서 공용으로 쓴다.
 export const BIG_TECH_TICKERS = [
   METRICS.AAPL, METRICS.MSFT, METRICS.GOOGL, METRICS.AMZN, METRICS.NVDA, METRICS.META, METRICS.TSLA,
@@ -136,7 +134,3 @@ export interface FetchedPoint {
   source: "fred" | "cftc" | "coingecko" | "mof" | "ecos" | "yahoo" | "cnn" | "kis" | "manual" | "alphavantage" | "krx";
 }
 
-export interface SourceFetchResult {
-  points: FetchedPoint[];
-  errors: { metric: string; message: string }[];
-}

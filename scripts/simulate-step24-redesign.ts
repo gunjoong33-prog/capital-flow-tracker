@@ -3,7 +3,6 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { WEIGHTS, TOTAL_WEIGHT, decisionFromScore } from "../src/lib/scoring/pure";
-import type { Step8Result } from "../src/lib/scoring/types";
 
 const g = (o: unknown, k: string) => (o as Record<string, number>)[k];
 
@@ -13,7 +12,6 @@ async function main() {
   const before: number[] = [], after: number[] = [];
   let changed = 0;
   for (const r of rows) {
-    const s8 = r.step8 as unknown as Step8Result;
     const s2old = g(r.step2, "finalScore");
     const s4old = g(r.step4, "score");
 

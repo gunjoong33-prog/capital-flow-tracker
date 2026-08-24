@@ -5,7 +5,6 @@ import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { kstToday } from "@/lib/date";
 
 import {
-  newsItemWeight,
   capDailyHighSeverity,
   capScheduledPolicyMeetingSeverity,
   downgradeUnsupportedHigh,

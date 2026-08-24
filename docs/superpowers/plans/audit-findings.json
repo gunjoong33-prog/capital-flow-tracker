@@ -1,0 +1,109 @@
+{
+  "items": [
+    {
+      "file": "src/lib/sources/alphavantage.ts",
+      "kind": "dead-code",
+      "before": "export async function fetchPutCallRatio(apiKey: string, symbol = \"SPY\"): Promise<number> { ... } — REALTIME_PUT_CALL_RATIO 호출용 함수",
+      "after": "삭제됨",
+      "reason": "ts-prune이 미사용으로 표시(태그 없음). grep 결과 정의부 외 호출처 0건(src/, scripts/ 전체). pipeline.ts는 같은 파일의 fetchHistoricalPutCallRatio만 사용하고 있어(실시간이 아니라 과거 날짜 버전으로 전환된 것으로 보임) 이 realtime 버전은 완전히 고아 상태. PutCallRatioResponse 인터페이스는 fetchHistoricalPutCallRatio가 계속 쓰므로 유지."
+    },
+    {
+      "file": "src/lib/news-events.ts",
+      "kind": "dead-code",
+      "before": "import { newsItemWeight, capDailyHighSeverity, ... } from \"./news-severity\"; — newsItemWeight를 이 파일에서 import",
+      "after": "newsItemWeight import 제거(나머지 import는 유지)",
+      "reason": "eslint no-unused-vars가 8행 newsItemWeight를 미사용으로 표시. grep 결과 이 파일 안에서 newsItemWeight를 실제로 참조하는 코드가 없음(news-severity.ts와 scoring/run.ts에서만 직접 사용). 같은 파일의 `export * from \"./news-severity\"`가 이미 재수출하므로 외부에서 news-events.ts를 통해 newsItemWeight를 import하는 경로는 그대로 살아있음 — 이 named import 바인딩 자체만 죽은 코드."
+    },
+    {
+      "file": "src/lib/sources/types.ts",
+      "kind": "dead-code",
+      "before": "export type MetricId = (typeof METRICS)[keyof typeof METRICS];",
+      "after": "삭제됨",
+      "reason": "ts-prune이 미사용으로 표시(태그 없음, 모듈 내부 사용도 없음). grep -rn \"MetricId\" 전체 리포지토리 결과 정의부 1건 외 0건."
+    },
+    {
+      "file": "src/lib/sources/types.ts",
+      "kind": "dead-code",
+      "before": "export interface SourceFetchResult { points: FetchedPoint[]; errors: { metric: string; message: string }[]; }",
+      "after": "삭제됨",
+      "reason": "ts-prune이 미사용으로 표시(태그 없음, 모듈 내부 사용도 없음). grep -rn \"SourceFetchResult\" 전체 리포지토리 결과 정의부 1건 외 0건."
+    },
+    {
+      "file": "scripts/simulate-step24-redesign.ts",
+      "kind": "dead-code",
+      "before": "const s8 = r.step8 as unknown as Step8Result; (할당만 되고 이후 전혀 참조 안 됨), import type { Step8Result } from \"../src/lib/scoring/types\";",
+      "after": "두 줄 다 삭제됨(s8 변수 + 이제 미사용이 된 Step8Result 타입 import)",
+      "reason": "eslint no-unused-vars가 16행 's8'을 미사용으로 표시. grep 결과 파일 전체에서 s8이 정의 줄 외 재참조 없음을 확인. 이 스크립트는 읽기 전용 1회성 분석 스크립트(scoring 엔진 코드 자체가 아님)라 삭제 범위에 해당."
+    },
+    {
+      "file": "src/lib/verdict-outcomes.ts",
+      "kind": "skipped",
+      "before": "export const WATCH_NEUTRAL_BAND_PCT = NEUTRAL_BAND_PCT; (10행, @deprecated 주석: \"NEUTRAL_BAND_PCT로 통합됨(예전엔 지켜보기에만 적용됐다). 외부 참조 호환용.\")",
+      "after": "변경 없음",
+      "reason": "ts-prune이 미사용으로 표시했고 grep으로도 리포지토리 내 참조 0건 확인했지만, 코드 자체에 '외부 참조 호환용'이라는 명시적 deprecated 주석이 있어 이 리포 바깥(예: 다른 프로젝트나 과거 export 데이터)에서 참조될 가능성을 배제할 수 없음 — 애매하면 삭제하지 말라는 원칙에 따라 보류."
+    },
+    {
+      "file": "src/lib/news-severity.ts (MAX_ITEM_WEIGHT / RISK_ITEM_CAP / MAX_HIGH_PER_DAY)",
+      "kind": "skipped",
+      "before": "ts-prune 출력엔 \"src/lib/news-events.ts:36/40/94\"로 표시됨(news-events.ts의 `export * from \"./news-severity\"` 배럴 재수출 때문에 ts-prune이 원본 파일 대신 재수출 지점 경로를 보고함)",
+      "after": "변경 없음",
+      "reason": "grep 확인 결과 세 상수 모두 news-severity.ts 내부에서 실제로 계산에 쓰이고 있고(MAX_ITEM_WEIGHT/RISK_ITEM_CAP은 46~59행 정규화 계산, MAX_HIGH_PER_DAY는 94~106행 상한 로직), MAX_HIGH_PER_DAY는 news-severity.test.ts가 외부에서 직접 import해서 검증까지 함. ts-prune이 배럴 파일 재수출을 원본 정의로 오인한 false positive."
+    },
+    {
+      "file": "src/lib/scoring/ppt-slides.ts",
+      "kind": "skipped",
+      "before": "33행 'step7' is assigned a value but never used (eslint no-unused-vars)",
+      "after": "변경 없음",
+      "reason": "src/lib/scoring/** 는 이번 태스크 범위에서 명시적으로 제외된 스코어링 엔진 내부 코드라 손대지 않음."
+    },
+    {
+      "file": "다수 파일 (src/app/**/page.tsx, layout.tsx, route.ts 등)",
+      "kind": "skipped",
+      "before": "ts-prune이 default/GET/POST/dynamic/revalidate/maxDuration/metadata/viewport 등을 대량으로 '미사용'으로 표시(예: src/app/layout.tsx, src/app/page.tsx, src/app/api/cron/**/route.ts, src/app/reports/[type]/page.tsx 등)",
+      "after": "변경 없음",
+      "reason": "Next.js App Router 프레임워크 규약으로 암묵 호출되는 export들(default export, route handler GET/POST, 라우트 설정 dynamic/revalidate/maxDuration, 파일 컨벤션 metadata/viewport). 태스크 브리프의 알려진 false-positive 트랩과 정확히 일치 — 실제로는 죽은 코드가 아님."
+    },
+    {
+      "file": "다수 파일 (src/lib/**.ts, src/lib/scoring/**.ts의 '(used in module)' 태그 항목들)",
+      "kind": "skipped",
+      "before": "예: src/components/SiteHeader.tsx SitePage, src/lib/comprehensive-report.ts buildComprehensiveReportPrompt, src/lib/event-outcomes.ts EventOutcome, src/lib/period-report.ts isReportDay/PeriodStepScoreRow, src/lib/pipeline.ts DailyPipelineResult, src/lib/text-similarity.ts significantTokens/jaccardSimilarity, src/lib/verdict-outcomes.ts anchorIndex, src/lib/scoring/types.ts 등 다수 — ts-prune이 '(used in module)' 태그로 표시",
+      "after": "변경 없음",
+      "reason": "'(used in module)' 태그는 해당 export가 같은 파일(모듈) 내부에서 실제로 참조되고 있다는 뜻 — 즉 죽은 코드가 아니라 export 키워드만 외부에 안 쓰이는 것뿐. grep으로 표본 확인(SitePage, DailyPipelineResult 등) 결과도 실제 참조가 있어 일치. export 키워드 제거는 삭제가 아니라 리팩터링이라 이번 태스크 범위(삭제) 밖."
+    },
+    {
+      "file": "next.config.ts / prisma.config.ts / vitest.config.ts (default export)",
+      "kind": "skipped",
+      "before": "ts-prune이 각 설정 파일의 default export를 미사용으로 표시",
+      "after": "변경 없음",
+      "reason": "Next.js/Prisma/Vitest가 각자 설정 파일의 default export를 도구 자체적으로 로드하는 프레임워크 규약 — 코드 내 import 그래프에는 안 잡히지만 죽은 코드 아님."
+    },
+    {
+      "file": "package.json dependencies: @prisma/client, pg",
+      "kind": "skipped",
+      "before": "depcheck가 미사용 dependency로 표시",
+      "after": "변경 없음",
+      "reason": "grep 확인 결과 @prisma/client는 src/generated/prisma/**(prisma generate 산출물, gitignore 대상이라 depcheck가 못 봄)가 직접 import함 — 실사용 확인. pg는 src/ 어디서도 직접 import하는 코드는 없지만, src/lib/db.ts가 쓰는 @prisma/adapter-pg(PrismaPg)가 pg를 peerDependency로 요구하는 구조라 package.json에 직접 명시해둔 것으로 보임(빌드 로그에도 pg-connection-string SSL 경고가 실제로 출력됨, adapter가 pg를 내부적으로 로드하고 있다는 방증) — depcheck가 간접/피어 의존성 사용을 못 잡은 false positive로 보임. 어쨌든 의존성 제거는 이번 태스크 범위 밖이라 실사용 여부와 무관하게 건드리지 않음."
+    },
+    {
+      "file": "package.json devDependencies: @tailwindcss/postcss, @types/pg, @types/react-dom, tailwindcss, tsx",
+      "kind": "skipped",
+      "before": "depcheck가 미사용 devDependency로 표시",
+      "after": "변경 없음",
+      "reason": "grep 확인 결과 tailwindcss/@tailwindcss/postcss는 postcss.config.mjs·src/app/globals.css에서 실제로 참조됨. tsx(devDependency)는 npm 스크립트에 등록돼 있진 않지만 scripts/ 아래 다수의 1회성 백필/시뮬레이션 스크립트를 `npx tsx`로 직접 실행하는 용도로 보임(package.json 스크립트에는 없어 depcheck가 놓친 것으로 추정, 완전한 실사용 증거는 못 찾음 — 애매해서 삭제 대상으로 안 다룸). @types/pg·@types/react-dom은 각각 pg·react-dom 타입 보강용 devDependency로 코드에서 직접 import되진 않지만(타입 전용 패키지 특성상 원래 그럼) 대응하는 런타임 패키지가 실사용 중이라 타입 패키지만 따로 죽었다고 보기 어려움. 의존성 제거는 이번 태스크 범위 밖이라 실사용 여부와 무관하게 건드리지 않음."
+    },
+    {
+      "file": "src/lib/notion-write.ts, scripts/fix-0812-bigtech-reasons.ts, scripts/fix-0818-0820-bigtech-reasons.ts",
+      "kind": "skipped",
+      "before": "eslint @typescript-eslint/no-explicit-any 에러 + notion-write.ts의 사용되지 않는 eslint-disable 주석 2건",
+      "after": "변경 없음",
+      "reason": "죽은 코드가 아니라 타입 안전성(any 사용) 관련 lint 이슈 — 이번 태스크는 죽은 코드 삭제가 목적이라 범위 밖."
+    },
+    {
+      "file": "src/app/**/*.tsx (커스텀 폰트 경고 다수)",
+      "kind": "skipped",
+      "before": "@next/next/no-page-custom-font 경고 다수",
+      "after": "변경 없음",
+      "reason": "죽은 코드가 아니라 폰트 로딩 방식 관련 경고 — 이번 태스크 범위 밖."
+    }
+  ]
+}
