@@ -86,7 +86,7 @@ function DetailTable({
   function MetCell({ row }: { row: StepDetailRow }) {
     if (row.result !== undefined) return <span className="text-[var(--ink-dim)]">{row.result}</span>;
     if (row.met === null) return <span className="text-[var(--ink-faint)]">-</span>;
-    return row.met ? <span className="text-emerald-400">✓</span> : <span className="text-rose-400">✕</span>;
+    return row.met ? <span className="text-[var(--pos)]">✓</span> : <span className="text-[var(--neg)]">✕</span>;
   }
 
   return (
