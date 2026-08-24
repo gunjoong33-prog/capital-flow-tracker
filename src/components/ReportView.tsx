@@ -182,10 +182,10 @@ export function ReportView({
             {step1.recentEventOutcomes && step1.recentEventOutcomes.filter((o) => o.risky).length > 0 && (
               <div className="mt-3 space-y-2">
                 {step1.recentEventOutcomes.filter((o) => o.risky).map((o, i) => (
-                  <div key={i} className="[word-break:keep-all] rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                  <div key={i} className="[word-break:keep-all] rounded-md bg-[var(--risk-high-bg)] px-3 py-2 text-xs text-[var(--risk-high-text)]">
                     {o.name}({slashDate(o.date)}) 결과가 예상 밖입니다 — {o.detail}
                     {o.url && (
-                      <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-1 block underline text-rose-400 hover:text-rose-300">
+                      <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-1 block underline text-[var(--risk-high-text)] hover:opacity-80">
                         자세히 보기 →
                       </a>
                     )}
@@ -218,7 +218,7 @@ export function ReportView({
             <Field label="US10Y-JP10Y 스프레드" value={`${step3.spreadBp}bp`} />
             <Field label="구간(참고용, 미검증)" value={step3.zone} />
             {step3.warning && (
-              <p className="mt-2 rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{step3.warning}</p>
+              <p className="mt-2 rounded-md bg-[var(--risk-high-bg)] px-3 py-2 text-xs text-[var(--risk-high-text)]">{step3.warning}</p>
             )}
             <Step3ThresholdBar spreadBp={step3.spreadBp} />
           </StepCard>
