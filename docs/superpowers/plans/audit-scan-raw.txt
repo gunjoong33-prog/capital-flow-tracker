@@ -1,0 +1,156 @@
+\next.config.ts:17 - default
+\prisma.config.ts:6 - default
+\vitest.config.ts:8 - default
+\src\app\layout.tsx:26 - default
+\src\app\layout.tsx:15 - metadata
+\src\app\layout.tsx:21 - viewport
+\src\app\page.tsx:55 - default
+\src\app\page.tsx:14 - dynamic
+\src\app\robots.ts:5 - default
+\src\app\sitemap.ts:5 - default
+\src\components\SiteHeader.tsx:5 - SitePage (used in module)
+\src\lib\comprehensive-report.ts:44 - buildComprehensiveReportPrompt (used in module)
+\src\lib\event-outcomes.ts:52 - EventOutcome (used in module)
+\src\lib\news-events.ts:158 - mergeCrossSourceDuplicates (used in module)
+\src\lib\news-events.ts:101 - capDailyHighSeverity (used in module)
+\src\lib\news-events.ts:36 - MAX_ITEM_WEIGHT
+\src\lib\news-events.ts:40 - RISK_ITEM_CAP
+\src\lib\news-events.ts:94 - MAX_HIGH_PER_DAY
+\src\lib\news-reaction.ts:16 - NewsReaction (used in module)
+\src\lib\notion-write.ts:250 - archiveNotionPages (used in module)
+\src\lib\period-report.ts:157 - isReportDay (used in module)
+\src\lib\period-report.ts:91 - PeriodStepScoreRow (used in module)
+\src\lib\pipeline.ts:34 - DailyPipelineResult (used in module)
+\src\lib\text-similarity.ts:10 - significantTokens (used in module)
+\src\lib\text-similarity.ts:16 - jaccardSimilarity (used in module)
+\src\lib\verdict-outcomes.ts:68 - anchorIndex (used in module)
+\src\lib\verdict-outcomes.ts:10 - WATCH_NEUTRAL_BAND_PCT
+\src\app\about\page.tsx:9 - default
+\src\app\about\page.tsx:5 - metadata
+\src\app\calendar\page.tsx:34 - default
+\src\app\calendar\page.tsx:20 - dynamic
+\src\app\indicators\page.tsx:20 - default
+\src\app\indicators\page.tsx:11 - dynamic
+\src\app\indicators\WidgetCard.tsx:5 - TipText (used in module)
+\src\app\news\page.tsx:55 - default
+\src\app\news\page.tsx:12 - dynamic
+\src\app\privacy\page.tsx:9 - default
+\src\app\privacy\page.tsx:5 - metadata
+\src\app\report\page.tsx:54 - default
+\src\app\report\page.tsx:21 - revalidate
+\src\app\terms\page.tsx:9 - default
+\src\app\terms\page.tsx:5 - metadata
+\src\app\track-record\page.tsx:62 - default
+\src\app\track-record\page.tsx:14 - dynamic
+\src\lib\scoring\ppt-slides.ts:11 - BuildPptSlidesInput (used in module)
+\src\lib\scoring\run.ts:1598 - SECTOR_ETFS (used in module)
+\src\lib\scoring\run.ts:1599 - StepDetailRow (used in module)
+\src\lib\scoring\run.ts:1599 - StepDetails (used in module)
+\src\lib\scoring\types.ts:45 - UpcomingEventItem (used in module)
+\src\lib\scoring\types.ts:49 - EventOutcomeItem (used in module)
+\src\lib\scoring\types.ts:260 - PptStat (used in module)
+\src\lib\scoring\types.ts:266 - PptBar (used in module)
+\src\lib\sources\alphavantage.ts:123 - fetchPutCallRatio
+\src\lib\sources\krx-short.ts:124 - KrxShortBalanceSummary (used in module)
+\src\lib\sources\news-ticker-match.ts:8 - MatchableTicker (used in module)
+\src\lib\sources\news-ticker-match.ts:14 - MATCHABLE_TICKERS (used in module)
+\src\lib\sources\types.ts:85 - MetricId
+\src\lib\sources\types.ts:139 - SourceFetchResult
+\src\lib\sources\yahoo.ts:200 - SectorRawData (used in module)
+\src\app\calendar\[date]\not-found.tsx:6 - default
+\src\app\calendar\[date]\page.tsx:11 - default
+\src\app\calendar\[date]\page.tsx:9 - dynamic
+\src\app\reports\[type]\page.tsx:24 - default
+\src\app\reports\[type]\page.tsx:10 - dynamic
+\src\app\api\cron\daily\route.ts:13 - GET
+\src\app\api\cron\daily\route.ts:6 - dynamic
+\src\app\api\cron\daily\route.ts:11 - maxDuration
+\src\app\api\cron\health-check\route.ts:15 - GET
+\src\app\api\cron\health-check\route.ts:11 - dynamic
+\src\app\api\cron\jpy-check\route.ts:24 - GET
+\src\app\api\cron\jpy-check\route.ts:7 - dynamic
+\src\app\api\cron\news-refresh\route.ts:16 - GET
+\src\app\api\cron\news-refresh\route.ts:5 - dynamic
+\src\app\api\cron\obsidian-export\route.ts:54 - GET
+\src\app\api\cron\obsidian-export\route.ts:7 - dynamic
+\src\app\api\cron\obsidian-export\route.ts:8 - maxDuration
+\src\app\api\debug\mistral\route.ts:6 - GET
+\src\app\api\debug\notion\route.ts:7 - GET
+\src\app\api\debug\sources\route.ts:12 - GET
+\src\app\api\public\institutional\route.ts:13 - GET
+\src\app\api\public\macro-detail\route.ts:12 - GET
+\src\app\api\public\news\route.ts:12 - GET
+\src\app\api\public\verdict-outcomes\route.ts:13 - GET
+\src\app\api\public\verdicts\route.ts:11 - GET
+\src\app\reports\[type]\[start]\page.tsx:52 - default
+\src\app\reports\[type]\[start]\page.tsx:17 - dynamic
+
+=== depcheck ===
+Unused dependencies
+* @prisma/client
+* pg
+Unused devDependencies
+* @tailwindcss/postcss
+* @types/pg
+* @types/react-dom
+* tailwindcss
+* tsx
+
+=== eslint ===
+
+> capital-flow-tracker@0.1.0 lint
+> eslint
+
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\scripts\fix-0812-bigtech-reasons.ts
+  52:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\scripts\fix-0818-0820-bigtech-reasons.ts
+  79:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\scripts\simulate-step24-redesign.ts
+  16:11  warning  's8' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\calendar\[date]\not-found.tsx
+  17:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\calendar\[date]\page.tsx
+  62:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\calendar\page.tsx
+  105:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\indicators\page.tsx
+  37:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\news\page.tsx
+  86:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\page.tsx
+  110:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\report\page.tsx
+  42:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\reports\[type]\[start]\page.tsx
+  88:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\app\reports\[type]\page.tsx
+  48:7  warning  Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\lib\news-events.ts
+  8:3  warning  'newsItemWeight' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\lib\notion-write.ts
+   42:3   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+   45:31  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  218:3   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+  225:10  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  244:10  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+
+C:\Users\김건중\capital-flow-tracker\.claude\worktrees\codebase-audit-cleanup\src\lib\scoring\ppt-slides.ts
+  33:53  warning  'step7' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 19 problems (5 errors, 14 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
