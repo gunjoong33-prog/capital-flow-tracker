@@ -104,6 +104,13 @@
       "before": "@next/next/no-page-custom-font 경고 다수",
       "after": "변경 없음",
       "reason": "죽은 코드가 아니라 폰트 로딩 방식 관련 경고 — 이번 태스크 범위 밖."
+    },
+    {
+      "file": "src/lib/bigtech-reasons.ts",
+      "kind": "bug",
+      "before": "LLM이 방향과 모순되는 원인을 지어내도(예: 하락했는데 '목표주가 상향') 그대로 저장됨",
+      "after": "LLM에 direction 필드도 요청해 changePct1d 부호와 비교, 불일치하면 '명확한 원인 확인 안 됨'으로 대체",
+      "reason": "트래커.md에 2026-08-14부터 열려있던 이슈(MSFT/AMZN 실사례로 확인된 환각) 수정"
     }
   ],
   "engine_explainers": [

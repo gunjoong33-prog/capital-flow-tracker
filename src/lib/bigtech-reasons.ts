@@ -6,6 +6,17 @@ import { fetchBigTechHeadlines, type Headline } from "@/lib/sources/news-feeds";
 import { BIG_TECH_LABELS } from "@/lib/sources/types";
 import { callGroq, extractJsonArray } from "@/lib/llm-clients";
 
+export function checkDirectionConsistency(
+  changePct1d: number | null,
+  direction: "up" | "down" | "flat" | undefined
+): boolean {
+  if (changePct1d === null || direction === undefined || direction === "flat") return true;
+  if (Math.abs(changePct1d) <= 0.05) return true;
+  if (direction === "up" && changePct1d < 0) return false;
+  if (direction === "down" && changePct1d > 0) return false;
+  return true;
+}
+
 async function change1dFor(ticker: string, asOf: Date): Promise<number | null> {
   const history = await getMetricHistoryByCount(ticker, 2, asOf);
   if (history.length < 2) return null;
@@ -54,8 +65,9 @@ async function judgeBigTechReasons(
 업계·거시 통계라는 점을 그대로 드러내라. 통계 하락이 타이밍 효과(예: 행사 시기 이동) 때문이라고
 기사에 나와 있으면 그 설명도 반드시 포함해라. ***
 
-각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라:
-[{"ticker": "AAPL", "reason": "한국어 1문장"}]
+각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라. direction은 원인이 주가를
+"올리는 방향"이면 "up", "내리는 방향"이면 "down", 방향성이 없거나 중립적 영향이면 "flat":
+[{"ticker": "AAPL", "reason": "한국어 1문장", "direction": "up"}]
 
 종목 목록:
 ${sections}`;
@@ -68,15 +80,19 @@ ${sections}`;
   // extractJsonArray가 파싱 실패하는 사례가 실제로 있었다(8/17·8/20 리포트에서 7종목이 한꺼번에
   // "명확한 원인 확인 안 됨"으로 뜬 원인 — 개별 판정 7건이 아니라 그날 응답 전체가 깨진 것).
   const text = await callGroq(prompt, { maxTokens: 8192, reasoningEffort: "low" });
-  const parsed = extractJsonArray<{ ticker: string; reason: string }>(text);
+  const parsed = extractJsonArray<{ ticker: string; reason: string; direction?: "up" | "down" | "flat" }>(text);
   // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 7종목이 한꺼번에 "명확한 원인 확인 안 됨"으로
   // 뜨는데도 sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가
   // 깨진 것을 화면에서 구분할 수 없었음) — 던져서 호출부(computeBigTechReasons)의 try/catch가
   // errors 배열에 남기게 한다.
   if (!parsed) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(응답 앞부분: ${text.slice(0, 300)})`);
 
+  const changeByTicker = new Map(changes.map((c) => [c.ticker, c.changePct1d]));
   const result: Record<string, string> = {};
-  for (const p of parsed) result[p.ticker] = p.reason;
+  for (const p of parsed) {
+    const consistent = checkDirectionConsistency(changeByTicker.get(p.ticker) ?? null, p.direction);
+    result[p.ticker] = consistent ? p.reason : "명확한 원인 확인 안 됨(방향 불일치로 제외)";
+  }
   return result;
 }
 
