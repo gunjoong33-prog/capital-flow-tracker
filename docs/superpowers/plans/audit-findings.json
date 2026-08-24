@@ -132,6 +132,27 @@
       "before": "page.tsx, report/page.tsx, calendar/page.tsx, calendar/[date]/page.tsx, indicators/page.tsx, news/page.tsx, reports/[type]/page.tsx, reports/[type]/[start]/page.tsx 8개 파일이 각자 <link rel=preconnect>×2 + <link rel=stylesheet> 3줄과 --font-gothic/--font-sans 인라인 style을 가진 wrapper div를 거의 동일하게 반복",
       "after": "변경 없음",
       "reason": "브리프의 '3회 이상 반복 로직' 스파게티 기준에 해당하는 걸로 보이나, 통합하려면 공용 PageShell/레이아웃 컴포넌트를 새로 만들어 8개 파일 전부를 그걸 쓰도록 고쳐야 한다 — 이는 태스크 브리프의 'Code Organization' 지침(\"컴포넌트를 쪼개는 게 '맞는' 해법이어도 이번 태스크에서 독단적으로 하지 말고 스킵/우려사항으로 남겨라\")이 명시적으로 범위 밖이라고 한 리스트럭처링에 해당해 손대지 않음. eslint @next/next/no-page-custom-font 경고도 이미 이전 태스크(현재 items 배열 상단, \"src/app/**/*.tsx (커스텀 폰트 경고 다수)\" 항목)가 같은 패턴을 '폰트 로딩 방식 관련 경고, 범위 밖'으로 스킵 처리한 전례가 있다."
+    },
+    {
+      "file": "vitest.config.ts",
+      "kind": "bug",
+      "before": "defineConfig({ resolve: { alias: {...} } }) — .env/.env.local을 읽어 process.env에 채우는 로직이 전혀 없었다. src/lib/bigtech-reasons.ts(Task 4에서 추가, checkDirectionConsistency 7개 테스트 보유)가 src/lib/db.ts를 transitively import하는데, db.ts는 모듈 로드 시점에 process.env.DATABASE_URL이 없으면 즉시 throw한다 — DATABASE_URL은 .env/.env.local에 실제로 있었지만 vitest 설정이 그 파일들을 읽지 않아, `npm run test`(플레인, 특수 플래그 없음)로 돌리면 src/lib/bigtech-reasons.test.ts 전체가 import 단계에서 에러 나며 0 tests collected로 스킵됐다 — \"0 failing\"이 아니라 파일 자체가 안 실렸다는 뜻이라 눈에 띄지 않고 조용히 회귀 커버리지가 0이 되는 문제였다(Task 5 리뷰어가 npm run test를 직접 돌려 발견).",
+      "after": "defineConfig(({ mode }) => { Object.assign(process.env, loadEnv(mode, process.cwd(), \"\")); return { resolve: {...} }; }) — vite(vitest.config.ts가 재수출하는 vitest/config엔 이 버전(vitest 4.1.10 / vite 8.2.0)에서 loadEnv가 없어 vite 패키지에서 직접 import)의 loadEnv로 .env/.env.local 값을 config 평가 시점에 process.env에 채워 넣는다. 시크릿 값은 vitest.config.ts에 하드코딩하지 않음 — 파일 로딩만 담당.",
+      "reason": "npm run test 결과 13개 테스트 파일 전부(108/108) 통과로 확인, bigtech-reasons.test.ts가 checkDirectionConsistency 7개 테스트로 정상 로드·통과되는 것도 --reporter=verbose로 개별 확인함(0 collected였던 이전과 대조)."
+    },
+    {
+      "file": "src/lib/sources/krx-short.ts",
+      "kind": "skipped",
+      "before": "loginKrx()의 warmup1/warmup2/doLogin() 세 fetch 모두 res.ok를 확인하지 않고 바로 쿠키 수집·res.json() 파싱으로 넘어간다(Discord 웹훅과 같은 'res.ok 미확인' 패턴에 해당).",
+      "after": "변경 없음",
+      "reason": "완전히 조용한 실패는 아니다 — doLogin이 HTML/비JSON 응답을 받으면 res.json()이 SyntaxError로 throw하고, 로그인 자체가 실패하면 result._error_code가 CD001이 아니라서 명시적으로 'KRX 로그인 실패' 에러를 던진다(80~81행) — 어느 경로든 호출부에 에러가 그대로 전파돼 Discord 버그처럼 실패가 사라지진 않는다(에러 메시지가 'HTTP 500' 대신 파싱 에러로 나오는 수준의 차이). 이 파일 자체가 파일 상단 주석에서 '사용자가 위험을 인지하고 승인함'이라고 명시한 비공식 로그인 세션 스크레이핑(data.krx.co.kr, pykrx 흐름 재현)이라 로그인 흐름을 건드리면 실제 KRX 세션 발급이 깨질 위험이 있고, 수정해도 에러 메시지 품질만 개선될 뿐 동작은 바뀌지 않아 '안전하게 확인 가능한 버그'보다는 리스크가 큰 변경이라 스킵."
+    },
+    {
+      "file": "src/lib/news-market-events.ts",
+      "kind": "skipped",
+      "before": "FINRA_SHORT_VOLUME_URL / DART_EQUITY_URL / DATAROMA_URL / OPENINSIDER_URL 4개 상수가 src/lib/scoring/run.ts의 step7 상세 표가 쓰는 동일 URL과 값이 겹친다(중복 로직 후보).",
+      "after": "변경 없음",
+      "reason": "파일 자체 주석(17~18행)에 'run.ts의 step7 상세 표가 쓰는 것과 동일한 실제 출처 링크(하드코딩 상수 재선언 — run.ts는 export 안 해서 그대로 복제, 값이 바뀌면 두 곳 다 고쳐야 함을 감수)'라고 이미 의도적 트레이드오프로 명시돼 있음. 공용 상수 파일로 뽑으려면 run.ts(scoring/** 제외 대상)를 같이 고쳐야 해서 이번 태스크 범위 밖이라 스킵."
     }
   ],
   "engine_explainers": [
