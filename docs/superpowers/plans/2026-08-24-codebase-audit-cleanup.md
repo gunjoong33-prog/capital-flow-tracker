@@ -251,7 +251,7 @@ const changeByTicker = new Map(changes.map((c) => [c.ticker, c.changePct1d]));
 const result: Record<string, string> = {};
 for (const p of parsed) {
   const consistent = checkDirectionConsistency(changeByTicker.get(p.ticker) ?? null, p.direction);
-  result[p.ticker] = consistent ? p.reason : "명확한 원인 확인 안 됨(방향 불일치로 제외)";
+  result[p.ticker] = consistent ? p.reason : "명확한 원인 확인 안 됨";
 }
 return result;
 ```

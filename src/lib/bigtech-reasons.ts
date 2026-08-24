@@ -5,17 +5,7 @@ import { getMetricHistoryByCount } from "@/lib/metrics";
 import { fetchBigTechHeadlines, type Headline } from "@/lib/sources/news-feeds";
 import { BIG_TECH_LABELS } from "@/lib/sources/types";
 import { callGroq, extractJsonArray } from "@/lib/llm-clients";
-
-export function checkDirectionConsistency(
-  changePct1d: number | null,
-  direction: "up" | "down" | "flat" | undefined
-): boolean {
-  if (changePct1d === null || direction === undefined || direction === "flat") return true;
-  if (Math.abs(changePct1d) <= 0.05) return true;
-  if (direction === "up" && changePct1d < 0) return false;
-  if (direction === "down" && changePct1d > 0) return false;
-  return true;
-}
+import { buildConsistentReasons } from "@/lib/bigtech-direction";
 
 async function change1dFor(ticker: string, asOf: Date): Promise<number | null> {
   const history = await getMetricHistoryByCount(ticker, 2, asOf);
@@ -87,13 +77,7 @@ ${sections}`;
   // errors 배열에 남기게 한다.
   if (!parsed) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(응답 앞부분: ${text.slice(0, 300)})`);
 
-  const changeByTicker = new Map(changes.map((c) => [c.ticker, c.changePct1d]));
-  const result: Record<string, string> = {};
-  for (const p of parsed) {
-    const consistent = checkDirectionConsistency(changeByTicker.get(p.ticker) ?? null, p.direction);
-    result[p.ticker] = consistent ? p.reason : "명확한 원인 확인 안 됨(방향 불일치로 제외)";
-  }
-  return result;
+  return buildConsistentReasons(parsed, changes);
 }
 
 /**

@@ -113,6 +113,13 @@
       "reason": "트래커.md에 2026-08-14부터 열려있던 이슈(MSFT/AMZN 실사례로 확인된 환각) 수정"
     },
     {
+      "file": "src/lib/bigtech-direction.ts (Task 4 당시엔 src/lib/bigtech-reasons.ts 내부)",
+      "kind": "bug",
+      "before": "direction 불일치 시 대체 문구가 \"명확한 원인 확인 안 됨(방향 불일치로 제외)\"였다 — src/lib/scoring/run.ts:350과 run.ts:1379가 정확 일치(exact-match, === 비교)로 기대하는 문자열은 접미사 없는 \"명확한 원인 확인 안 됨\"뿐이라, 이 대체 문구가 나오면 두 exact-match 분기 모두 안 타서 \"원인이 있다\"는 걸 전제한 서술(예: 라벨+등락률을 보여준 뒤)이 이어지면서 실제로는 접미사 붙은 정체불명 문구가 그대로 노출되는 자기모순 문장이 만들어졌다.",
+      "after": "접미사를 제거해 run.ts의 exact-match 문자열과 정확히 일치시켰다(\"명확한 원인 확인 안 됨\", 접미사 없음). run.ts는 건드리지 않음 — 애초에 Task 4 계획 문서(2026-08-24-codebase-audit-cleanup.md)의 audit-findings 예시 항목도 접미사 없는 문자열을 의도했던 것으로 보이나, 실제 구현 코드(Step 6)에는 접미사가 붙은 채로 들어가 있었다.",
+      "reason": "전체 브랜치 리뷰(2026-08-25)에서 발견 — Task 4 검증 당시 checkDirectionConsistency 단위 테스트만 있고 대체 문구를 실제로 조립하는 로직(현재 buildConsistentReasons)에는 테스트가 없어 이 불일치가 개별 태스크 리뷰를 통과했다. bigtech-direction.test.ts에 정확 문자열을 assert하는 회귀 테스트를 추가함(\"exact-match 회귀 테스트\" 표기)."
+    },
+    {
       "file": "src/components/StepCard.tsx",
       "kind": "spaghetti",
       "before": "MetCell의 충족/불충족(✓/✕) 색이 하드코딩된 Tailwind 기본 팔레트(text-emerald-400, text-rose-400)",
@@ -137,8 +144,8 @@
       "file": "vitest.config.ts",
       "kind": "bug",
       "before": "defineConfig({ resolve: { alias: {...} } }) — .env/.env.local을 읽어 process.env에 채우는 로직이 전혀 없었다. src/lib/bigtech-reasons.ts(Task 4에서 추가, checkDirectionConsistency 7개 테스트 보유)가 src/lib/db.ts를 transitively import하는데, db.ts는 모듈 로드 시점에 process.env.DATABASE_URL이 없으면 즉시 throw한다 — DATABASE_URL은 .env/.env.local에 실제로 있었지만 vitest 설정이 그 파일들을 읽지 않아, `npm run test`(플레인, 특수 플래그 없음)로 돌리면 src/lib/bigtech-reasons.test.ts 전체가 import 단계에서 에러 나며 0 tests collected로 스킵됐다 — \"0 failing\"이 아니라 파일 자체가 안 실렸다는 뜻이라 눈에 띄지 않고 조용히 회귀 커버리지가 0이 되는 문제였다(Task 5 리뷰어가 npm run test를 직접 돌려 발견).",
-      "after": "defineConfig(({ mode }) => { Object.assign(process.env, loadEnv(mode, process.cwd(), \"\")); return { resolve: {...} }; }) — vite(vitest.config.ts가 재수출하는 vitest/config엔 이 버전(vitest 4.1.10 / vite 8.2.0)에서 loadEnv가 없어 vite 패키지에서 직접 import)의 loadEnv로 .env/.env.local 값을 config 평가 시점에 process.env에 채워 넣는다. 시크릿 값은 vitest.config.ts에 하드코딩하지 않음 — 파일 로딩만 담당.",
-      "reason": "npm run test 결과 13개 테스트 파일 전부(108/108) 통과로 확인, bigtech-reasons.test.ts가 checkDirectionConsistency 7개 테스트로 정상 로드·통과되는 것도 --reporter=verbose로 개별 확인함(0 collected였던 이전과 대조)."
+      "after": "vitest.config.ts는 원래의 최소 형태(defineConfig({ resolve: { alias: {...} } }))로 되돌렸다 — loadEnv로 .env를 읽어 채우는 접근은 전체 브랜치 리뷰에서 CI를 깨뜨리는 걸로 드러나 폐기(.github/workflows/test.yml은 시크릿을 전혀 설정하지 않고 npm test를 돌리도록 의도적으로 설계돼 있어 — DB·외부 API 접근이 없는 순수 함수 테스트라는 전제 — .env 자체가 CI엔 없다). 대신 근본 원인(순수 판정 로직이 DB 클라이언트를 transitively import)을 없앴다: checkDirectionConsistency와 결과 조립 로직(buildConsistentReasons로 명명)을 새 파일 src/lib/bigtech-direction.ts로 옮겼다 — @/lib/db, @/lib/metrics 등 DB를 건드리는 어떤 것도 import하지 않는 순수 모듈. bigtech-reasons.ts는 이제 이 두 함수를 가져다 쓰기만 하고, bigtech-reasons.test.ts(구 위치)는 삭제, 테스트는 bigtech-direction.test.ts로 이전 — 이 테스트 파일은 db.ts를 아예 import하지 않으므로 DATABASE_URL 유무와 무관하게 항상 실행된다. news-events.ts가 news-severity.ts를 분리한 것과 동일한 패턴(파일 14행 주석: \"순수 판정 로직은 news-severity.ts로 옮겼다(테스트가 DB 없이 돌아야 해서)\").",
+      "reason": "전체 브랜치 리뷰(2026-08-25)에서 Critical로 지적됨: loadEnv 방식은 로컬에 .env가 있을 때만 동작하고 CI(.env 없음)에서는 여전히 DATABASE_URL 미설정으로 bigtech-reasons.test.ts import가 throw해 CI가 빨간불이 된다는 걸 재현으로 확인함. 모듈 분리 후 .env/.env.local을 모두 임시로 치우고(CI 시뮬레이션) `npm run test`를 돌려 13개 파일·112개 테스트 전부 통과, DB 관련 에러 0건을 확인 — 이게 이 수정이 실제로 CI를 깨지 않는다는 결정적 증거."
     },
     {
       "file": "src/lib/sources/krx-short.ts",
