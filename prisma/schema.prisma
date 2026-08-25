@@ -138,6 +138,10 @@ model ExternalConsensus {
   payload    Json
   createdAt  DateTime @default(now())
 
+  // 주간 크론이 같은 13F 제출(filingDate 안 바뀜)을 매주 새 행으로 또 저장해 근중복이
+  // 계속 쌓이는 문제(최종 리뷰 지적) — sourceType+sourceName+date가 같으면 같은 관측이라
+  // 보고 upsert로 덮어쓴다.
+  @@unique([sourceType, sourceName, date])
   @@index([sourceType, date])
 }
 

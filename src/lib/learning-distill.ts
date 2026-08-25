@@ -35,7 +35,10 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
   let saved = 0;
 
   const since = new Date(Date.now() - 7 * 86_400_000);
-  const records = await db.externalConsensus.findMany({ where: { date: { gte: since } } });
+  // date는 13F 행이면 SEC 제출일(최대 45일 전일 수 있음)이라 "이번 주에 수집된 데이터"를 걸러내는
+  // 기준으로 쓰면 거의 즉시 7일 창을 벗어나 영원히 distill 안 되는 버그였다(최종 리뷰 지적).
+  // createdAt(행이 실제로 DB에 저장된 시각)이 "이번 주에 수집됨"의 올바른 기준이다.
+  const records = await db.externalConsensus.findMany({ where: { createdAt: { gte: since } } });
 
   const bySource = new Map<string, ConsensusRecord[]>();
   for (const r of records) {

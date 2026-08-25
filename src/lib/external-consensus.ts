@@ -12,7 +12,16 @@ import { fetchBrokerConsensus } from "@/lib/sources/broker-consensus";
 // pipeline.ts·period-report.ts와 같은 방식으로 캐스팅한다.
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
 
-export async function collectExternalConsensus(tickers: string[]): Promise<{ saved: number; errors: string[] }> {
+// fetchBrokerConsensus(네이버금융)는 6자리 KRX 종목코드를 기대하는데, 예전엔 US 티커
+// (TRACKED_TICKERS: AAPL 등)를 그대로 넘겨서 매주 전량 실패했다(최종 리뷰 지적). 국내
+// 소스 모듈(krx-short.ts·types.ts 등)에 기존 KRX 종목코드 상수가 없어서, 시총 상위
+// 4종목(삼성전자·SK하이닉스·NAVER·카카오)을 새로 하드코딩한다.
+export const TRACKED_KRX_TICKERS = ["005930", "000660", "035420", "035720"];
+
+export async function collectExternalConsensus(
+  tickers: string[],
+  krxTickers: string[] = TRACKED_KRX_TICKERS
+): Promise<{ saved: number; errors: string[] }> {
   const errors: string[] = [];
   let saved = 0;
   const today = new Date();
@@ -21,8 +30,13 @@ export async function collectExternalConsensus(tickers: string[]): Promise<{ sav
     const { holdings, filingDate, errors: fundErrors } = await fetchHedgeFundHoldings(fund.cik);
     errors.push(...fundErrors);
     if (holdings.length > 0) {
-      await db.externalConsensus.create({
-        data: { sourceType: "13f", sourceName: fund.name, date: filingDate ? new Date(filingDate) : today, payload: asJson(holdings) },
+      const date = filingDate ? new Date(filingDate) : today;
+      // 같은 13F 제출(filingDate 불변)을 매주 다시 조회해도 create면 근중복 행이 계속 쌓인다
+      // (최종 리뷰 지적) — sourceType+sourceName+date 유니크 제약 기준으로 upsert한다.
+      await db.externalConsensus.upsert({
+        where: { sourceType_sourceName_date: { sourceType: "13f", sourceName: fund.name, date } },
+        create: { sourceType: "13f", sourceName: fund.name, date, payload: asJson(holdings) },
+        update: { payload: asJson(holdings) },
       });
       saved++;
     }
@@ -31,7 +45,11 @@ export async function collectExternalConsensus(tickers: string[]): Promise<{ sav
   const { rates, errors: bisErrors } = await fetchPolicyRates();
   errors.push(...bisErrors);
   if (rates.length > 0) {
-    await db.externalConsensus.create({ data: { sourceType: "bis", sourceName: "BIS", date: today, payload: asJson(rates) } });
+    await db.externalConsensus.upsert({
+      where: { sourceType_sourceName_date: { sourceType: "bis", sourceName: "BIS", date: today } },
+      create: { sourceType: "bis", sourceName: "BIS", date: today, payload: asJson(rates) },
+      update: { payload: asJson(rates) },
+    });
     saved++;
   }
 
@@ -39,14 +57,26 @@ export async function collectExternalConsensus(tickers: string[]): Promise<{ sav
     const { trend, errors: finnhubErrors } = await fetchRecommendationTrend(ticker);
     errors.push(...finnhubErrors);
     if (trend) {
-      await db.externalConsensus.create({ data: { sourceType: "finnhub", sourceName: ticker, date: today, payload: asJson(trend) } });
+      await db.externalConsensus.upsert({
+        where: { sourceType_sourceName_date: { sourceType: "finnhub", sourceName: ticker, date: today } },
+        create: { sourceType: "finnhub", sourceName: ticker, date: today, payload: asJson(trend) },
+        update: { payload: asJson(trend) },
+      });
       saved++;
     }
+  }
 
-    const { consensus, errors: brokerErrors } = await fetchBrokerConsensus(ticker);
+  // fetchBrokerConsensus(네이버금융)는 US 티커가 아니라 6자리 KRX 종목코드를 받는다 — tickers와
+  // 별도 리스트로 분리해서 넘긴다(위 TRACKED_KRX_TICKERS 주석 참고).
+  for (const krxTicker of krxTickers) {
+    const { consensus, errors: brokerErrors } = await fetchBrokerConsensus(krxTicker);
     errors.push(...brokerErrors);
     if (consensus) {
-      await db.externalConsensus.create({ data: { sourceType: "domestic_broker", sourceName: ticker, date: today, payload: asJson(consensus) } });
+      await db.externalConsensus.upsert({
+        where: { sourceType_sourceName_date: { sourceType: "domestic_broker", sourceName: krxTicker, date: today } },
+        create: { sourceType: "domestic_broker", sourceName: krxTicker, date: today, payload: asJson(consensus) },
+        update: { payload: asJson(consensus) },
+      });
       saved++;
     }
   }
