@@ -1558,8 +1558,12 @@ jobs:
         run: git checkout -b auto-fix/${{ github.event.client_payload.logId }}
 
       - name: Claude Code 헤드리스 실행 — 진단→수정 시도
+        # ANTHROPIC_API_KEY가 아니라 CLAUDE_CODE_OAUTH_TOKEN을 쓴다 — API 키는 Pro 구독과 무관한
+        # 별도 종량제 과금이지만, OAuth 토큰은 사용자의 Pro 구독 크레딧(월 $20치 Agent SDK 크레딧,
+        # 2026-06-15부터 포함)에서 차감된다. 발급: `claude setup-token`(로컬에서 1회 실행 후 출력된
+        # 토큰을 GitHub Secrets에 CLAUDE_CODE_OAUTH_TOKEN으로 등록).
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           npx @anthropic-ai/claude-code -p "다음 이상이 자가진단에서 감지됐다: ${{ github.event.client_payload.issueDescription }}
           원인을 찾아 최소한의 수정을 하라. 다음 파일은 절대 건드리지 마라(회귀 위험 때문에 스코프 제외됨):
@@ -1617,7 +1621,7 @@ jobs:
             "${{ secrets.DISCORD_WEBHOOK_URL }}"
 ```
 
-**참고(구현자 안내, 코드 아님)**: 이 워크플로가 동작하려면 GitHub 리포지토리 Settings → Secrets에 `ANTHROPIC_API_KEY`(신규, 사용자가 발급)와 `DISCORD_WEBHOOK_URL`(기존 Vercel env와 별도로 GH Actions Secrets에도 등록 필요)을 추가해야 한다. 또한 `dispatches` 이벤트를 쏘는 `GITHUB_EXPORT_TOKEN`(Task 10에서 재사용)이 `repo` 스코프를 갖고 있는지 확인할 것 — Contents API 쓰기 권한만 있고 `repository_dispatch` 권한이 없는 세분화된(fine-grained) PAT라면 새 스코프를 추가하거나 별도 토큰이 필요할 수 있다.
+**참고(구현자 안내, 코드 아님)**: 이 워크플로가 동작하려면 GitHub 리포지토리 Settings → Secrets에 `CLAUDE_CODE_OAUTH_TOKEN`(신규 — 사용자가 로컬에서 `claude setup-token` 실행해 발급, Pro 구독 크레딧에서 차감되게 하려면 `ANTHROPIC_API_KEY`가 아니라 반드시 이 토큰을 써야 함)과 `DISCORD_WEBHOOK_URL`(기존 Vercel env와 별도로 GH Actions Secrets에도 등록 필요)을 추가해야 한다. 또한 `dispatches` 이벤트를 쏘는 `GITHUB_EXPORT_TOKEN`(Task 10에서 재사용)이 `repo` 스코프를 갖고 있는지 확인할 것 — Contents API 쓰기 권한만 있고 `repository_dispatch` 권한이 없는 세분화된(fine-grained) PAT라면 새 스코프를 추가하거나 별도 토큰이 필요할 수 있다.
 
 - [ ] **Step 6: 커밋**
 
@@ -1638,11 +1642,9 @@ git commit -m "feat: 자동수정 GitHub Actions 워크플로(Claude Code 헤드
 
 - [ ] **Step 1: `.env.example`에 신규 키 추가**
 
-`.env.example`의 `# LLM providers` 섹션 아래에 추가:
+`.env.example`의 `# LLM providers` 섹션 아래에 추가(Vercel/Next.js 앱이 읽는 값만 — `CLAUDE_CODE_OAUTH_TOKEN`은 이 앱이 아니라 GitHub Actions Secrets에 별도 등록하는 값이라 여기 안 들어간다):
 
 ```
-ANTHROPIC_API_KEY=
-
 # Finnhub(애널리스트 등급분포, 무료 티어)
 FINNHUB_API_KEY=
 
@@ -1653,6 +1655,8 @@ GITHUB_EXPORT_TOKEN=
 # false로 설정하면 자가진단이 이상을 발견해도 자동수정을 트리거하지 않고 알림만 보낸다(킬스위치).
 AUTO_FIX_ENABLED=
 ```
+
+**참고(구현자 안내, 코드 아님)**: `CLAUDE_CODE_OAUTH_TOKEN`(Task 11에서 씀)은 Vercel env가 아니라 GitHub 리포지토리 Settings → Secrets에 등록한다 — 로컬에서 `claude setup-token` 실행 후 출력된 토큰을 그대로 등록.
 
 - [ ] **Step 2: 커밋**
 
