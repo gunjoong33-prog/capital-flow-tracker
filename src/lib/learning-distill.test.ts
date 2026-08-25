@@ -10,7 +10,7 @@ import { buildDistillPrompt } from "./learning-distill";
 describe("buildDistillPrompt", () => {
   it("소스명·데이터 개수를 프롬프트에 포함한다", () => {
     const prompt = buildDistillPrompt("Bridgewater Associates", [
-      { sourceType: "13f", date: new Date("2026-08-14"), payload: { nameOfIssuer: "APPLE INC" } },
+      { id: "test-id-1", sourceType: "13f", date: new Date("2026-08-14"), payload: { nameOfIssuer: "APPLE INC" } },
     ]);
 
     expect(prompt).toContain("Bridgewater Associates");

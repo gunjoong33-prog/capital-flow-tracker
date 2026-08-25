@@ -10,7 +10,7 @@ import { upsertObsidianFile } from "@/lib/obsidian-export";
 // pipeline.ts·external-consensus.ts와 같은 방식으로 캐스팅한다.
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
 
-type ConsensusRecord = { sourceType: string; date: Date; payload: unknown };
+type ConsensusRecord = { id: string; sourceType: string; date: Date; payload: unknown };
 
 const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
   "13f": "헤지펀드",
@@ -40,18 +40,25 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
   const bySource = new Map<string, ConsensusRecord[]>();
   for (const r of records) {
     const list = bySource.get(r.sourceName) ?? [];
-    list.push({ sourceType: r.sourceType, date: r.date, payload: r.payload });
+    list.push({ id: r.id, sourceType: r.sourceType, date: r.date, payload: r.payload });
     bySource.set(r.sourceName, list);
   }
 
   const githubToken = process.env.GITHUB_EXPORT_TOKEN;
 
   for (const [sourceName, sourceRecords] of bySource) {
-    const summary = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
+    let summary: string;
+    try {
+      summary = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
+    } catch (e) {
+      errors.push(`Mistral distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+
     const category = CATEGORY_BY_SOURCE_TYPE[sourceRecords[0].sourceType] ?? "증권사";
 
     const note = await db.learningNote.create({
-      data: { category, sourceName, summary, basedOn: asJson(sourceRecords.map((r) => r.date.toISOString())) },
+      data: { category, sourceName, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
     });
     saved++;
 
