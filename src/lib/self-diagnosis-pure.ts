@@ -21,8 +21,7 @@ export function detectDivergence(verdicts: { date: string; hit: boolean | null }
     else break;
   }
 
-  // 연속 불일치가 표본 전체를 차지해야만 패턴으로 본다(중간에 적중이 섞여 있으면 안 됨)
-  if (consecutiveMiss < MIN_SAMPLE || consecutiveMiss !== graded.length) return [];
+  if (consecutiveMiss < MIN_SAMPLE) return [];
 
   return [
     {

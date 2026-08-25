@@ -38,10 +38,10 @@ describe("detectDivergence", () => {
     expect(patterns[0]).toMatchObject({ count: 3 });
   });
 
-  it("적중이 섞여 있으면 연속 실패로 안 본다", () => {
+  it("추적 구간 안에 적중이 섞이면 연속 실패 카운트가 최소치 미만으로 끊긴다", () => {
     const verdicts = [
-      { date: "2026-08-20", hit: true },
-      { date: "2026-08-21", hit: false },
+      { date: "2026-08-20", hit: false },
+      { date: "2026-08-21", hit: true },
       { date: "2026-08-22", hit: false },
       { date: "2026-08-23", hit: false },
     ];
