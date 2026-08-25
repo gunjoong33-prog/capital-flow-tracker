@@ -20,13 +20,43 @@ const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
   news_quote: "은행",
 };
 
+// 13F 보유내역처럼 payload가 배열인 소스는 한 기관이 1000건 가까이 될 수 있어 그대로
+// JSON.stringify하면 Mistral 컨텍스트 윈도우를 넘긴다(최종 리뷰 지적). 배열 payload만
+// 상위 N건으로 자른다 — BIS·Finnhub·국내컨센서스 같은 단일 객체 payload는 원래 작아서 안 건드림.
+const MAX_ARRAY_PAYLOAD_ENTRIES = 20;
+
+function capArrayPayload(payload: unknown): { payload: unknown; truncated: boolean; totalCount: number } {
+  if (!Array.isArray(payload) || payload.length <= MAX_ARRAY_PAYLOAD_ENTRIES) return { payload, truncated: false, totalCount: 0 };
+
+  const totalCount = payload.length;
+  const first = payload[0];
+  // 정렬 기준 숫자 필드를 첫 항목에서 찾는다(13F holdings면 valueThousands) — 못 찾으면 원래 순서 유지.
+  const sortKey =
+    first && typeof first === "object"
+      ? Object.keys(first as Record<string, unknown>).find((k) => typeof (first as Record<string, unknown>)[k] === "number")
+      : undefined;
+  const ordered = sortKey
+    ? [...payload].sort((a, b) => (b as Record<string, number>)[sortKey] - (a as Record<string, number>)[sortKey])
+    : payload;
+  return { payload: ordered.slice(0, MAX_ARRAY_PAYLOAD_ENTRIES), truncated: true, totalCount };
+}
+
 export function buildDistillPrompt(sourceName: string, records: ConsensusRecord[]): string {
+  const truncationNotes: string[] = [];
+  const cappedRecords = records.map((r) => {
+    const { payload, truncated, totalCount } = capArrayPayload(r.payload);
+    if (truncated) {
+      truncationNotes.push(`(${r.sourceType} ${r.date.toISOString().slice(0, 10)}: 상위 ${MAX_ARRAY_PAYLOAD_ENTRIES}건만 표시, 전체 ${totalCount}건 중)`);
+    }
+    return { ...r, payload };
+  });
+
   return `너는 매크로 리서치 애널리스트다. 아래는 "${sourceName}"의 최근 공개 데이터다.
 이 데이터만 근거로, 이 기관이 어떤 지표를 어떤 논리로 해석해 어떤 결론에 도달했는지 한국어 3~5문장으로 요약해라.
 데이터에 없는 내용을 지어내지 마라. 존댓말 아닌 평서체로.
-
+${truncationNotes.length > 0 ? `\n${truncationNotes.join("\n")}\n` : ""}
 데이터:
-${JSON.stringify(records, null, 2)}`;
+${JSON.stringify(cappedRecords, null, 2)}`;
 }
 
 /** 최근 7일간 쌓인 ExternalConsensus를 sourceName별로 묶어 distill하고, DB 저장 + 옵시디언 커밋까지 한다. */

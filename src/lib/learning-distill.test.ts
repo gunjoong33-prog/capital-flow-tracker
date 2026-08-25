@@ -16,4 +16,30 @@ describe("buildDistillPrompt", () => {
     expect(prompt).toContain("Bridgewater Associates");
     expect(prompt).toContain("APPLE INC");
   });
+
+  it("배열 payload가 20건을 넘으면 valueThousands 기준 상위 20건만 포함하고 절단 안내를 남긴다", () => {
+    const holdings = Array.from({ length: 50 }, (_, i) => ({
+      nameOfIssuer: `COMPANY ${i}`,
+      valueThousands: i, // 0~49, 내림차순 정렬하면 49가 1등
+    }));
+
+    const prompt = buildDistillPrompt("Bridgewater Associates", [
+      { id: "test-id-1", sourceType: "13f", date: new Date("2026-08-14"), payload: holdings },
+    ]);
+
+    expect(prompt).toContain("상위 20건만 표시, 전체 50건 중");
+    expect(prompt).toContain("COMPANY 49"); // 최댓값 valueThousands=49는 살아남아야 함
+    expect(prompt).not.toContain("COMPANY 0\""); // 최솟값(valueThousands=0)은 잘려나가야 함
+  });
+
+  it("배열 payload가 20건 이하면 그대로 전부 포함하고 절단 안내를 남기지 않는다", () => {
+    const holdings = Array.from({ length: 5 }, (_, i) => ({ nameOfIssuer: `COMPANY ${i}`, valueThousands: i }));
+
+    const prompt = buildDistillPrompt("Bridgewater Associates", [
+      { id: "test-id-1", sourceType: "13f", date: new Date("2026-08-14"), payload: holdings },
+    ]);
+
+    expect(prompt).not.toContain("상위");
+    expect(prompt).toContain("COMPANY 4");
+  });
 });
