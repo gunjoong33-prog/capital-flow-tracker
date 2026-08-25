@@ -124,14 +124,25 @@ jobs:
           else
             PR_URL="${{ steps.draft_pr.outputs.pr_url }}"
           fi
-          curl -s -X POST \
+          # 상태코드를 확인 안 하면 401(시크릿 불일치)·404(잘못된 logId)·네트워크 오류가 조용히
+          # 묻혀서 AutoFixLog.deployed가 영영 false로 남는다(재리뷰 지적) — %{http_code}를 받아
+          # 2xx가 아니면 워크플로 자체를 실패시킨다(daily-report.yml의 기존 패턴과 동일).
+          status=$(curl -s -o /tmp/result_body.json -w "%{http_code}" -X POST \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg logId "$LOG_ID" --argjson testsPassed "$TESTS_PASSED" \
                   --argjson protectedFileTouched "$PROTECTED_TOUCHED" --argjson deployed "$DEPLOYED" \
                   --arg prUrl "$PR_URL" --arg attemptedFix "$ISSUE_DESCRIPTION" \
                   '{logId: $logId, testsPassed: $testsPassed, protectedFileTouched: $protectedFileTouched, deployed: $deployed, prUrl: (if $prUrl == "" then null else $prUrl end), attemptedFix: $attemptedFix}')" \
-            "https://capital-flow-tracker.vercel.app/api/cron/auto-fix-result"
+            "https://capital-flow-tracker.vercel.app/api/cron/auto-fix-result" || echo "000")
+          echo "AutoFixLog 결과보고: HTTP $status"
+          cat /tmp/result_body.json 2>/dev/null || true
+          case "$status" in
+            2??) ;;
+            401) echo "CRON_SECRET mismatch between GitHub secret and Vercel env" >&2; exit 1 ;;
+            404) echo "logId not found in AutoFixLog: $LOG_ID" >&2; exit 1 ;;
+            *) echo "auto-fix-result callback failed with HTTP $status" >&2; exit 1 ;;
+          esac
 
       - name: Discord 알림 — 결과 무관 항상 전송
         if: always()
