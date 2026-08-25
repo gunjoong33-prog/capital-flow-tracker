@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// narrative.ts는 이제 narrative-learning-context.ts(fetchRecentLearningContext)를 import하고,
+// 그 파일이 최상단에서 "@/lib/db"를 import한다 — db.ts는 DATABASE_URL이 process.env에 없으면
+// 즉시 throw한다(vitest는 .env를 자동 로드하지 않음). external-consensus.test.ts·
+// learning-distill.test.ts·self-diagnosis.test.ts와 동일한 방식으로 mock한다.
+vi.mock("@/lib/db", () => ({ db: {} }));
+
 import { buildDailyNarrativePrompt } from "./narrative";
 
 describe("buildDailyNarrativePrompt", () => {

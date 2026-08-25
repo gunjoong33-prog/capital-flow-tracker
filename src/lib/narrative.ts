@@ -5,7 +5,8 @@
 // 소진됐다 — Mistral(mistral-large-latest, 무료 Experiment 플랜)로 교체. 실측 비교에서 Groq의
 // Llama 3.3 70B는 한국어 응답에 한자·일본어 문자가 섞여 나와 제외했고, Mistral이 이 사이트가
 // 쓰는 분석적 한국어 문체를 가장 자연스럽게 생성했다(llm-clients.ts 주석 참고).
-import { callMistral } from "@/lib/llm-clients";
+import { callMistral, sleep } from "@/lib/llm-clients";
+import { fetchRecentLearningContext } from "@/lib/narrative-learning-context";
 
 /**
  * 생성한 해설을 스스로 재검토해 어려운 문장이면 한 번만 다시 쓴다(무한루프 방지로 1회 제한).
@@ -32,7 +33,29 @@ export async function generateNarrative(prompt: string, maxOutputTokens = 2048):
   if (!process.env.MISTRAL_API_KEY) {
     return "[해설 생성 안 됨 — MISTRAL_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
   }
-  const draft = await callMistral(prompt, maxOutputTokens, 0.4);
+
+  // buildDailyNarrativePrompt는 learningContext 파라미터를 받지만, 유일한 실제 호출부인
+  // pipeline.ts:351(보호 파일 — 이 브랜치에서 절대 수정 안 함)은 그 파라미터를 안 넘긴다.
+  // pipeline.ts를 안 건드리면서 LearningNote를 실제로 써먹으려면, generateNarrative가 이미
+  // 받은 prompt 문자열에 직접 참고자료를 덧붙이는 수밖에 없다 — 이러면 4개 호출부(pipeline.ts·
+  // comprehensive-report.ts·period-report.ts·debug/mistral) 전부에 자동 적용된다.
+  // DB 조회 실패는 "학습 컨텍스트 없이 진행"으로 조용히 넘어간다 — pipeline.ts가 이 함수 전체를
+  // try/catch로 감싸고 있어서(narrative = "[해설 생성 실패]"), 여기서 던지면 학습 컨텍스트 하나
+  // 때문에 해설 전체가 날아간다.
+  let learningContext: string | undefined;
+  try {
+    learningContext = await fetchRecentLearningContext();
+  } catch {
+    learningContext = undefined;
+  }
+  const fullPrompt = learningContext ? `${prompt}\n\n참고(축적된 전문가 해석 방법론):\n${learningContext}` : prompt;
+
+  const draft = await callMistral(fullPrompt, maxOutputTokens, 0.4);
+  // 자가검수 패스가 연달아 두 번째 Mistral 호출을 만든다 — 이 코드베이스의 기존 관례
+  // (pipeline.ts:356, llm-clients.ts 주석)대로 무료 티어 레이트리밋을 지키려면 연속 호출
+  // 사이에 간격을 둬야 한다(최종 리뷰 지적: generateNarrative 호출부가 4곳이라 이 간격
+  // 없이는 Mistral 호출량이 그냥 2배가 된다).
+  await sleep(20_000);
   return selfReviewForPlainLanguage(draft, maxOutputTokens);
 }
 
