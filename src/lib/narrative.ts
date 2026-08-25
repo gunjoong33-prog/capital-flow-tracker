@@ -7,35 +7,69 @@
 // 쓰는 분석적 한국어 문체를 가장 자연스럽게 생성했다(llm-clients.ts 주석 참고).
 import { callMistral } from "@/lib/llm-clients";
 
+/**
+ * 생성한 해설을 스스로 재검토해 어려운 문장이면 한 번만 다시 쓴다(무한루프 방지로 1회 제한).
+ * "비전공자가 읽어도 명쾌해야 한다"는 요구를 생성 프롬프트 지시만으로는 못 지키는 날이 있어서
+ * (LLM이 지시를 놓치는 경우) 별도 검수 패스를 둔다 — narrative.ts 자체가 서술 레이어라 안전.
+ */
+async function selfReviewForPlainLanguage(narrative: string): Promise<string> {
+  const reviewPrompt = `아래 글을 비전공자가 한 번 읽고 바로 이해할 수 있는지 검토해라.
+전문용어를 괄호로 풀이하는 방식이 아니라, 문장 구조 자체를 쉽게 바꿔야 한다.
+이미 충분히 쉬우면 그대로 반환하고, 어려운 부분이 있으면 그 부분만 쉬운 문장으로 다시 써서
+전체 글을 반환해라. 다른 설명 없이 최종 글만 출력해라.
+
+원문:
+${narrative}`;
+  try {
+    const reviewed = await callMistral(reviewPrompt, 2048, 0.3);
+    return reviewed.trim().length > 0 ? reviewed : narrative;
+  } catch {
+    return narrative; // 검수 실패해도 원문은 이미 있으니 그대로 쓴다(자가검수는 개선 시도일 뿐, 필수 경로 아님).
+  }
+}
+
 export async function generateNarrative(prompt: string, maxOutputTokens = 2048): Promise<string> {
   if (!process.env.MISTRAL_API_KEY) {
     return "[해설 생성 안 됨 — MISTRAL_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
   }
-  return callMistral(prompt, maxOutputTokens, 0.4);
+  const draft = await callMistral(prompt, maxOutputTokens, 0.4);
+  return selfReviewForPlainLanguage(draft);
 }
 
 /**
  * 오늘의 체크리스트 결과를 해설 프롬프트로 변환.
  * v2 프롬프트 원칙(모르면 모른다고 쓴다, 숫자는 링크로 확인한 값만) 그대로
  * — 해설도 계산된 값 밖의 내용을 지어내지 않도록 명시적으로 지시한다.
+ *
+ * 사용자 요구(2026-08-25 자기학습 프로젝트): "지표가 이래서 이랬다" 식 나열이 아니라
+ * 원인→결과→향후 자금흐름 전망의 인과관계로, 비전공자가 읽어도 명쾌한 쉬운 문장으로 쓴다.
+ * learningContext(선택)는 LearningNote에서 distill된 전문가 해석 방법론 — 있으면 프롬프트에 참고자료로 얹는다.
  */
-export function buildDailyNarrativePrompt(report: {
-  step1: unknown;
-  step2: unknown;
-  step3: unknown;
-  step4: unknown;
-  step5: unknown;
-  step6: unknown;
-  step7: unknown;
-  step8: unknown;
-}): string {
+export function buildDailyNarrativePrompt(
+  report: {
+    step1: unknown;
+    step2: unknown;
+    step3: unknown;
+    step4: unknown;
+    step5: unknown;
+    step6: unknown;
+    step7: unknown;
+    step8: unknown;
+  },
+  learningContext?: string
+): string {
   return `너는 매크로 자본흐름 애널리스트다. 아래는 오늘 계산된 체크리스트 결과(JSON)다.
 이 숫자·판정 결과만 근거로 3~5문장짜리 한국어 해설을 써라.
+
 규칙:
 - 결과 JSON에 없는 숫자나 사실을 지어내지 마라.
+- "지표가 이래서 이랬다" 식 나열이 아니라, 원인 → 결과 → 향후 자금 흐름 전망의 인과관계로 써라.
+  ("어떤 지표가 원인이 되어 이런 변화가 있었고, 앞으로 자금이 어디로 흘러갈 것으로 보인다"는 구조)
 - 결론(매수/지켜보기/현금비중늘리기)이 왜 나왔는지 핵심 근거 1~2개만 짚어라.
+- 비전공자가 한 번 읽고 바로 이해할 수 있도록 쉬운 문장으로 써라. 전문용어를 괄호로 풀이하지 말고,
+  문장 구조 자체를 쉽게 써라.
 - 과장하지 말고 담백하게 써라. 존댓말 아닌 평서체로.
-
+${learningContext ? `\n참고(전문가 해석 방법론):\n${learningContext}\n` : ""}
 결과 JSON:
 ${JSON.stringify(report, null, 2)}`;
 }
