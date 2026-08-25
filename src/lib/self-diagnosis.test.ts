@@ -39,6 +39,16 @@ describe("runSelfDiagnosis", () => {
     expect(result.issueDetected).toBe(false);
   });
 
+  it("같은 detectedIssue 문자열로 오늘 이미 AutoFixLog가 있으면 배포 상한과 무관하게 issueDetected는 false다", async () => {
+    // 첫 count 호출(배포 상한)은 0(상한 미도달), 두 번째 count 호출(같은 이슈 오늘 존재 여부)은 1.
+    vi.mocked(db.autoFixLog.count).mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+    const result = await runSelfDiagnosis();
+
+    expect(result.issueDetected).toBe(false);
+    expect(result.issueDescription).toBeNull();
+  });
+
   it("desc 정렬로 온 배열(최신이 먼저)에서 실제 최근 연속 실패를 정확히 감지한다(reverse 검증)", async () => {
     // findMany는 실제 쿼리(orderBy: date desc)와 동일하게 최신이 배열 맨 앞에 오도록 반환.
     // 가장 오래된 2건은 적중, 가장 최근 3건은 오적중 — reverse 없이 그대로 넘기면

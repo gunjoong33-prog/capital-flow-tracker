@@ -14,9 +14,10 @@ describe("touchesProtectedFile", () => {
     expect(touchesProtectedFile(["src/lib/narrative.ts", "src/lib/scoring/pure.ts"])).toBe(true);
   });
 
-  it("PROTECTED_FILES는 run.ts·pipeline.ts·pure.ts를 포함한다", () => {
+  it("PROTECTED_FILES는 run.ts·pipeline.ts·pure.ts·types.ts를 포함한다", () => {
     expect(PROTECTED_FILES).toContain("src/lib/scoring/run.ts");
     expect(PROTECTED_FILES).toContain("src/lib/pipeline.ts");
     expect(PROTECTED_FILES).toContain("src/lib/scoring/pure.ts");
+    expect(PROTECTED_FILES).toContain("src/lib/scoring/types.ts");
   });
 });

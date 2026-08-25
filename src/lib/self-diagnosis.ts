@@ -30,5 +30,17 @@ export async function runSelfDiagnosis(): Promise<{ issueDetected: boolean; issu
     return { issueDetected: false, issueDescription: null }; // 상한 도달 — 이상은 있지만 오늘은 더 안 건드림
   }
 
-  return { issueDetected: true, issueDescription: patterns.map((p) => p.detail).join("; ") };
+  const issueDescription = patterns.map((p) => p.detail).join("; ");
+
+  // 같은 이상이 오늘 이미 자동수정 시도 대상이었으면 다시 트리거하지 않는다 — 배포 상한(위 체크)은
+  // "오늘 이미 배포 성공"만 막아서, 며칠 연속으로 테스트/가드에 걸려 배포까지 못 간 실패 스트릭이면
+  // 같은 문자열의 detectedIssue로 매일 새 AutoFixLog가 쌓이고 매일 똑같은 "고치기" 시도가 반복된다.
+  const sameIssueToday = await db.autoFixLog.count({
+    where: { detectedIssue: issueDescription, createdAt: { gte: startOfTodayKst } },
+  });
+  if (sameIssueToday > 0) {
+    return { issueDetected: false, issueDescription: null };
+  }
+
+  return { issueDetected: true, issueDescription };
 }

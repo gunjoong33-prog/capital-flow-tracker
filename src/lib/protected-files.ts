@@ -8,6 +8,10 @@ export const PROTECTED_FILES: readonly string[] = [
   "src/lib/scoring/run.ts",
   "src/lib/pipeline.ts",
   "src/lib/scoring/pure.ts",
+  // pure.ts의 scoreStep1~8은 이 파일의 임계값 상수(NEWS_RISK_INTENSITY_THRESHOLD·VIX_OVERHEAT_BELOW·
+  // VIX_FEAR_ABOVE·FEAR_GREED_EXTREME_* 등)를 import해서 쓴다 — types.ts를 안 막으면 채점 로직
+  // 자체는 안 건드리고 이 상수만 바꿔서 채점 결과를 바꾸는 우회로가 열린다(최종 리뷰 지적).
+  "src/lib/scoring/types.ts",
 ];
 
 export function touchesProtectedFile(changedFiles: string[]): boolean {
