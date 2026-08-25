@@ -12,7 +12,7 @@ import { callMistral } from "@/lib/llm-clients";
  * "비전공자가 읽어도 명쾌해야 한다"는 요구를 생성 프롬프트 지시만으로는 못 지키는 날이 있어서
  * (LLM이 지시를 놓치는 경우) 별도 검수 패스를 둔다 — narrative.ts 자체가 서술 레이어라 안전.
  */
-async function selfReviewForPlainLanguage(narrative: string): Promise<string> {
+async function selfReviewForPlainLanguage(narrative: string, maxOutputTokens: number): Promise<string> {
   const reviewPrompt = `아래 글을 비전공자가 한 번 읽고 바로 이해할 수 있는지 검토해라.
 전문용어를 괄호로 풀이하는 방식이 아니라, 문장 구조 자체를 쉽게 바꿔야 한다.
 이미 충분히 쉬우면 그대로 반환하고, 어려운 부분이 있으면 그 부분만 쉬운 문장으로 다시 써서
@@ -21,7 +21,7 @@ async function selfReviewForPlainLanguage(narrative: string): Promise<string> {
 원문:
 ${narrative}`;
   try {
-    const reviewed = await callMistral(reviewPrompt, 2048, 0.3);
+    const reviewed = await callMistral(reviewPrompt, maxOutputTokens, 0.3);
     return reviewed.trim().length > 0 ? reviewed : narrative;
   } catch {
     return narrative; // 검수 실패해도 원문은 이미 있으니 그대로 쓴다(자가검수는 개선 시도일 뿐, 필수 경로 아님).
@@ -33,7 +33,7 @@ export async function generateNarrative(prompt: string, maxOutputTokens = 2048):
     return "[해설 생성 안 됨 — MISTRAL_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
   }
   const draft = await callMistral(prompt, maxOutputTokens, 0.4);
-  return selfReviewForPlainLanguage(draft);
+  return selfReviewForPlainLanguage(draft, maxOutputTokens);
 }
 
 /**
