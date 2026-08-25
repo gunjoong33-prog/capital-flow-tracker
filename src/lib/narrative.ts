@@ -48,7 +48,9 @@ export async function generateNarrative(prompt: string, maxOutputTokens = 2048):
   } catch {
     learningContext = undefined;
   }
-  const fullPrompt = learningContext ? `${prompt}\n\n참고(축적된 전문가 해석 방법론):\n${learningContext}` : prompt;
+  const fullPrompt = learningContext
+    ? `${prompt}\n\n참고(다른 기관들의 최근 해석 방법론 — 오늘의 사실로 인용하지 말고, 서술 방식의 참고 자료로만 써라):\n${learningContext}`
+    : prompt;
 
   const draft = await callMistral(fullPrompt, maxOutputTokens, 0.4);
   // 자가검수 패스가 연달아 두 번째 Mistral 호출을 만든다 — 이 코드베이스의 기존 관례
