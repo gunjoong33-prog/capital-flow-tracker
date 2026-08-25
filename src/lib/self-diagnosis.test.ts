@@ -51,15 +51,38 @@ describe("runSelfDiagnosis", () => {
       { date: new Date("2026-08-19"), marketDate: new Date("2026-08-19"), step8: { finalDecision: "매수" } },
     ] as never);
     const { computeVerdictOutcomes } = await import("@/lib/verdict-outcomes");
-    vi.mocked(computeVerdictOutcomes).mockResolvedValueOnce([
-      // computeVerdictOutcomes는 넘어온 순서를 그대로 유지 — self-diagnosis.ts가 reverse해서
-      // 넘기면 여기도 오름차순(오래된 것부터)으로 들어온다.
-      { date: "2026-08-19", marketDate: "2026-08-19", finalDecision: "매수", hitSp500: true, hitKospi: true, sp500ReturnPct: 1, kospiReturnPct: 1, sp500AnchorDate: null, kospiAnchorDate: null },
-      { date: "2026-08-20", marketDate: "2026-08-20", finalDecision: "매수", hitSp500: true, hitKospi: true, sp500ReturnPct: 1, kospiReturnPct: 1, sp500AnchorDate: null, kospiAnchorDate: null },
-      { date: "2026-08-21", marketDate: "2026-08-21", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-      { date: "2026-08-22", marketDate: "2026-08-22", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-      { date: "2026-08-23", marketDate: "2026-08-23", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
+    // mockResolvedValueOnce(고정값)로는 인자를 무시하고 항상 같은 결과를 반환하므로 reverse가
+    // 있든 없든 테스트가 똑같이 통과해 아무것도 증명하지 못한다. 대신 date -> hit 매핑을 두고,
+    // 넘어온 verdicts 배열의 "순서"는 그대로 유지한 채 각 원소에 hit만 채워 돌려준다.
+    // detectDivergence는 배열의 "끝"을 최근으로 보고 훑으므로: self-diagnosis.ts가 실제로
+    // reverse해서 오름차순(오래된 19~20일 적중 → 최근 21~23일 오적중)으로 넘겼을 때만 배열 끝에
+    // 오적중 3건이 와서 연속 실패가 잡힌다. reverse를 빼서 desc 그대로 넘기면 배열 끝에 19~20일
+    // (적중)이 와서 연속 실패를 못 잡고 issueDetected가 false로 뒤집힌다.
+    const hitByDate = new Map<string, boolean>([
+      ["2026-08-19", true],
+      ["2026-08-20", true],
+      ["2026-08-21", false],
+      ["2026-08-22", false],
+      ["2026-08-23", false],
     ]);
+    vi.mocked(computeVerdictOutcomes).mockImplementationOnce((verdicts) =>
+      Promise.resolve(
+        verdicts.map((v) => {
+          const hit = hitByDate.get(v.date) ?? null;
+          return {
+            date: v.date,
+            marketDate: v.marketDate,
+            finalDecision: v.finalDecision,
+            sp500ReturnPct: hit === null ? null : hit ? 1 : -1,
+            kospiReturnPct: hit === null ? null : hit ? 1 : -1,
+            hitSp500: hit,
+            hitKospi: hit,
+            sp500AnchorDate: null,
+            kospiAnchorDate: null,
+          };
+        })
+      )
+    );
 
     const result = await runSelfDiagnosis();
 
