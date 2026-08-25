@@ -11,6 +11,9 @@ name: Auto Fix
 # 공식 액션이 CLI 설치·버전 고정·인증 입력(claude_code_oauth_token)을 대신 처리해주는 현재 권장
 # 경로였다. --allowedTools/--permission-mode 플래그명 자체는 재확인해도 계획서와 동일했다(둘 다
 # 2026-08 CLI 문서 기준 유효).
+#
+# CRON_SECRET은 daily-report.yml 등 이 리포지토리의 다른 워크플로가 이미 쓰는 기존 GitHub
+# secret이다 — /api/cron/auto-fix-result 호출도 이 값을 그대로 재사용한다(신규 secret 아님).
 on:
   repository_dispatch:
     types: [auto-fix-request]
@@ -23,8 +26,19 @@ jobs:
       pull-requests: write
       # anthropics/claude-code-action의 기본 GitHub App 인증에 필요(공식 문서 명시 요구사항).
       id-token: write
+    env:
+      # client_payload는 repository_dispatch 토큰을 가진 누구든 채울 수 있는 값이라, run: 셸
+      # 블록에 ${{ }}로 직접 문자열 보간하면 따옴표·백틱·개행으로 임의 명령을 주입할 수 있다
+      # (최종 리뷰 지적). 셸에는 항상 이 env 변수를 거쳐서 "$ISSUE_DESCRIPTION"/"$LOG_ID" 형태로만
+      # 넣는다 — 셸이 값을 문자열로만 다루고 재해석하지 않는다.
+      ISSUE_DESCRIPTION: ${{ github.event.client_payload.issueDescription }}
+      LOG_ID: ${{ github.event.client_payload.logId }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 기본값(depth 1, 얕은 클론)이면 이후 master로의 --no-ff 머지·푸시가 히스토리 부족으로
+          # 실패한다(최종 리뷰 지적) — 전체 히스토리를 가져온다.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,7 +46,7 @@ jobs:
       - run: npm ci
 
       - name: 진단 대상 이슈로 브랜치 생성
-        run: git checkout -b auto-fix/${{ github.event.client_payload.logId }}
+        run: git checkout -b "auto-fix/$LOG_ID"
 
       - name: Claude Code 헤드리스 실행 — 진단→수정 시도
         # ANTHROPIC_API_KEY가 아니라 CLAUDE_CODE_OAUTH_TOKEN을 쓴다 — API 키는 Pro 구독과 무관한
@@ -46,7 +60,7 @@ jobs:
           prompt: |
             다음 이상이 자가진단에서 감지됐다: ${{ github.event.client_payload.issueDescription }}
             원인을 찾아 최소한의 수정을 하라. 다음 파일은 절대 건드리지 마라(회귀 위험 때문에 스코프 제외됨):
-            src/lib/scoring/run.ts, src/lib/pipeline.ts, src/lib/scoring/pure.ts
+            src/lib/scoring/run.ts, src/lib/pipeline.ts, src/lib/scoring/pure.ts, src/lib/scoring/types.ts
             수정 후 npm test와 npx tsc --noEmit을 직접 실행해 통과를 확인하라.
           claude_args: |
             --allowedTools "Read,Edit,Grep,Glob,Bash(npm test),Bash(npm test *),Bash(npx tsc --noEmit),Bash(npx tsc *)"
@@ -56,8 +70,10 @@ jobs:
       - name: 보호 파일 가드
         id: guard
         run: |
-          CHANGED=$(git diff --name-only master)
-          npx tsx scripts/check-protected-files.ts $CHANGED
+          # git diff --name-only의 각 줄을 배열 원소로 읽어(mapfile) "${CHANGED[@]}"로 개별
+          # 인자 전개한다 — $CHANGED 그대로 넘기면 공백 포함 파일명이 여러 인자로 쪼개진다(최종 리뷰 지적).
+          mapfile -t CHANGED < <(git diff --name-only master)
+          npx tsx scripts/check-protected-files.ts "${CHANGED[@]}"
 
       - name: 테스트 + 타입체크
         id: verify
@@ -71,32 +87,62 @@ jobs:
           git config user.name "capital-flow-tracker-autofix"
           git config user.email "autofix@users.noreply.github.com"
           git add -A
-          git commit -m "fix(auto): ${{ github.event.client_payload.issueDescription }}" || echo "변경 없음"
+          git commit -m "fix(auto): $ISSUE_DESCRIPTION" || echo "변경 없음"
           git checkout master
-          git merge --no-ff auto-fix/${{ github.event.client_payload.logId }} -m "merge: 자동수정 ${{ github.event.client_payload.logId }}"
+          git merge --no-ff "auto-fix/$LOG_ID" -m "merge: 자동수정 $LOG_ID"
           git push origin master
 
       - name: 실패 — draft PR로만 남김
+        id: draft_pr
         if: failure()
         run: |
           git config user.name "capital-flow-tracker-autofix"
           git config user.email "autofix@users.noreply.github.com"
           git add -A
-          git commit -m "fix(auto, 검증 실패): ${{ github.event.client_payload.issueDescription }}" || echo "변경 없음"
-          git push origin auto-fix/${{ github.event.client_payload.logId }}
-          gh pr create --draft --title "자동수정 시도(검증 실패, 사람 확인 필요): ${{ github.event.client_payload.issueDescription }}" \
-            --body "자가진단이 이상을 발견해 자동수정을 시도했지만 테스트/타입체크 또는 보호파일 가드를 통과하지 못했습니다. 로그: ${{ github.event.client_payload.logId }}"
+          git commit -m "fix(auto, 검증 실패): $ISSUE_DESCRIPTION" || echo "변경 없음"
+          git push origin "auto-fix/$LOG_ID"
+          PR_URL=$(gh pr create --draft --title "자동수정 시도(검증 실패, 사람 확인 필요): $ISSUE_DESCRIPTION" \
+            --body "자가진단이 이상을 발견해 자동수정을 시도했지만 테스트/타입체크 또는 보호파일 가드를 통과하지 못했습니다. 로그: $LOG_ID")
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 결과 보고 — AutoFixLog 업데이트
+        # 성공/실패 어느 경로든 항상 실행 — AutoFixLog는 self-diagnosis 크론이 생성만 하고
+        # 아무도 업데이트를 안 해서(최종 리뷰 지적) 하루 자동배포 상한(deployed: true 카운트)이
+        # 죽은 코드였다. 이 스텝이 그 유일한 업데이트 경로다.
+        if: always()
+        run: |
+          TESTS_PASSED=false
+          if [ "${{ steps.verify.outcome }}" = "success" ]; then TESTS_PASSED=true; fi
+          PROTECTED_TOUCHED=false
+          if [ "${{ steps.guard.outcome }}" = "failure" ]; then PROTECTED_TOUCHED=true; fi
+          DEPLOYED=false
+          PR_URL=""
+          if [ "${{ job.status }}" = "success" ]; then
+            DEPLOYED=true
+          else
+            PR_URL="${{ steps.draft_pr.outputs.pr_url }}"
+          fi
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg logId "$LOG_ID" --argjson testsPassed "$TESTS_PASSED" \
+                  --argjson protectedFileTouched "$PROTECTED_TOUCHED" --argjson deployed "$DEPLOYED" \
+                  --arg prUrl "$PR_URL" --arg attemptedFix "$ISSUE_DESCRIPTION" \
+                  '{logId: $logId, testsPassed: $testsPassed, protectedFileTouched: $protectedFileTouched, deployed: $deployed, prUrl: (if $prUrl == "" then null else $prUrl end), attemptedFix: $attemptedFix}')" \
+            "https://capital-flow-tracker.vercel.app/api/cron/auto-fix-result"
 
       - name: Discord 알림 — 결과 무관 항상 전송
         if: always()
         run: |
+          # jq -n으로 JSON을 구성해 issueDescription 안의 따옴표·개행이 있어도 안전하게 이스케이프한다
+          # (최종 리뷰 지적 — 예전엔 손으로 만든 "{\"content\": \"$MSG\"}" 문자열이라 따옴표 하나로도 깨졌다).
           if [ "${{ job.status }}" = "success" ]; then
-            MSG="✅ 자동수정 성공·배포됨: ${{ github.event.client_payload.issueDescription }}"
+            MSG="✅ 자동수정 성공·배포됨: $ISSUE_DESCRIPTION"
           else
-            MSG="⚠️ 자동수정 시도 실패(사람 확인 필요, draft PR 생성됨): ${{ github.event.client_payload.issueDescription }}"
+            MSG="⚠️ 자동수정 시도 실패(사람 확인 필요, draft PR 생성됨): $ISSUE_DESCRIPTION"
           fi
           curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"content\": \"$MSG\"}" \
+            -d "$(jq -n --arg msg "$MSG" '{content: $msg}')" \
             "${{ secrets.DISCORD_WEBHOOK_URL }}"
