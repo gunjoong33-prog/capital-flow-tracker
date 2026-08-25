@@ -6,6 +6,7 @@ export function checkDirectionConsistency(
   direction: "up" | "down" | "flat" | undefined
 ): boolean {
   if (changePct1d === null || direction === undefined || direction === "flat") return true;
+  // 0.05%p 이하는 사실상 보합이라 up/down 어느 쪽으로 판정해도 모순으로 볼 실익이 없다.
   if (Math.abs(changePct1d) <= 0.05) return true;
   if (direction === "up" && changePct1d < 0) return false;
   if (direction === "down" && changePct1d > 0) return false;
