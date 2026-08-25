@@ -10,9 +10,9 @@ export const maxDuration = 30;
 const GITHUB_OWNER = "gunjoong33-prog";
 const GITHUB_REPO = "capital-flow-tracker";
 
-async function triggerAutoFixWorkflow(issueDescription: string, logId: string): Promise<void> {
+async function triggerAutoFixWorkflow(issueDescription: string, logId: string): Promise<boolean> {
   const token = process.env.GITHUB_EXPORT_TOKEN!;
-  await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/dispatches`, {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/dispatches`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -22,6 +22,10 @@ async function triggerAutoFixWorkflow(issueDescription: string, logId: string): 
     },
     body: JSON.stringify({ event_type: "auto-fix-request", client_payload: { issueDescription, logId } }),
   });
+  if (!response.ok) {
+    await sendHealthCheckAlert(`자가진단 이상 발견했지만 GitHub 자동수정 트리거 요청 실패(HTTP ${response.status}): ${issueDescription}`);
+  }
+  return response.ok;
 }
 
 export async function GET(request: Request) {
@@ -43,6 +47,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ issueDetected: true, autoFixTriggered: false });
   }
 
-  await triggerAutoFixWorkflow(issueDescription, log.id);
-  return NextResponse.json({ issueDetected: true, autoFixTriggered: true, logId: log.id });
+  const triggered = await triggerAutoFixWorkflow(issueDescription, log.id);
+  return NextResponse.json({ issueDetected: true, autoFixTriggered: triggered, logId: log.id });
 }
