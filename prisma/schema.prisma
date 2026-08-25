@@ -127,3 +127,42 @@ model MajorEvent {
   @@unique([date, name])
   @@index([date])
 }
+
+// 외부 공식 자료(SEC 13F·BIS·국내 증권사 컨센서스·Finnhub·뉴스 인용) 원본 저장.
+// sourceType별로 payload 구조가 다르므로 Json으로 보관 — 각 소스 모듈의 반환 타입을 그대로 직렬화한다.
+model ExternalConsensus {
+  id         String   @id @default(cuid())
+  sourceType String   // "13f" | "bis" | "domestic_broker" | "finnhub" | "news_quote"
+  sourceName String   // 기관명(예: "Bridgewater Associates", "NH투자증권")
+  date       DateTime @db.Date
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  @@index([sourceType, date])
+}
+
+// distill된 해석 방법론 — 옵시디언 "학습" 폴더로 그대로 내보내진다(Task 6).
+model LearningNote {
+  id         String   @id @default(cuid())
+  category   String   // "증권사" | "헤지펀드" | "은행"
+  sourceName String
+  summary    String   // 한국어 서술 — 지표 해석 방법·사고 과정 요약
+  basedOn    Json      // 근거가 된 ExternalConsensus id 배열
+  createdAt  DateTime @default(now())
+
+  @@index([category, sourceName])
+}
+
+// 자가진단이 발견한 이상과 자동수정 시도 이력 — 성공/실패 무관하게 전부 남긴다(감사 로그).
+model AutoFixLog {
+  id                   String   @id @default(cuid())
+  detectedIssue        String
+  attemptedFix         String?
+  testsPassed          Boolean?
+  protectedFileTouched Boolean?
+  deployed             Boolean  @default(false)
+  prUrl                String?
+  createdAt            DateTime @default(now())
+
+  @@index([createdAt])
+}
