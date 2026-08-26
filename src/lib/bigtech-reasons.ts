@@ -14,31 +14,9 @@ async function change1dFor(ticker: string, asOf: Date): Promise<number | null> {
   return prev.value !== 0 ? ((curr.value - prev.value) / prev.value) * 100 : null;
 }
 
-async function judgeBigTechReasons(
-  changes: { ticker: string; changePct1d: number | null }[],
-  headlinesByTicker: Record<string, Headline[]>
-): Promise<Record<string, string>> {
-  if (!process.env.GROQ_API_KEY) return {};
-
-  const sections = changes
-    .map(({ ticker, changePct1d }) => {
-      const label = BIG_TECH_LABELS[ticker] ?? ticker;
-      const changeStr = changePct1d !== null ? `${changePct1d >= 0 ? "+" : ""}${changePct1d.toFixed(2)}%` : "확인 못함";
-      const heads = headlinesByTicker[ticker] ?? [];
-      // 발행일을 같이 보여준다 — 예전엔 제목만 줘서, "지난 6월 JPMorgan이 목표주가를 상향했다"처럼
-      // 옛 사건을 회고 언급만 하는 최신 기사를 오늘의 등락 원인으로 잘못 지목한 사례가 실제로
-      // 있었다(테슬라 상승 원인을 두 달 전 애널리스트 리포트로 서술). 기사 발행일과 기사가 다루는
-      // 사건 시점이 다를 수 있다는 걸 프롬프트에서 명시적으로 경고한다.
-      const list =
-        heads.length > 0
-          ? heads.map((h, i) => `  ${i + 1}. [발행: ${h.publishedAt ?? "날짜 확인 안 됨"}] ${h.title}`).join("\n")
-          : "  (관련 뉴스 없음)";
-      return `${ticker}(${label}) 전일 대비 ${changeStr}\n${list}`;
-    })
-    .join("\n\n");
-
-  const prompt = `너는 주식 시장 분석가다. 아래는 오늘 미국 빅테크 종목들의 전일 대비 등락률과 관련 뉴스 헤드라인(발행일 포함)이다.
-각 종목마다 오늘 등락의 원인을 헤드라인 근거로 한국어 1문장으로 요약해라.
+function buildPrompt(section: string): string {
+  return `너는 주식 시장 분석가다. 아래는 오늘 미국 빅테크 종목의 전일 대비 등락률과 관련 뉴스 헤드라인(발행일 포함)이다.
+오늘 등락의 원인을 헤드라인 근거로 한국어 1문장으로 요약해라.
 문장은 반드시 존댓말(합쇼체, "~습니다"/"~했습니다"체)로 끝내라 — "~다", "~았다/었다" 같은 평서체는 쓰지 마라.
 헤드라인에 등락 원인이 될 만한 내용이 없으면 반드시 "명확한 원인 확인 안 됨"이라고만 써라 — 뉴스에 없는 원인을 지어내지 마라.
 
@@ -55,29 +33,64 @@ async function judgeBigTechReasons(
 업계·거시 통계라는 점을 그대로 드러내라. 통계 하락이 타이밍 효과(예: 행사 시기 이동) 때문이라고
 기사에 나와 있으면 그 설명도 반드시 포함해라. ***
 
-각 항목에 대해 아래 JSON 배열 형식으로만 답해라. 다른 텍스트는 쓰지 마라. direction은 원인이 주가를
+아래 JSON 배열 형식(원소 1개)으로만 답해라. 다른 텍스트는 쓰지 마라. direction은 원인이 주가를
 "올리는 방향"이면 "up", "내리는 방향"이면 "down", 방향성이 없거나 중립적 영향이면 "flat":
 [{"ticker": "AAPL", "reason": "한국어 1문장", "direction": "up"}]
 
-종목 목록:
-${sections}`;
+종목:
+${section}`;
+}
 
-  // gpt-oss-120b는 내부적으로 thinking 모델이라 reasoning_effort를 낮춰(low) 답변 예산을
-  // 추론에 뺏기지 않게 한다 — 헤드라인·등락률을 보고 1문장 요약하는 단순 판단이라 깊은 추론이
-  // 필요 없다("none"은 이 모델이 거부해서 최소값인 "low"를 쓴다).
-  // maxTokens는 4096→8192로 상향(2026-08-22) — "low"로 낮춰도 thinking 모델은 내부 추론에 토큰을
-  // 일부 쓰고 남은 예산으로 7종목치 JSON을 완성해야 하는데, 예산이 빠듯한 날은 배열이 중간에 잘려
-  // extractJsonArray가 파싱 실패하는 사례가 실제로 있었다(8/17·8/20 리포트에서 7종목이 한꺼번에
-  // "명확한 원인 확인 안 됨"으로 뜬 원인 — 개별 판정 7건이 아니라 그날 응답 전체가 깨진 것).
-  const text = await callGroq(prompt, { maxTokens: 8192, reasoningEffort: "low" });
-  const parsed = extractJsonArray<{ ticker: string; reason: string; direction?: "up" | "down" | "flat" }>(text);
-  // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 7종목이 한꺼번에 "명확한 원인 확인 안 됨"으로
-  // 뜨는데도 sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가
-  // 깨진 것을 화면에서 구분할 수 없었음) — 던져서 호출부(computeBigTechReasons)의 try/catch가
-  // errors 배열에 남기게 한다.
-  if (!parsed) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(응답 앞부분: ${text.slice(0, 300)})`);
+/**
+ * 종목별로 한 번씩 Groq를 호출한다(예전엔 7종목을 한 프롬프트에 묶어 하루 1회만 호출했으나,
+ * 2026-08-24·25 리포트에서 매일 100% 재현되는 413 "Request too large ... tokens per minute
+ * (TPM): Limit 8000"으로 실패했다 — 8/22에 늘린 maxTokens(8192)와 헤드라인 개수(6개, 종목당)가
+ * 겹치며 프롬프트+maxTokens 합이 항상 이 조직의 gpt-oss-120b 분당 토큰 한도를 넘게 된 것.
+ * 단일 요청 크기 자체가 문제라 재시도로는 못 고친다(429 재시도 로직과 달리 413은 매번 똑같이
+ * 실패). 종목당 프롬프트+maxTokens를 한도 밖으로 훨씬 작게 유지하는 게 유일하게 안정적인 해결책 —
+ * 부수 효과로 한 종목 호출이 실패해도 나머지 6개는 살아남아, "7종목이 한꺼번에 원인 확인 안 됨"
+ * 으로 뜨던 반복 장애 패턴 자체가 사라진다. */
+async function judgeBigTechReasons(
+  changes: { ticker: string; changePct1d: number | null }[],
+  headlinesByTicker: Record<string, Headline[]>
+): Promise<{ reasons: Record<string, string>; errors: string[] }> {
+  if (!process.env.GROQ_API_KEY) return { reasons: {}, errors: [] };
 
-  return buildConsistentReasons(parsed, changes);
+  const errors: string[] = [];
+  const parsed: { ticker: string; reason: string; direction?: "up" | "down" | "flat" }[] = [];
+
+  for (const { ticker, changePct1d } of changes) {
+    const label = BIG_TECH_LABELS[ticker] ?? ticker;
+    const changeStr = changePct1d !== null ? `${changePct1d >= 0 ? "+" : ""}${changePct1d.toFixed(2)}%` : "확인 못함";
+    const heads = headlinesByTicker[ticker] ?? [];
+    // 발행일을 같이 보여준다 — 예전엔 제목만 줘서, "지난 6월 JPMorgan이 목표주가를 상향했다"처럼
+    // 옛 사건을 회고 언급만 하는 최신 기사를 오늘의 등락 원인으로 잘못 지목한 사례가 실제로
+    // 있었다(테슬라 상승 원인을 두 달 전 애널리스트 리포트로 서술). 기사 발행일과 기사가 다루는
+    // 사건 시점이 다를 수 있다는 걸 프롬프트에서 명시적으로 경고한다.
+    const list =
+      heads.length > 0
+        ? heads.map((h, i) => `  ${i + 1}. [발행: ${h.publishedAt ?? "날짜 확인 안 됨"}] ${h.title}`).join("\n")
+        : "  (관련 뉴스 없음)";
+    const prompt = buildPrompt(`${ticker}(${label}) 전일 대비 ${changeStr}\n${list}`);
+
+    try {
+      // gpt-oss-120b는 내부적으로 thinking 모델이라 reasoning_effort를 낮춰(low) 답변 예산을
+      // 추론에 뺏기지 않게 한다("none"은 이 모델이 거부해서 최소값인 "low"를 쓴다). 종목 1개치
+      // 판정이라 8/22에 7종목 배치용으로 올렸던 8192는 필요 없다 — 2048이면 프롬프트(종목 1개+
+      // 헤드라인 최대 6개, 약 400~600토큰)를 더해도 TPM 한도(8000)에 전혀 근접하지 않는다.
+      const text = await callGroq(prompt, { maxTokens: 2048, reasoningEffort: "low" });
+      const items = extractJsonArray<{ ticker: string; reason: string; direction?: "up" | "down" | "flat" }>(text);
+      // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 종목이 "명확한 원인 확인 안 됨"으로 뜨는데도
+      // sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가 깨진
+      // 것을 화면에서 구분할 수 없었음) — errors 배열에 남겨 호출부가 기록하게 한다.
+      if (!items) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(${ticker}, 응답 앞부분: ${text.slice(0, 300)})`);
+      parsed.push(...items);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return { reasons: buildConsistentReasons(parsed, changes), errors };
 }
 
 /**
@@ -100,12 +113,8 @@ export async function computeBigTechReasons(
   const { byTicker, errors: fetchErrors } = await fetchBigTechHeadlines(asOf);
   errors.push(...fetchErrors);
 
-  let reasons: Record<string, string> = {};
-  try {
-    reasons = await judgeBigTechReasons(changes, byTicker);
-  } catch (err) {
-    errors.push(err instanceof Error ? err.message : String(err));
-  }
+  const { reasons, errors: judgeErrors } = await judgeBigTechReasons(changes, byTicker);
+  errors.push(...judgeErrors);
 
   return { reasons, errors };
 }

@@ -78,9 +78,11 @@ export async function callGroq(
     });
 
   let res = await request();
-  // 분당 토큰 한도(TPM)에 걸리면 Groq가 정확한 재시도 대기시간을 응답에 알려준다 — 그만큼만 기다렸다가
-  // 한 번 재시도한다(무한 재시도는 안 하고, 그래도 실패하면 진짜 에러로 처리).
-  if (res.status === 429) {
+  // 분당 토큰 한도(TPM)는 롤링 윈도우라, 짧은 시간에 여러 건을 연달아 호출하면(예: bigtech-reasons.ts가
+  // 종목 7개를 순차 호출) 한 번 대기해도 그 사이 다른 호출이 쓴 토큰 때문에 재시도가 또 429에 걸릴 수
+  // 있다(실측: 7건 중 1건이 1차 재시도 후에도 또 걸림) — 최대 3번까지, 매번 Groq가 알려주는 정확한
+  // 대기시간만큼만 기다렸다가 재시도한다(무한 재시도는 안 하고, 그래도 실패하면 진짜 에러로 처리).
+  for (let attempt = 0; attempt < 3 && res.status === 429; attempt++) {
     const waitSec = Math.min(parseRetryAfterSeconds(res, await res.text(), 5), 30);
     await sleep(Math.ceil(waitSec * 1000) + 500);
     res = await request();
