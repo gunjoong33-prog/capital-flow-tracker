@@ -3,16 +3,49 @@
   font-weight: 700;
   margin-bottom: 0.75rem;
 }
-.lead {
-  color: var(--ink-dim);
-  line-height: 1.7;
+.explainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
   max-width: 48rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.explainerRow {
+  display: flex;
+  gap: 0.9rem;
+  align-items: baseline;
+}
+.explainerTag {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.35rem;
+  white-space: nowrap;
+}
+.explainerText {
+  color: var(--ink-dim);
+  line-height: 1.75;
+  margin: 0;
 }
 .caveat {
-  color: var(--ink-faint);
-  font-size: 0.8rem;
-  margin-bottom: 1.5rem;
+  color: var(--ink-dim);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  max-width: 48rem;
+  margin-bottom: 1.75rem;
+  padding: 0.7rem 1rem;
+  background: color-mix(in srgb, var(--ink-faint) 12%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
 }
 
 .summaryRow {
@@ -32,6 +65,11 @@
   font-size: 0.78rem;
   color: var(--ink-faint);
   margin-bottom: 0.35rem;
+}
+.summaryBody {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
 }
 .summaryValue {
   font-size: 1.4rem;

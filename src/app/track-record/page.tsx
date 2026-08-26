@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DecisionBadge } from "@/components/ScoreBadge";
+import { HitRateDonut, HitTrendStrip } from "@/components/TrackRecordGraphs";
 import {
   computeVerdictOutcomes,
   hitStats,
@@ -8,6 +9,7 @@ import {
   NEUTRAL_BAND_PCT,
 } from "@/lib/verdict-outcomes";
 import type { Step8Result } from "@/lib/scoring/types";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import siteStyles from "@/styles/site.module.css";
 import styles from "./page.module.css";
 
@@ -45,15 +47,18 @@ function StatCard({
       {stats === null ? (
         <div className={styles.summaryValue}>채점 가능한 표본 없음</div>
       ) : (
-        <>
-          <div className={styles.summaryValue}>
-            {stats.hits}/{stats.graded}
-            <span className={styles.summaryPct}>{stats.pct}%</span>
+        <div className={styles.summaryBody}>
+          <HitRateDonut pct={stats.pct} />
+          <div>
+            <div className={styles.summaryValue}>
+              {stats.hits}/{stats.graded}
+              <span className={styles.summaryPct}>{stats.pct}%</span>
+            </div>
+            <div className={styles.summaryContext}>
+              오차범위 {stats.ciLowPct}~{stats.ciHighPct}% · 동전 던지기 50%
+            </div>
           </div>
-          <div className={styles.summaryContext}>
-            오차범위 {stats.ciLowPct}~{stats.ciHighPct}% · 동전 던지기 50%
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -85,22 +90,32 @@ export default async function TrackRecordPage() {
   });
 
   return (
-    <div className={siteStyles.page}>
+    <div className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}>
       <SiteHeader current="track-record" />
       <div className={siteStyles.wrap} style={{ paddingTop: "1.5rem", paddingBottom: "3rem" }}>
         <h1 className={styles.title}>적중률(트랙레코드)</h1>
-        <p className={styles.lead}>
-          매일의 최종 결론(매수/지켜보기/현금비중늘리기)을 <strong>리포트가 다룬 미국장 거래일의 다음
-          거래일 종가</strong>부터 {GRADING_LAG_TRADING_DAYS}거래일 뒤 종가와 코드가 자동으로 대조해
-          채점합니다. 리포트는 기준 거래일 종가가 나온 뒤 발행되므로, 독자가 실제로 체결할 수 있는
-          최초 가격에서 기산합니다. LLM이 스스로 &ldquo;적중&rdquo;을 판단하지 않습니다.
-        </p>
-        <p className={styles.lead}>
-          &ldquo;매수&rdquo;는 +{NEUTRAL_BAND_PCT}% 초과 상승, &ldquo;현금비중늘리기&rdquo;는 −
-          {NEUTRAL_BAND_PCT}% 초과 하락, &ldquo;지켜보기&rdquo;는 ±{NEUTRAL_BAND_PCT}% 이내일 때
-          적중입니다. 세 결론 모두 ±{NEUTRAL_BAND_PCT}% 안쪽 움직임은 <strong>사실상 보합</strong>으로
-          보고 적중으로 세지 않습니다.
-        </p>
+
+        <div className={styles.explainer}>
+          <div className={styles.explainerRow}>
+            <span className={styles.explainerTag}>채점 방식</span>
+            <p className={styles.explainerText}>
+              매일의 최종 결론(매수/지켜보기/현금비중늘리기)을 <strong>리포트가 다룬 미국장 거래일의
+              다음 거래일 종가</strong>부터 {GRADING_LAG_TRADING_DAYS}거래일 뒤 종가와 코드가 자동으로
+              대조해 채점합니다. 리포트는 기준 거래일 종가가 나온 뒤 발행되므로, 독자가 실제로 체결할
+              수 있는 최초 가격에서 기산합니다. LLM이 스스로 &ldquo;적중&rdquo;을 판단하지 않습니다.
+            </p>
+          </div>
+          <div className={styles.explainerRow}>
+            <span className={styles.explainerTag}>적중 기준</span>
+            <p className={styles.explainerText}>
+              &ldquo;매수&rdquo;는 +{NEUTRAL_BAND_PCT}% 초과 상승, &ldquo;현금비중늘리기&rdquo;는 −
+              {NEUTRAL_BAND_PCT}% 초과 하락, &ldquo;지켜보기&rdquo;는 ±{NEUTRAL_BAND_PCT}% 이내일 때
+              적중입니다. 세 결론 모두 ±{NEUTRAL_BAND_PCT}% 안쪽 움직임은 <strong>사실상 보합</strong>으로
+              보고 적중으로 세지 않습니다.
+            </p>
+          </div>
+        </div>
+
         <p className={styles.caveat}>
           ⚠ 2026년 7월 27일 운영 시작이라 표본이 아직 적습니다. 아래 오차범위가 50%(동전 던지기)를
           포함하면 통계적으로 &ldquo;좋다/나쁘다&rdquo;를 말할 수 없는 구간입니다. 기준 시각 {asOfLabel} KST.
@@ -109,6 +124,10 @@ export default async function TrackRecordPage() {
         <div className={styles.summaryRow}>
           <StatCard label="S&P500 대비 적중" stats={spStats} />
           <StatCard label="코스피 대비 적중" stats={koStats} />
+        </div>
+
+        <div className="mb-6">
+          <HitTrendStrip outcomes={outcomes} />
         </div>
 
         <div className={styles.tableWrap}>
