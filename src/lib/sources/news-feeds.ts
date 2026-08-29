@@ -29,7 +29,7 @@ export function decodeXmlEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-function extractTag(block: string, tag: string): string | null {
+export function extractTag(block: string, tag: string): string | null {
   const cdataMatch = block.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>`, "i"));
   if (cdataMatch) return decodeXmlEntities(cdataMatch[1].trim());
   const plainMatch = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
