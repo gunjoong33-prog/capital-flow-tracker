@@ -92,27 +92,44 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
 
   const githubToken = process.env.GITHUB_EXPORT_TOKEN;
 
-  for (const [sourceName, sourceRecords] of bySource) {
-    let summary: string;
-    try {
-      summary = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
-    } catch (e) {
-      errors.push(`Mistral distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
-      continue;
-    }
+  // institutional-research.ts(2026-09-01)가 기관당 원문 하나하나에 별도 sourceName을 매겨
+  // 그룹 수가 5개 안팎에서 20개 이상으로 늘었다 — 순차 처리(1건씩 대기)로는 Mistral 호출만
+  // 20건 넘게 이어져 함수 시간제한(맨 아래 route의 maxDuration)을 넘긴다(실측: 504 타임아웃).
+  // mistral-small은 초당 요청 한도가 있어 무제한 병렬은 429를 유발하므로, CONCURRENCY만큼만
+  // 동시에 처리하는 배치 방식으로 총 대기시간을 줄인다.
+  const CONCURRENCY = 3;
+  const entries = [...bySource.entries()];
 
-    const category = CATEGORY_BY_SOURCE_TYPE[sourceRecords[0].sourceType] ?? "증권사";
+  for (let i = 0; i < entries.length; i += CONCURRENCY) {
+    const batch = entries.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async ([sourceName, sourceRecords]) => {
+        try {
+          const summary = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
+          return { sourceName, sourceRecords, summary };
+        } catch (e) {
+          errors.push(`Mistral distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
+          return null;
+        }
+      })
+    );
 
-    const note = await db.learningNote.create({
-      data: { category, sourceName, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
-    });
-    saved++;
+    for (const result of results) {
+      if (!result) continue;
+      const { sourceName, sourceRecords, summary } = result;
+      const category = CATEGORY_BY_SOURCE_TYPE[sourceRecords[0].sourceType] ?? "증권사";
 
-    if (githubToken) {
-      const repoPath = `obsidian-export/학습/${category}/${sourceName}.md`;
-      const content = `# ${sourceName}\n\n**분류**: ${category}\n**최종 업데이트**: ${note.createdAt.toISOString().slice(0, 10)}\n\n${summary}\n`;
-      const { status, detail } = await upsertObsidianFile(repoPath, content, githubToken);
-      if (status === "error") errors.push(`옵시디언 커밋 실패(${sourceName}): ${detail ?? "알 수 없는 오류"}`);
+      const note = await db.learningNote.create({
+        data: { category, sourceName, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
+      });
+      saved++;
+
+      if (githubToken) {
+        const repoPath = `obsidian-export/학습/${category}/${sourceName}.md`;
+        const content = `# ${sourceName}\n\n**분류**: ${category}\n**최종 업데이트**: ${note.createdAt.toISOString().slice(0, 10)}\n\n${summary}\n`;
+        const { status, detail } = await upsertObsidianFile(repoPath, content, githubToken);
+        if (status === "error") errors.push(`옵시디언 커밋 실패(${sourceName}): ${detail ?? "알 수 없는 오류"}`);
+      }
     }
   }
 
