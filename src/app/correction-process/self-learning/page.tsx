@@ -77,10 +77,15 @@ export default async function SelfLearningPage() {
                 소개 페이지에 공개한 기관 리서치 출처(네이버금융·SEC·연준·ECB·World Bank·PIMCO·BlackRock 등)를 정기적으로
                 수집합니다.
               </span>
+              <span>모은 자료를 LLM으로 다시 읽혀, 각 기관의 다음 세 가지를 학습 노트로 남깁니다.</span>
               <span>
-                모은 자료를 LLM으로 다시 읽혀 각 기관이 <strong>① 어떤 지표를 근거로 쓰는지(지표 수집 방법)</strong>,{" "}
-                <strong>② 그 지표를 어떤 논리로 해석해 결론에 도달하는지(사고 과정)</strong>,{" "}
-                <strong>③ 결론을 어떤 형식·어조로 전달하는지(보고 방식)</strong> 세 가지를 요약해 학습 노트로 남깁니다.
+                <strong>① 어떤 지표를 근거로 쓰는지(지표 수집 방법)</strong>
+              </span>
+              <span>
+                <strong>② 그 지표를 어떤 논리로 해석해 결론에 도달하는지(사고 과정)</strong>
+              </span>
+              <span>
+                <strong>③ 결론을 어떤 형식·어조로 전달하는지(보고 방식)</strong>
               </span>
               <span>이 학습 노트는 매일의 리포트를 서술하는 프롬프트에 참고자료로 함께 들어갑니다.</span>
               <span>이 페이지는 세 단계(수집 · 증류 · 적용)가 실제로 어디까지 진행됐고, 무엇이 부족한지를 있는 그대로 보여줍니다.</span>
