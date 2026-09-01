@@ -40,6 +40,17 @@ const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
   blackrock: "자산운용사",
 };
 
+// LearningNote.periodKey에 쓰는 ISO 8601 주차 키(예: "2026-W36") — 마이그레이션의 백필 SQL
+// (TO_CHAR(..., 'IYYY"-W"IW'))과 반드시 같은 결과를 내야 한다(목요일 기준 ISO 주차 계산).
+function isoWeekKey(d: Date): string {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7; // 월=1 ... 일=7
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum); // 이번 ISO 주의 목요일로 이동
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
 // 13F 보유내역처럼 payload가 배열인 소스는 한 기관이 1000건 가까이 될 수 있어 그대로
 // JSON.stringify하면 Mistral 컨텍스트 윈도우를 넘긴다(최종 리뷰 지적). 배열 payload만
 // 상위 N건으로 자른다 — BIS·Finnhub·국내컨센서스 같은 단일 객체 payload는 원래 작아서 안 건드림.
@@ -101,6 +112,9 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
   }
 
   const githubToken = process.env.GITHUB_EXPORT_TOKEN;
+  // 이번 실행 전체가 같은 주차 키를 쓴다 — 같은 주 안에서 몇 번을 재실행해도(수동 재실행,
+  // 겹치는 크론 등) sourceName당 행이 하나로 upsert된다(2026-09-01, 근중복 11건 정리 후 추가).
+  const periodKey = isoWeekKey(new Date());
 
   // institutional-research.ts(2026-09-01)가 기관당 원문 하나하나에 별도 sourceName을 매겨
   // 그룹 수가 5개 안팎에서 20개 이상으로 늘었다 — 순차 처리(1건씩 대기)로는 Mistral 호출만
@@ -129,8 +143,10 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
       const { sourceName, sourceRecords, summary } = result;
       const category = CATEGORY_BY_SOURCE_TYPE[sourceRecords[0].sourceType] ?? "증권사";
 
-      const note = await db.learningNote.create({
-        data: { category, sourceName, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
+      const note = await db.learningNote.upsert({
+        where: { sourceName_periodKey: { sourceName, periodKey } },
+        create: { category, sourceName, periodKey, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
+        update: { category, summary, basedOn: asJson(sourceRecords.map((r) => r.id)) },
       });
       saved++;
 
