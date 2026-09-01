@@ -80,8 +80,11 @@ export default async function CorrectionProcessPage() {
         {logs.length === 0 ? (
           <div className={styles.empty}>
             <span>아직 기록된 수정 시도가 없습니다.</span>
-            <span>자가진단은 매일 09:45(KST) 정상적으로 실행되고 있지만, 자동배포가 꺼져 있어(위 상태 참고) 이상이 발견돼도 이 로그에는 남지 않고 Discord 알림으로만 전달됩니다.</span>
-            <span>자동배포를 켜면 그때부터 이 페이지에 실제 진단·수정 이력이 쌓입니다.</span>
+            {autoFixEnabled ? (
+              <span>자가진단은 매일 09:45(KST) 실행되고, 이상이 발견되면 자동수정을 시도합니다 — 아직 이상이 감지된 적이 없습니다.</span>
+            ) : (
+              <span>자가진단은 매일 09:45(KST) 정상적으로 실행되고 있지만, 자동배포가 꺼져 있어(위 상태 참고) 이상이 발견돼도 이 로그에는 남지 않고 Discord 알림으로만 전달됩니다.</span>
+            )}
           </div>
         ) : (
           <div className={styles.timeline}>
