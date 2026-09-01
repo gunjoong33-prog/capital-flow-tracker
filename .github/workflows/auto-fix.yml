@@ -81,8 +81,29 @@ jobs:
           npm test
           npx tsc --noEmit
 
+      - name: 변경 범위 크기 확인
+        id: size
+        # 테스트를 통과했다고 "작은 버그 수정"이라는 보장은 없다 — 몇백 줄짜리 변경도 우연히
+        # 테스트를 다 통과할 수 있다. 사람 검토 없이 자동배포되는 범위는 작은 수정으로만
+        # 한정하고, 그보다 큰 변경은 테스트를 통과해도 draft PR로만 남긴다(자동배포 활성화
+        # 논의 중 추가된 안전장치 — self-diagnosis-pure.ts 통계 기준 강화와 짝을 이룬다).
+        if: always()
+        run: |
+          STAT=$(git diff --shortstat master -- . ':(exclude)package-lock.json' || echo "")
+          echo "diff stat: $STAT"
+          CHANGED=$(echo "$STAT" | grep -oE '[0-9]+ (insertion|deletion)' | grep -oE '[0-9]+' | awk '{sum+=$1} END {print sum+0}')
+          echo "changed_lines=$CHANGED" >> "$GITHUB_OUTPUT"
+          LIMIT=50
+          if [ "$CHANGED" -gt "$LIMIT" ]; then
+            echo "too_large=true" >> "$GITHUB_OUTPUT"
+            echo "변경 줄 수 $CHANGED > $LIMIT — 자동배포 범위 초과"
+          else
+            echo "too_large=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 통과 — master에 병합·배포
-        if: success()
+        id: deploy
+        if: success() && steps.size.outputs.too_large == 'false'
         run: |
           git config user.name "capital-flow-tracker-autofix"
           git config user.email "autofix@users.noreply.github.com"
@@ -92,17 +113,21 @@ jobs:
           git merge --no-ff "auto-fix/$LOG_ID" -m "merge: 자동수정 $LOG_ID"
           git push origin master
 
-      - name: 실패 — draft PR로만 남김
+      - name: 실패 또는 변경 범위 초과 — draft PR로만 남김
         id: draft_pr
-        if: failure()
+        if: failure() || steps.size.outputs.too_large == 'true'
         run: |
           git config user.name "capital-flow-tracker-autofix"
           git config user.email "autofix@users.noreply.github.com"
           git add -A
-          git commit -m "fix(auto, 검증 실패): $ISSUE_DESCRIPTION" || echo "변경 없음"
+          git commit -m "fix(auto, 검증 실패 또는 변경 범위 초과): $ISSUE_DESCRIPTION" || echo "변경 없음"
           git push origin "auto-fix/$LOG_ID"
-          PR_URL=$(gh pr create --draft --title "자동수정 시도(검증 실패, 사람 확인 필요): $ISSUE_DESCRIPTION" \
-            --body "자가진단이 이상을 발견해 자동수정을 시도했지만 테스트/타입체크 또는 보호파일 가드를 통과하지 못했습니다. 로그: $LOG_ID")
+          REASON="테스트/타입체크 또는 보호파일 가드를 통과하지 못했습니다"
+          if [ "${{ steps.size.outputs.too_large }}" = "true" ]; then
+            REASON="검증은 통과했지만 변경 범위(${{ steps.size.outputs.changed_lines }}줄)가 자동배포 한도를 넘었습니다"
+          fi
+          PR_URL=$(gh pr create --draft --title "자동수정 시도(사람 확인 필요): $ISSUE_DESCRIPTION" \
+            --body "자가진단이 이상을 발견해 자동수정을 시도했지만 $REASON. 로그: $LOG_ID")
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -119,7 +144,10 @@ jobs:
           if [ "${{ steps.guard.outcome }}" = "failure" ]; then PROTECTED_TOUCHED=true; fi
           DEPLOYED=false
           PR_URL=""
-          if [ "${{ job.status }}" = "success" ]; then
+          # job.status는 "실패한 스텝이 있었나"만 보므로, 검증은 통과했지만 변경 범위가 커서
+          # 배포 스텝 자체가 조건부로 건너뛰어진(skipped) 경우도 success로 잡혀 "배포됨"이라고
+          # 잘못 보고할 뻔했다 — 배포 스텝의 실제 outcome으로 판단한다.
+          if [ "${{ steps.deploy.outcome }}" = "success" ]; then
             DEPLOYED=true
           else
             PR_URL="${{ steps.draft_pr.outputs.pr_url }}"
@@ -149,8 +177,10 @@ jobs:
         run: |
           # jq -n으로 JSON을 구성해 issueDescription 안의 따옴표·개행이 있어도 안전하게 이스케이프한다
           # (최종 리뷰 지적 — 예전엔 손으로 만든 "{\"content\": \"$MSG\"}" 문자열이라 따옴표 하나로도 깨졌다).
-          if [ "${{ job.status }}" = "success" ]; then
+          if [ "${{ steps.deploy.outcome }}" = "success" ]; then
             MSG="✅ 자동수정 성공·배포됨: $ISSUE_DESCRIPTION"
+          elif [ "${{ steps.size.outputs.too_large }}" = "true" ]; then
+            MSG="⚠️ 자동수정 시도했으나 변경 범위 초과로 배포 보류(사람 확인 필요, draft PR 생성됨): $ISSUE_DESCRIPTION"
           else
             MSG="⚠️ 자동수정 시도 실패(사람 확인 필요, draft PR 생성됨): $ISSUE_DESCRIPTION"
           fi

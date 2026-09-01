@@ -1,34 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
 
+// 8건(MIN_SAMPLE) 이상, 실제 쿼리(orderBy: date desc)와 같은 최신순 — 전부 오적중이라
+// 어떤 순서로 들어와도(reverse 여부와 무관하게) 신뢰구간 상한이 50% 밑으로 떨어진다.
+// 예전 버전(3연속 실패 기준)은 배열의 "끝"이 최근인지 여부에 트리거가 갈렸지만, 지금은
+// 표본 전체의 적중률로 판단하므로 순서 자체가 정답을 좌우하지 않는다 — self-diagnosis.ts의
+// reverse()는 이제 트리거 정확성이 아니라 detail 메시지의 날짜 범위 표기 순서를 위한 것이다.
+// vi.mock 팩토리는 파일 맨 위로 호이스팅되므로, 참조할 데이터는 vi.hoisted()로 같이 끌어올린다.
+const { DESC_MOCK_REPORTS } = vi.hoisted(() => ({
+  DESC_MOCK_REPORTS: Array.from({ length: 8 }, (_, i) => ({
+    date: new Date(`2026-08-${23 - i}`),
+    marketDate: new Date(`2026-08-${23 - i}`),
+    step8: { finalDecision: "매수" },
+  })),
+}));
+
 vi.mock("@/lib/db", () => ({
   db: {
     autoFixLog: { count: vi.fn().mockResolvedValue(0) },
-    dailyReport: { findMany: vi.fn().mockResolvedValue([
-      { date: new Date("2026-08-20"), marketDate: new Date("2026-08-20"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-21"), marketDate: new Date("2026-08-21"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-22"), marketDate: new Date("2026-08-22"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-23"), marketDate: new Date("2026-08-23"), step8: { finalDecision: "매수" } },
-    ]) },
+    dailyReport: { findMany: vi.fn().mockResolvedValue(DESC_MOCK_REPORTS) },
   },
 }));
 vi.mock("@/lib/verdict-outcomes", () => ({
-  computeVerdictOutcomes: vi.fn().mockResolvedValue([
-    { date: "2026-08-20", marketDate: "2026-08-20", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-    { date: "2026-08-21", marketDate: "2026-08-21", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-    { date: "2026-08-22", marketDate: "2026-08-22", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-    { date: "2026-08-23", marketDate: "2026-08-23", finalDecision: "매수", hitSp500: false, hitKospi: false, sp500ReturnPct: -1, kospiReturnPct: -1, sp500AnchorDate: null, kospiAnchorDate: null },
-  ]),
+  computeVerdictOutcomes: vi.fn().mockImplementation((verdicts: { date: string }[]) =>
+    Promise.resolve(
+      verdicts.map((v) => ({
+        date: v.date,
+        marketDate: v.date,
+        finalDecision: "매수",
+        hitSp500: false,
+        hitKospi: false,
+        sp500ReturnPct: -1,
+        kospiReturnPct: -1,
+        sp500AnchorDate: null,
+        kospiAnchorDate: null,
+      }))
+    )
+  ),
 }));
 
 import { runSelfDiagnosis } from "./self-diagnosis";
 import { db } from "@/lib/db";
 
 describe("runSelfDiagnosis", () => {
-  it("연속 오적중 패턴이 있으면 이상 발견으로 보고한다", async () => {
+  it("표본 8건 이상이 통계적으로 유의하게 저조하면 이상 발견으로 보고한다", async () => {
     const result = await runSelfDiagnosis();
 
     expect(result.issueDetected).toBe(true);
-    expect(result.issueDescription).toContain("연속");
+    expect(result.issueDescription).toContain("적중");
   });
 
   it("오늘 이미 자동배포 1건이 있으면 이상이 있어도 issueDetected는 false로 보고한다(상한 가드)", async () => {
@@ -47,56 +65,5 @@ describe("runSelfDiagnosis", () => {
 
     expect(result.issueDetected).toBe(false);
     expect(result.issueDescription).toBeNull();
-  });
-
-  it("desc 정렬로 온 배열(최신이 먼저)에서 실제 최근 연속 실패를 정확히 감지한다(reverse 검증)", async () => {
-    // findMany는 실제 쿼리(orderBy: date desc)와 동일하게 최신이 배열 맨 앞에 오도록 반환.
-    // 가장 오래된 2건은 적중, 가장 최근 3건은 오적중 — reverse 없이 그대로 넘기면
-    // detectDivergence가 거꾸로 훑어서 이 최근 연속 실패를 못 잡는다.
-    vi.mocked(db.dailyReport.findMany).mockResolvedValueOnce([
-      { date: new Date("2026-08-23"), marketDate: new Date("2026-08-23"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-22"), marketDate: new Date("2026-08-22"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-21"), marketDate: new Date("2026-08-21"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-20"), marketDate: new Date("2026-08-20"), step8: { finalDecision: "매수" } },
-      { date: new Date("2026-08-19"), marketDate: new Date("2026-08-19"), step8: { finalDecision: "매수" } },
-    ] as never);
-    const { computeVerdictOutcomes } = await import("@/lib/verdict-outcomes");
-    // mockResolvedValueOnce(고정값)로는 인자를 무시하고 항상 같은 결과를 반환하므로 reverse가
-    // 있든 없든 테스트가 똑같이 통과해 아무것도 증명하지 못한다. 대신 date -> hit 매핑을 두고,
-    // 넘어온 verdicts 배열의 "순서"는 그대로 유지한 채 각 원소에 hit만 채워 돌려준다.
-    // detectDivergence는 배열의 "끝"을 최근으로 보고 훑으므로: self-diagnosis.ts가 실제로
-    // reverse해서 오름차순(오래된 19~20일 적중 → 최근 21~23일 오적중)으로 넘겼을 때만 배열 끝에
-    // 오적중 3건이 와서 연속 실패가 잡힌다. reverse를 빼서 desc 그대로 넘기면 배열 끝에 19~20일
-    // (적중)이 와서 연속 실패를 못 잡고 issueDetected가 false로 뒤집힌다.
-    const hitByDate = new Map<string, boolean>([
-      ["2026-08-19", true],
-      ["2026-08-20", true],
-      ["2026-08-21", false],
-      ["2026-08-22", false],
-      ["2026-08-23", false],
-    ]);
-    vi.mocked(computeVerdictOutcomes).mockImplementationOnce((verdicts) =>
-      Promise.resolve(
-        verdicts.map((v) => {
-          const hit = hitByDate.get(v.date) ?? null;
-          return {
-            date: v.date,
-            marketDate: v.marketDate,
-            finalDecision: v.finalDecision,
-            sp500ReturnPct: hit === null ? null : hit ? 1 : -1,
-            kospiReturnPct: hit === null ? null : hit ? 1 : -1,
-            hitSp500: hit,
-            hitKospi: hit,
-            sp500AnchorDate: null,
-            kospiAnchorDate: null,
-          };
-        })
-      )
-    );
-
-    const result = await runSelfDiagnosis();
-
-    expect(result.issueDetected).toBe(true);
-    expect(result.issueDescription).toContain("연속");
   });
 });
