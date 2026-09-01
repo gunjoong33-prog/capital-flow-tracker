@@ -18,6 +18,16 @@ const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
   domestic_broker: "증권사",
   finnhub: "증권사",
   news_quote: "은행",
+  // institutional-research.ts(2026-09-01 추가)가 쌓는 7개 신규 소스 — 매핑이 없으면 전부
+  // "증권사"로 뭉뚱그려지는데, Fed·ECB는 은행이 아니라 중앙은행, World Bank는 증권사가 아니라
+  // 국제기구라 옵시디언 학습 폴더 분류(학습/{category}/{sourceName}.md)가 부정확해진다.
+  naver_research: "증권사",
+  sec_8k: "기업공시",
+  fed: "중앙은행",
+  ecb: "중앙은행",
+  world_bank: "국제기구",
+  pimco: "자산운용사",
+  blackrock: "자산운용사",
 };
 
 // 13F 보유내역처럼 payload가 배열인 소스는 한 기관이 1000건 가까이 될 수 있어 그대로
@@ -52,7 +62,10 @@ export function buildDistillPrompt(sourceName: string, records: ConsensusRecord[
   });
 
   return `너는 매크로 리서치 애널리스트다. 아래는 "${sourceName}"의 최근 공개 데이터다.
-이 데이터만 근거로, 이 기관이 어떤 지표를 어떤 논리로 해석해 어떤 결론에 도달했는지 한국어 3~5문장으로 요약해라.
+이 데이터만 근거로 다음 세 가지를 한국어 3~5문장으로 요약해라 — 이 기관이 ① 어떤 지표를 근거로
+쓰는지(지표 수집 방법), ② 그 지표를 어떤 논리로 해석해 어떤 결론에 도달하는지(사고 과정),
+③ 결론을 어떤 형식·어조로 전달하는지(보고 방식 — 예: 수치를 먼저 제시하는지 서술을 먼저 하는지,
+확정적으로 단언하는지 조건부로 표현하는지, 몇 개 시나리오로 나누는지 등).
 데이터에 없는 내용을 지어내지 마라. 존댓말 아닌 평서체로.
 ${truncationNotes.length > 0 ? `\n${truncationNotes.join("\n")}\n` : ""}
 데이터:
