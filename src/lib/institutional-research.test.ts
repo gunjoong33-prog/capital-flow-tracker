@@ -29,19 +29,34 @@ vi.mock("@/lib/sources/pimco", () => ({
 vi.mock("@/lib/sources/blackrock", () => ({
   fetchBlackrockCommentary: vi.fn().mockResolvedValue({ commentary: { title: "Weekly: x", url: "https://blackrock.com/x" }, errors: [] }),
 }));
+vi.mock("@/lib/sources/bis-quarterly-review", () => ({
+  fetchBisQuarterlyReview: vi.fn().mockResolvedValue({ articles: [{ title: "BIS QR article", url: "https://bis.org/x", publishedAt: "15 Jun 2026" }], errors: [] }),
+}));
+vi.mock("@/lib/sources/bok-economic-outlook", () => ({
+  fetchBokEconomicOutlook: vi.fn().mockResolvedValue({ report: { title: "경제전망보고서(2026년 8월)", url: "https://bok.or.kr/x.pdf" }, errors: [] }),
+}));
+vi.mock("@/lib/sources/kcmi-report", () => ({
+  fetchKcmiReports: vi.fn().mockResolvedValue({ reports: [{ title: "KCMI report", url: "https://kcmi.re.kr/x.pdf", publishedAt: "2026.08.26", subject: "거시금융" }], errors: [] }),
+}));
+vi.mock("@/lib/sources/jpm-guide-to-markets", () => ({
+  fetchJpmGuideToMarkets: vi.fn().mockResolvedValue({ guide: { title: "JPM Guide", url: "https://jpm.com/x.pdf", lastModified: "Thu, 02 Jul 2026" }, errors: [] }),
+}));
+vi.mock("@/lib/sources/miraeasset-research", () => ({
+  fetchMiraeassetResearch: vi.fn().mockResolvedValue({ items: [{ title: "Mirae report", url: "https://miraeasset.com/x.pdf", date: "20260901" }], errors: [] }),
+}));
 
 import { collectInstitutionalResearch, buildInstitutionalResearchMarkdown, collectAndExportInstitutionalResearch } from "./institutional-research";
 import { db } from "@/lib/db";
 import { upsertObsidianFile } from "@/lib/obsidian-export";
 
 describe("collectInstitutionalResearch", () => {
-  it("7개 소스를 전부 조회해 DB에 저장하고 항목 목록을 반환한다", async () => {
+  it("12개 소스를 전부 조회해 DB에 저장하고 항목 목록을 반환한다", async () => {
     const { saved, items, errors } = await collectInstitutionalResearch();
 
     expect(errors).toEqual([]);
-    expect(saved).toBe(7);
-    expect(items).toHaveLength(7);
-    expect(db.externalConsensus.upsert).toHaveBeenCalledTimes(7);
+    expect(saved).toBe(12);
+    expect(items).toHaveLength(12);
+    expect(db.externalConsensus.upsert).toHaveBeenCalledTimes(12);
   });
 });
 
@@ -71,7 +86,7 @@ describe("collectAndExportInstitutionalResearch", () => {
 
     const { saved, errors } = await collectAndExportInstitutionalResearch();
 
-    expect(saved).toBe(7);
+    expect(saved).toBe(12);
     expect(errors).toEqual([]);
     expect(upsertObsidianFile).toHaveBeenCalledWith(
       expect.stringContaining("obsidian-export/학습/기관 리서치/"),
@@ -88,7 +103,7 @@ describe("collectAndExportInstitutionalResearch", () => {
 
     const { saved } = await collectAndExportInstitutionalResearch();
 
-    expect(saved).toBe(7);
+    expect(saved).toBe(12);
     expect(upsertObsidianFile).not.toHaveBeenCalled();
   });
 });

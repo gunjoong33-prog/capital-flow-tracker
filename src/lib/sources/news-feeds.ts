@@ -22,6 +22,9 @@ export interface Headline {
 
 export function decodeXmlEntities(text: string): string {
   return text
+    // 숫자 문자 참조(예: BIS 사이트의 &#039; 아포스트로피)는 명명된 참조보다 먼저 풀어야 한다 —
+    // bis-quarterly-review.ts가 이 함수를 재사용하며 처음 필요해짐(2026-09).
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')

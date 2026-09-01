@@ -38,6 +38,13 @@ const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
   world_bank: "국제기구",
   pimco: "자산운용사",
   blackrock: "자산운용사",
+  // 2026-09-02(보류 기관 6곳 중 5곳 재조사 후 연동) — 기존 bis(SDMX 수치 데이터, "은행"으로 분류됨)
+  // 와는 다른 소스라 bis_qr로 분리.
+  bis_qr: "국제기구",
+  bok_report: "중앙은행",
+  kcmi_report: "공적연구기관",
+  jpm_am: "자산운용사",
+  miraeasset_research: "증권사",
 };
 
 // LearningNote.periodKey에 쓰는 ISO 8601 주차 키(예: "2026-W36") — 마이그레이션의 백필 SQL

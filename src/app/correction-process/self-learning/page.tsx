@@ -26,6 +26,11 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
   world_bank: "World Bank",
   pimco: "PIMCO",
   blackrock: "BlackRock",
+  bis_qr: "BIS Quarterly Review",
+  bok_report: "한국은행",
+  kcmi_report: "자본시장연구원",
+  jpm_am: "JPMorgan Asset Management",
+  miraeasset_research: "미래에셋증권",
 };
 
 function fmtDate(d: Date | null | undefined) {

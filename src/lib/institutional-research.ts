@@ -1,4 +1,5 @@
-// 기관 리서치 원문 7개 소스(네이버·SEC·연준·ECB·World Bank·PIMCO·BlackRock)를 모아 저장하고
+// 기관 리서치 원문 12개 소스(네이버·SEC·연준·ECB·World Bank·PIMCO·BlackRock·BIS Quarterly
+// Review·한국은행·자본시장연구원·JPMorgan AM·미래에셋증권)를 모아 저장하고
 // 옵시디언에 내보내는 오케스트레이션. external-consensus.ts와 같은 원칙 — 모든 소스 모듈이
 // 던지지 않고 errors를 반환하므로 이 계층에서 하나로 합친다.
 //
@@ -18,6 +19,11 @@ import { fetchEcbPublications } from "@/lib/sources/ecb-publications";
 import { fetchWorldBankReports } from "@/lib/sources/world-bank";
 import { fetchPimcoOutlooks } from "@/lib/sources/pimco";
 import { fetchBlackrockCommentary } from "@/lib/sources/blackrock";
+import { fetchBisQuarterlyReview } from "@/lib/sources/bis-quarterly-review";
+import { fetchBokEconomicOutlook } from "@/lib/sources/bok-economic-outlook";
+import { fetchKcmiReports } from "@/lib/sources/kcmi-report";
+import { fetchJpmGuideToMarkets } from "@/lib/sources/jpm-guide-to-markets";
+import { fetchMiraeassetResearch } from "@/lib/sources/miraeasset-research";
 import { upsertObsidianFile } from "@/lib/obsidian-export";
 
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
@@ -77,6 +83,38 @@ export async function collectInstitutionalResearch(): Promise<{ saved: number; i
     items.push({ sourceType: "blackrock", sourceName: "weekly-commentary", title: blackrock.commentary.title, url: blackrock.commentary.url });
   }
 
+  // 2026-09-02: 보류돼 있던 기관 6곳 중 5곳을 재조사해 실제 연동(IMF는 robots.txt가 유일한 발견
+  // 경로를 막아 스킵 — sources/ 폴더 대신 여기 주석에 기록).
+  const bisQr = await fetchBisQuarterlyReview(5);
+  errors.push(...bisQr.errors);
+  for (const a of bisQr.articles) {
+    items.push({ sourceType: "bis_qr", sourceName: a.url, title: a.title, url: a.url, extra: a.publishedAt ?? undefined });
+  }
+
+  const bok = await fetchBokEconomicOutlook();
+  errors.push(...bok.errors);
+  if (bok.report) {
+    items.push({ sourceType: "bok_report", sourceName: bok.report.title, title: bok.report.title, url: bok.report.url });
+  }
+
+  const kcmi = await fetchKcmiReports(4);
+  errors.push(...kcmi.errors);
+  for (const r of kcmi.reports) {
+    items.push({ sourceType: "kcmi_report", sourceName: r.url, title: r.title, url: r.url, extra: r.subject });
+  }
+
+  const jpm = await fetchJpmGuideToMarkets();
+  errors.push(...jpm.errors);
+  if (jpm.guide) {
+    items.push({ sourceType: "jpm_am", sourceName: "guide-to-the-markets", title: jpm.guide.title, url: jpm.guide.url, extra: jpm.guide.lastModified ?? undefined });
+  }
+
+  const miraeasset = await fetchMiraeassetResearch(10);
+  errors.push(...miraeasset.errors);
+  for (const r of miraeasset.items) {
+    items.push({ sourceType: "miraeasset_research", sourceName: r.url, title: r.title, url: r.url, extra: r.date });
+  }
+
   let saved = 0;
   for (const item of items) {
     await db.externalConsensus.upsert({
@@ -98,6 +136,11 @@ const SOURCE_LABEL: Record<string, string> = {
   world_bank: "World Bank",
   pimco: "PIMCO",
   blackrock: "BlackRock",
+  bis_qr: "BIS Quarterly Review",
+  bok_report: "한국은행",
+  kcmi_report: "자본시장연구원",
+  jpm_am: "JPMorgan Asset Management",
+  miraeasset_research: "미래에셋증권",
 };
 
 export function buildInstitutionalResearchMarkdown(dateStr: string, items: CollectedItem[]): string {
