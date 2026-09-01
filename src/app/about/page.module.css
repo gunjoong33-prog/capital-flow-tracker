@@ -28,6 +28,11 @@
   color: var(--ink-dim);
   line-height: 1.7;
 }
+.sentences {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
 .prose strong {
   color: var(--ink);
 }

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { SiteHeader } from "@/components/SiteHeader";
+import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import siteStyles from "@/styles/site.module.css";
 import styles from "./page.module.css";
 
@@ -37,7 +38,7 @@ export default async function CorrectionProcessPage() {
   });
 
   return (
-    <div className={siteStyles.page}>
+    <div className={`${siteStyles.page} ${ibmPlexMono.variable} ${mrsSaintDelafield.variable}`}>
       <SiteHeader current="correction-process" />
       <div className={siteStyles.wrap} style={{ paddingTop: "1.5rem", paddingBottom: "3rem" }}>
         <h1 className={styles.title}>수정과정</h1>
@@ -46,11 +47,13 @@ export default async function CorrectionProcessPage() {
           <div className={styles.explainerRow}>
             <span className={styles.explainerTag}>작동 방식</span>
             <p className={styles.explainerText}>
-              매일 자가진단 파이프라인이 최근 예측 결과에서 이상 패턴(연속 오적중 등)이 있는지
-              점검합니다. 이상이 발견되면 GitHub Actions에서 Claude Code가 헤드리스로 원인을
-              진단하고 수정을 시도합니다 — 테스트를 통과하고 채점 로직 등 보호 파일을 건드리지
-              않았을 때만 자동으로 master에 배포되고, 그렇지 않으면 사람이 검토할 초안 PR만
-              만들어집니다. 이 페이지는 그 시도 이력을 성공·실패 구분 없이 전부 기록합니다.
+              <span>매일 자가진단 파이프라인이 최근 예측 결과에서 이상 패턴(연속 오적중 등)이 있는지 점검합니다.</span>
+              <span>
+                이상이 발견되면 GitHub Actions에서 Claude Code가 헤드리스로 원인을 진단하고 수정을
+                시도합니다 — 테스트를 통과하고 채점 로직 등 보호 파일을 건드리지 않았을 때만
+                자동으로 master에 배포되고, 그렇지 않으면 사람이 검토할 초안 PR만 만들어집니다.
+              </span>
+              <span>이 페이지는 그 시도 이력을 성공·실패 구분 없이 전부 기록합니다.</span>
             </p>
           </div>
         </div>
@@ -76,10 +79,9 @@ export default async function CorrectionProcessPage() {
 
         {logs.length === 0 ? (
           <div className={styles.empty}>
-            아직 기록된 수정 시도가 없습니다. 자가진단은 매일 09:45(KST) 정상적으로 실행되고
-            있지만, 자동배포가 꺼져 있어(위 상태 참고) 이상이 발견돼도 이 로그에는 남지 않고
-            Discord 알림으로만 전달됩니다. 자동배포를 켜면 그때부터 이 페이지에 실제 진단·수정
-            이력이 쌓입니다.
+            <span>아직 기록된 수정 시도가 없습니다.</span>
+            <span>자가진단은 매일 09:45(KST) 정상적으로 실행되고 있지만, 자동배포가 꺼져 있어(위 상태 참고) 이상이 발견돼도 이 로그에는 남지 않고 Discord 알림으로만 전달됩니다.</span>
+            <span>자동배포를 켜면 그때부터 이 페이지에 실제 진단·수정 이력이 쌓입니다.</span>
           </div>
         ) : (
           <div className={styles.timeline}>
