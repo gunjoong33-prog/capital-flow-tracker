@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
@@ -42,6 +43,13 @@ export default async function CorrectionProcessPage() {
       <SiteHeader current="correction-process" />
       <div className={siteStyles.wrap} style={{ paddingTop: "1.5rem", paddingBottom: "3rem" }}>
         <h1 className={styles.title}>수정과정</h1>
+
+        <nav className={styles.subNav}>
+          <span className={`${styles.subNavLink} ${styles.subNavLinkCurrent}`}>자동 수정</span>
+          <Link href="/correction-process/self-learning" className={styles.subNavLink}>
+            자가학습
+          </Link>
+        </nav>
 
         <div className={styles.explainer}>
           <div className={styles.explainerRow}>

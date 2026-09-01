@@ -170,3 +170,174 @@
   margin-top: 0.6rem;
   font-size: 0.82rem;
 }
+
+/* 수정과정 ↔ 자가학습 하부 페이지 전환 — 두 페이지가 공유한다. */
+.subNav {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+.subNavLink {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.5rem;
+  color: var(--ink-dim);
+  border: 1px solid transparent;
+}
+.subNavLinkCurrent {
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.stageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+@media (max-width: 860px) {
+  .stageGrid {
+    grid-template-columns: 1fr;
+  }
+}
+.stageCard {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.stageHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.stageNum {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.stageName {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.stageMetric {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stageMetricLabel {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  margin-top: -0.4rem;
+}
+.stageNote {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.sectionHeading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 0.8rem;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  max-width: 48rem;
+  margin-bottom: 1.75rem;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.table th,
+.table td {
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table th {
+  color: var(--ink-faint);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.noteSample {
+  max-width: 48rem;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.75rem;
+}
+.noteSampleHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+.noteSampleBody {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--ink-dim);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.gapList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 48rem;
+  margin-bottom: 1rem;
+}
+.gapItem {
+  display: flex;
+  gap: 0.8rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1.1rem;
+}
+.gapIcon {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--neg);
+  background: color-mix(in srgb, var(--neg) 14%, transparent);
+}
+.gapText h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.25rem;
+}
+.gapText p {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--ink-dim);
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
