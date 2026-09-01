@@ -20,6 +20,14 @@
 .prose a {
   color: var(--accent);
 }
+.prose ul {
+  margin: 0 0 0.4rem;
+  padding-left: 1.2rem;
+}
+.prose li {
+  color: var(--ink-dim);
+  line-height: 1.7;
+}
 .prose strong {
   color: var(--ink);
 }

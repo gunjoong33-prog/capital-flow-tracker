@@ -34,6 +34,68 @@ export default function AboutPage() {
             아니라, 이 프레임워크를 참고한 경험적 추정값입니다 — 각 지표의 상세 화면에 실제
             가중치와 계산식을 그대로 노출합니다.
           </p>
+          <h2>참고 리서치 원문</h2>
+          <p>
+            이 사이트의 자동 계산 외에, 아래 기관들이 로그인 없이 공개하는 리서치 원문도 직접
+            확인해보실 수 있습니다.
+          </p>
+          <ul>
+            <li>
+              <a href="https://finance.naver.com/research/" target="_blank" rel="noopener noreferrer">
+                네이버금융 리서치
+              </a>{" "}
+              (국내 증권사 PDF 모음)
+            </li>
+            <li>
+              <a href="https://www.sec.gov/edgar/search/" target="_blank" rel="noopener noreferrer">
+                SEC EDGAR
+              </a>{" "}
+              (미국 기업 공시 전문)
+            </li>
+            <li>
+              <a href="https://www.bis.org/publ/qtrpdf/qtr_index.htm" target="_blank" rel="noopener noreferrer">
+                BIS Quarterly Review
+              </a>
+            </li>
+            <li>
+              <a href="https://www.bok.or.kr/portal/bbs/B0000246/list.do" target="_blank" rel="noopener noreferrer">
+                한국은행
+              </a>{" "}
+              (경제전망보고서 등)
+            </li>
+            <li>
+              <a href="https://www.kcmi.re.kr" target="_blank" rel="noopener noreferrer">
+                자본시장연구원
+              </a>
+            </li>
+            <li>
+              <a href="https://www.federalreserve.gov/publications.htm" target="_blank" rel="noopener noreferrer">
+                미 연준(Fed)
+              </a>{" "}
+              보도자료·연설문·보고서
+            </li>
+            <li>
+              <a href="https://www.ecb.europa.eu/press/pubbydate/html/index.en.html" target="_blank" rel="noopener noreferrer">
+                ECB
+              </a>
+            </li>
+            <li>
+              <a href="https://www.worldbank.org/en/research" target="_blank" rel="noopener noreferrer">
+                World Bank
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://am.jpmorgan.com/us/en/asset-management/adv/insights/market-insights/guide-to-the-markets/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                JPMorgan Asset Management
+              </a>{" "}
+              &quot;Guide to the Markets&quot;(분기 PDF)
+            </li>
+          </ul>
+
           <h2>운영 기간이 짧다는 점</h2>
           <p>
             2026년 7월 27일 이후로 아직 운영 기간이 길지 않아, 신호의 장기 정확도는 검증되지
