@@ -8,6 +8,16 @@ import { upsertObsidianFile } from "@/lib/obsidian-export";
 
 // Prisma의 Json 컬럼은 구체 타입을 그대로 받아주지 않으므로(인덱스 시그니처 요구),
 // pipeline.ts·external-consensus.ts와 같은 방식으로 캐스팅한다.
+
+// institutional-research.ts의 네이버금융 수집기가 sourceName을 "${broker}:${title}" 형태로
+// 만든다 — 콜론(:)은 NTFS(Windows)에서 파일명에 못 쓰는 문자라, 이 값을 그대로 옵시디언 파일
+// 경로에 쓰면 GitHub엔 커밋되지만 Windows에서 로컬로 pull/checkout할 때 실패한다(실측: git이
+// "invalid path" 에러로 거부, rebase/reset 전체가 막힘). ExternalConsensus의 upsert 유니크 키
+// (sourceType, sourceName, date)는 원본 sourceName을 그대로 써야 하므로 sourceName 자체는
+// 안 건드리고, 파일 경로로 쓸 때만 별도로 안전화한다.
+function sanitizeForFilename(name: string): string {
+  return name.replace(/[:*?"<>|\\/]/g, "-").trim();
+}
 const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
 
 type ConsensusRecord = { id: string; sourceType: string; date: Date; payload: unknown };
@@ -125,7 +135,7 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
       saved++;
 
       if (githubToken) {
-        const repoPath = `obsidian-export/학습/${category}/${sourceName}.md`;
+        const repoPath = `obsidian-export/학습/${category}/${sanitizeForFilename(sourceName)}.md`;
         const content = `# ${sourceName}\n\n**분류**: ${category}\n**최종 업데이트**: ${note.createdAt.toISOString().slice(0, 10)}\n\n${summary}\n`;
         const { status, detail } = await upsertObsidianFile(repoPath, content, githubToken);
         if (status === "error") errors.push(`옵시디언 커밋 실패(${sourceName}): ${detail ?? "알 수 없는 오류"}`);
