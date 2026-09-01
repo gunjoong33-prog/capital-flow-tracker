@@ -1,5 +1,10 @@
 .prose {
   max-width: 42rem;
+  /* 한글은 브라우저 기본값이 음절(글자) 단위로 줄바꿈해서, 문장 하나를 span으로 감싸도
+     단어 중간에서 다음 줄로 끊기는 경우가 있었다(예: "체크리스" / "트는") — 어절(공백) 단위로만
+     끊기게 한다. overflow-wrap은 공백 없는 긴 토큰(URL 등)이 넘칠 때의 안전장치. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 .prose h1 {
   font-size: 1.6rem;
