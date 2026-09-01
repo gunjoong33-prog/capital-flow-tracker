@@ -2,7 +2,15 @@ import Link from "next/link";
 import { HomeThemeToggle } from "@/components/HomeThemeToggle";
 import styles from "@/styles/site.module.css";
 
-export type SitePage = "indicators" | "news" | "report" | "calendar" | "reports" | "track-record" | "home";
+export type SitePage =
+  | "indicators"
+  | "news"
+  | "report"
+  | "calendar"
+  | "reports"
+  | "track-record"
+  | "correction-process"
+  | "home";
 
 const NAV_ITEMS: { href: string; label: string; key: SitePage }[] = [
   { href: "/indicators", label: "지표", key: "indicators" },
@@ -11,6 +19,7 @@ const NAV_ITEMS: { href: string; label: string; key: SitePage }[] = [
   { href: "/calendar", label: "캘린더", key: "calendar" },
   { href: "/reports/weekly", label: "주기별 리포트", key: "reports" },
   { href: "/track-record", label: "적중률", key: "track-record" },
+  { href: "/correction-process", label: "수정과정", key: "correction-process" },
 ];
 
 /** 좌측 상단 스크립트체 로고("Macroeconomic Analysis") + 내비 + 다크/라이트 토글 — 새 디자인 시스템을
