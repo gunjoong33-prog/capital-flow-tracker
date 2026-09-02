@@ -111,6 +111,14 @@ export function buildComprehensiveReportPrompt(report: {
 - 문장은 자연스럽게 이어 쓰고, 마침표마다 줄바꿈하지 마라 — 문단 단위로 흐르게 써라.
 - 정해진 소제목이나 고정된 문단 개수를 강요하지 마라. 그날 특별할 게 없는 단계는 한두 문장으로 짧게
   넘어가고, 눈에 띄는 부분에 분량을 더 써라. 매일 같은 분량·같은 순서로 기계적으로 채우지 마라.
+- **글머리에 "①", "②"처럼 번호를 매기거나, 굵게(**) 표시한 소제목·질문("① 오늘 시장을 움직인
+  요인은 무엇입니까?" 같은 형태)을 절대 달지 마라.** 다섯 덩어리는 오직 빈 줄로만 구분되는 순수한
+  문단 다섯 개여야 한다 — 각 문단이 무슨 내용인지 알려주는 제목·질문·번호를 문단 앞에 붙이면 안 된다.
+- 모든 단어는 한국어로만 써라. "circulating money", "forward signals", "certainty", "upcoming
+  events"처럼 영어 단어나 표현을 한글 문장 사이에 그대로 섞어 쓰지 마라 — 반드시 자연스러운
+  한국어로 번역해서 써라.
+- 글을 "오늘 하루를 정리합니다", "오늘 하루를 정리해드리겠습니다" 같은 상투적인 도입 문장으로 시작
+  하지 마라 — 바로 첫 번째 문단(오늘 자본을 움직인 사건)의 내용으로 시작해라.
 
 다뤄야 할 내용 — 아래 다섯 덩어리를 이 순서대로, 각각 문단 하나씩 써라(원인 → 환경 → 이동 →
 전망 → 판단 순서다). 소제목은 달지 마라(문단 흐름으로만 구분한다).
@@ -222,5 +230,17 @@ export async function generateComprehensiveReport(report: Parameters<typeof buil
 
   // jpyVolNote가 이미 마침표로 끝나는 완결된 문장인데, LLM이 그 뒤에 자기 마침표를 하나 더 붙이는
   // 경우가 있었다("...습니다.." 중복) — 치환 후 남는 이중 마침표만 하나로 정리한다.
-  return collapseRepeatedDots(text);
+  return collapseRepeatedDots(sanitizeFormat(text));
+}
+
+// mistral-large-latest가 결제수단 미등록으로 막혀(2026-09-01~) mistral-small-latest로 임시
+// 강등된 뒤([[llm-clients.ts]]), 프롬프트로 "소제목 달지 마라"를 아무리 강조해도 가끔 어기는
+// 사례가 실측됐다(9/1 리포트: "**① 오늘 시장을 움직인 주요 요인은 무엇입니까?**" 같은 굵은
+// 번호 소제목, "오늘 하루를 정리해드리겠습니다." 상투적 도입 문장). 프롬프트 지시만 믿지 않고
+// 여기서 기계적으로 한 번 더 제거한다(플레이스홀더 치환과 같은 defense-in-depth 원칙).
+export function sanitizeFormat(text: string): string {
+  return text
+    .replace(/^\*\*[^\n]*\*\*\s*\n+/gm, "")
+    .replace(/^오늘 하루를 정리(합니다|해드리겠습니다)\.\s*\n+/, "")
+    .trim();
 }
