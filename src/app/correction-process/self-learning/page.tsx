@@ -42,17 +42,55 @@ function fmtDateTime(d: Date | null | undefined) {
   return d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" });
 }
 
+// ExternalConsensus.payload는 소스별 fetcher가 만든 CollectedItem을 그대로 저장한 것 —
+// url·title 필드가 있다(institutional-research.ts:31-37). 13F 등 예전 소스는 이 모양이 아닐 수
+// 있어 옵셔널로 읽는다.
+type PayloadLink = { url?: string; title?: string };
+
 export default async function SelfLearningPage() {
-  const [collectionBySource, totalCollected, firstCollected, notesByCategory, totalNotes, latestNote, notesBySourceName] =
+  const [collectionBySource, totalCollected, firstCollected, notesByCategory, totalNotes, recentNotes, notesBySourceName] =
     await Promise.all([
       db.externalConsensus.groupBy({ by: ["sourceType"], _count: { _all: true }, _max: { date: true } }),
       db.externalConsensus.count(),
       db.externalConsensus.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
       db.learningNote.groupBy({ by: ["category"], _count: { _all: true }, _max: { createdAt: true } }),
       db.learningNote.count(),
-      db.learningNote.findFirst({ orderBy: { createdAt: "desc" } }),
+      db.learningNote.findMany({ orderBy: { createdAt: "desc" }, take: 8 }),
       db.learningNote.groupBy({ by: ["sourceName"], _count: { _all: true } }),
     ]);
+
+  const latestNote = recentNotes[0];
+
+  // 수집 테이블에 "최근 자료" 링크를 붙이기 위해 소스별로 가장 최근 항목 하나씩만 조회 —
+  // 소스 개수(현재 12개)만큼만 도는 작은 쿼리라 N+1이어도 부담 없다.
+  const latestBySourceType = new Map<string, PayloadLink>();
+  await Promise.all(
+    collectionBySource.map(async (row) => {
+      const latest = await db.externalConsensus.findFirst({
+        where: { sourceType: row.sourceType },
+        orderBy: { createdAt: "desc" },
+        select: { payload: true },
+      });
+      if (latest) latestBySourceType.set(row.sourceType, latest.payload as unknown as PayloadLink);
+    })
+  );
+
+  // 최근 학습 노트 각각이 어떤 원문(들)에서 나왔는지 — basedOn(ExternalConsensus id 배열)을
+  // 한 번에 조회해 노트별로 대표 링크 하나씩 붙인다.
+  const allBasedOnIds = [...new Set(recentNotes.flatMap((n) => (n.basedOn as unknown as string[]) ?? []))];
+  const basedOnRows =
+    allBasedOnIds.length > 0
+      ? await db.externalConsensus.findMany({ where: { id: { in: allBasedOnIds } }, select: { id: true, payload: true } })
+      : [];
+  const payloadById = new Map(basedOnRows.map((r) => [r.id, r.payload as unknown as PayloadLink]));
+  function noteSourceLink(note: (typeof recentNotes)[number]): PayloadLink | undefined {
+    const ids = (note.basedOn as unknown as string[]) ?? [];
+    for (const id of ids) {
+      const p = payloadById.get(id);
+      if (p?.url) return p;
+    }
+    return undefined;
+  }
 
   const duplicateNoteRows = notesBySourceName
     .filter((g) => g._count._all > 1)
@@ -135,7 +173,7 @@ export default async function SelfLearningPage() {
             <span className={styles.stageMetricLabel}>리포트 프롬프트에 주입되는 학습 노트</span>
             <p className={styles.stageNote}>
               {distilling
-                ? "다음 정기 리포트부터 반영 — 실제 문장 반영 여부는 아직 라이브 확인 전"
+                ? "매 리포트 생성마다 실제로 프롬프트에 주입됨(코드 확인) — 문장에 얼마나 반영됐는지는 미측정"
                 : "학습 노트가 없어 아직 반영할 내용이 없습니다"}
             </p>
           </div>
@@ -149,23 +187,36 @@ export default async function SelfLearningPage() {
                 <th>소스</th>
                 <th>누적 건수</th>
                 <th>최근 수집일</th>
+                <th>최근 자료</th>
               </tr>
             </thead>
             <tbody>
               {collectionBySource.length === 0 ? (
                 <tr>
-                  <td colSpan={3}>아직 수집된 자료가 없습니다.</td>
+                  <td colSpan={4}>아직 수집된 자료가 없습니다.</td>
                 </tr>
               ) : (
                 collectionBySource
                   .sort((a, b) => b._count._all - a._count._all)
-                  .map((row) => (
-                    <tr key={row.sourceType}>
-                      <td>{SOURCE_TYPE_LABEL[row.sourceType] ?? row.sourceType}</td>
-                      <td>{row._count._all.toLocaleString("ko-KR")}건</td>
-                      <td>{fmtDate(row._max.date)}</td>
-                    </tr>
-                  ))
+                  .map((row) => {
+                    const latest = latestBySourceType.get(row.sourceType);
+                    return (
+                      <tr key={row.sourceType}>
+                        <td>{SOURCE_TYPE_LABEL[row.sourceType] ?? row.sourceType}</td>
+                        <td>{row._count._all.toLocaleString("ko-KR")}건</td>
+                        <td>{fmtDate(row._max.date)}</td>
+                        <td className={styles.sourceLinkCell}>
+                          {latest?.url ? (
+                            <a href={latest.url} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
+                              {latest.title || latest.url}
+                            </a>
+                          ) : (
+                            <span className={styles.sourceLinkMissing}>출처 링크 없음</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
               )}
             </tbody>
           </table>
@@ -201,16 +252,29 @@ export default async function SelfLearningPage() {
           </table>
         </div>
 
-        {latestNote && (
-          <div className={styles.noteSample}>
-            <div className={styles.noteSampleHead}>
-              <span>
-                최근 학습 노트 표본 — {latestNote.category} / {latestNote.sourceName}
-              </span>
-              <span>{fmtDateTime(latestNote.createdAt)}</span>
-            </div>
-            <p className={styles.noteSampleBody}>{latestNote.summary}</p>
-          </div>
+        {recentNotes.length > 0 && (
+          <>
+            <h2 className={styles.sectionHeading}>최근 학습 노트 — 출처 원문 링크 포함</h2>
+            {recentNotes.map((note) => {
+              const link = noteSourceLink(note);
+              return (
+                <div key={note.id} className={styles.noteSample}>
+                  <div className={styles.noteSampleHead}>
+                    <span>
+                      [{note.category}] {note.sourceName}
+                    </span>
+                    <span>{fmtDateTime(note.createdAt)}</span>
+                  </div>
+                  <p className={styles.noteSampleBody}>{note.summary}</p>
+                  {link?.url && (
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
+                      원문 보기: {link.title || link.url}
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </>
         )}
 
         <h2 className={styles.sectionHeading}>부족한 점 · 필요한 점</h2>
@@ -218,11 +282,11 @@ export default async function SelfLearningPage() {
           <div className={styles.gapItem}>
             <span className={styles.gapIcon}>!</span>
             <div className={styles.gapText}>
-              <h3>기관 6곳 추가 조사 보류 중</h3>
+              <h3>IMF 한 곳만 미연동</h3>
               <p>
-                BIS(스크래퍼 미검증) · 한국은행(카테고리 필터링 미해결) · 자본시장연구원(봇 차단+Cloudflare Turnstile) ·
-                JPMorgan Asset Management(JS 렌더링) · 미래에셋증권(목록 페이지 렌더링 미확인) · IMF(403 차단) — &ldquo;확실한
-                기관 먼저&rdquo; 원칙에 따라 뒤로 미뤄둔 상태입니다.
+                2026-09-02 재조사로 BIS Quarterly Review·한국은행·자본시장연구원·JPMorgan Asset Management·미래에셋증권 5곳은
+                실제로 접근 가능함이 확인돼 연동을 완료했습니다. IMF만 유일한 우회 경로(elibrary.imf.org의 journalCode 확인
+                페이지)가 robots.txt로 막혀 있어 원칙대로 미구현 상태입니다.
               </p>
             </div>
           </div>
@@ -236,10 +300,11 @@ export default async function SelfLearningPage() {
           <div className={styles.gapItem}>
             <span className={styles.gapIcon}>!</span>
             <div className={styles.gapText}>
-              <h3>③ 적용, 실제 리포트에서 아직 확인 전</h3>
+              <h3>③ 적용 — 코드 실행은 확인, 문장 반영 정도는 미측정</h3>
               <p>
-                프롬프트에 학습 노트를 넣는 코드는 연결돼 있지만, 그 내용이 실제 리포트 문장에 반영되는 모습은 아직 라이브로
-                확인하지 않았습니다.
+                <code>generateNarrative()</code>가 일일 리포트·종합 보고서·주기별 리포트 등 서술을 생성하는 모든 호출마다 예외
+                없이 최근 학습 노트 5건을 프롬프트에 참고자료로 붙인다는 것은 코드로 확인했습니다. 다만 LLM이 그 참고자료를
+                실제로 얼마나 반영해 문장을 바꾸는지는 정량적으로 측정하지 않았습니다(A/B 비교 등 검증 인프라 없음).
               </p>
             </div>
           </div>

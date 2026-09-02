@@ -301,6 +301,25 @@
   overflow-wrap: break-word;
 }
 
+.sourceLinkCell {
+  white-space: normal;
+  max-width: 20rem;
+}
+.sourceLink {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-word;
+}
+.sourceLink:hover {
+  text-decoration: underline;
+}
+.sourceLinkMissing {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
 .gapList {
   display: flex;
   flex-direction: column;
