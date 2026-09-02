@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import siteStyles from "@/styles/site.module.css";
 import styles from "../page.module.css";
+import { InstitutionNotes } from "./InstitutionNotes";
 
 export const dynamic = "force-dynamic"; // 수집·증류가 계속 쌓이므로 항상 최신 조회
 
@@ -48,18 +49,24 @@ function fmtDateTime(d: Date | null | undefined) {
 type PayloadLink = { url?: string; title?: string };
 
 export default async function SelfLearningPage() {
-  const [collectionBySource, totalCollected, firstCollected, notesByCategory, totalNotes, recentNotes, notesBySourceName] =
+  const [collectionBySource, totalCollected, firstCollected, notesByCategory, totalNotes, latestNote, notesBySourceName] =
     await Promise.all([
       db.externalConsensus.groupBy({ by: ["sourceType"], _count: { _all: true }, _max: { date: true } }),
       db.externalConsensus.count(),
       db.externalConsensus.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
       db.learningNote.groupBy({ by: ["category"], _count: { _all: true }, _max: { createdAt: true } }),
       db.learningNote.count(),
-      db.learningNote.findMany({ orderBy: { createdAt: "desc" }, take: 8 }),
+      db.learningNote.findFirst({ orderBy: { createdAt: "desc" } }),
       db.learningNote.groupBy({ by: ["sourceName"], _count: { _all: true } }),
     ]);
 
-  const latestNote = recentNotes[0];
+  // 기관별 버튼으로 걸러볼 "최근 학습 노트"는 최신 1건이 속한 주(periodKey) 전체를 보여준다 —
+  // "최근 8건" 같은 임의 개수 컷은 노트가 많은 기관(예: 미래에셋 10건)이 적은 기관을 밀어내
+  // 버튼을 눌러도 그 기관 노트가 하나도 안 보일 수 있었다(periodKey는 sourceName당 주 1건
+  // upsert라 "이번 주 생성분 전체"가 곧 "최근"과 같은 뜻이다 — learning-distill.ts 참고).
+  const recentNotes = latestNote
+    ? await db.learningNote.findMany({ where: { periodKey: latestNote.periodKey }, orderBy: { createdAt: "desc" } })
+    : [];
 
   // 수집 테이블에 "최근 자료" 링크를 붙이기 위해 소스별로 가장 최근 항목 하나씩만 조회 —
   // 소스 개수(현재 12개)만큼만 도는 작은 쿼리라 N+1이어도 부담 없다.
@@ -76,21 +83,39 @@ export default async function SelfLearningPage() {
   );
 
   // 최근 학습 노트 각각이 어떤 원문(들)에서 나왔는지 — basedOn(ExternalConsensus id 배열)을
-  // 한 번에 조회해 노트별로 대표 링크 하나씩 붙인다.
+  // 한 번에 조회해 노트별로 대표 링크와 "기관"(sourceType→SOURCE_TYPE_LABEL)을 붙인다.
   const allBasedOnIds = [...new Set(recentNotes.flatMap((n) => (n.basedOn as unknown as string[]) ?? []))];
   const basedOnRows =
     allBasedOnIds.length > 0
-      ? await db.externalConsensus.findMany({ where: { id: { in: allBasedOnIds } }, select: { id: true, payload: true } })
+      ? await db.externalConsensus.findMany({
+          where: { id: { in: allBasedOnIds } },
+          select: { id: true, sourceType: true, payload: true },
+        })
       : [];
-  const payloadById = new Map(basedOnRows.map((r) => [r.id, r.payload as unknown as PayloadLink]));
-  function noteSourceLink(note: (typeof recentNotes)[number]): PayloadLink | undefined {
+  const basedOnById = new Map(basedOnRows.map((r) => [r.id, r]));
+  function noteSourceInfo(note: (typeof recentNotes)[number]): { link?: PayloadLink; institution: string } {
     const ids = (note.basedOn as unknown as string[]) ?? [];
     for (const id of ids) {
-      const p = payloadById.get(id);
-      if (p?.url) return p;
+      const row = basedOnById.get(id);
+      if (!row) continue;
+      const payload = row.payload as unknown as PayloadLink;
+      return { link: payload?.url ? payload : undefined, institution: SOURCE_TYPE_LABEL[row.sourceType] ?? row.sourceType };
     }
-    return undefined;
+    return { institution: "기타" };
   }
+
+  const notesForFilter = recentNotes.map((note) => {
+    const { link, institution } = noteSourceInfo(note);
+    return {
+      id: note.id,
+      category: note.category,
+      institution,
+      summary: note.summary,
+      createdAt: note.createdAt,
+      sourceUrl: link?.url,
+      sourceTitle: link?.title,
+    };
+  });
 
   const duplicateNoteRows = notesBySourceName
     .filter((g) => g._count._all > 1)
@@ -252,28 +277,10 @@ export default async function SelfLearningPage() {
           </table>
         </div>
 
-        {recentNotes.length > 0 && (
+        {notesForFilter.length > 0 && (
           <>
-            <h2 className={styles.sectionHeading}>최근 학습 노트 — 출처 원문 링크 포함</h2>
-            {recentNotes.map((note) => {
-              const link = noteSourceLink(note);
-              return (
-                <div key={note.id} className={styles.noteSample}>
-                  <div className={styles.noteSampleHead}>
-                    <span>
-                      [{note.category}] {note.sourceName}
-                    </span>
-                    <span>{fmtDateTime(note.createdAt)}</span>
-                  </div>
-                  <p className={styles.noteSampleBody}>{note.summary}</p>
-                  {link?.url && (
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
-                      원문 보기: {link.title || link.url}
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+            <h2 className={styles.sectionHeading}>최근 학습 노트 — 기관별로 보기</h2>
+            <InstitutionNotes notes={notesForFilter} />
           </>
         )}
 
