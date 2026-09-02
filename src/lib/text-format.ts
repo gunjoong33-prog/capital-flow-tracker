@@ -20,3 +20,23 @@ export function slashDate(iso: string): string {
 export function collapseRepeatedDots(text: string): string {
   return text.replace(/\.\.+/g, ".");
 }
+
+/** LearningNote.summary가 "**볼드**"·"① 지표 근거: ..." 같은 AI 답변 특유의 도식적 구조로
+ * 나오는 경우가 실측됐다(learning-distill.ts) — 마크다운 볼드와 번호·라벨 프리픽스를 걷어내고,
+ * 문장 하나당 한 줄로 재배열한다(이 사이트의 다른 페이지들과 같은 "한 줄에 한 문장씩" 관례).
+ * 프롬프트로 지시해도 모델이 가끔 어기므로(comprehensive-report.ts의 sanitizeFormat과 같은
+ * defense-in-depth 원칙) 저장 직전 여기서 기계적으로 한 번 더 정리한다. */
+export function toPlainSentenceLines(text: string): string {
+  const noBold = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*\*/g, "");
+  // "① **라벨**: " 형태(볼드는 이미 제거됨) — 번호+짧은 라벨+콜론 프리픽스를 통째로 제거.
+  const noLabeled = noBold.replace(/[①②③④⑤]\s*[^:：\n]{0,24}[:：]\s*/g, "");
+  // 라벨 없이 번호만 붙은 경우("① 이 기관은...") 남은 번호 기호만 제거.
+  const noNumbers = noLabeled.replace(/[①②③④⑤]\s*/g, "");
+
+  return noNumbers
+    .split(/(?<=[가-힣])\.(?=\s|$)/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s.endsWith(".") ? s : `${s}.`))
+    .join("\n");
+}

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { callMistral } from "@/lib/llm-clients";
 import { upsertObsidianFile } from "@/lib/obsidian-export";
+import { toPlainSentenceLines } from "@/lib/text-format";
 
 // Prisma의 Json 컬럼은 구체 타입을 그대로 받아주지 않으므로(인덱스 시그니처 요구),
 // pipeline.ts·external-consensus.ts와 같은 방식으로 캐스팅한다.
@@ -90,10 +91,16 @@ export function buildDistillPrompt(sourceName: string, records: ConsensusRecord[
   });
 
   return `너는 매크로 리서치 애널리스트다. 아래는 "${sourceName}"의 최근 공개 데이터다.
-이 데이터만 근거로 다음 세 가지를 한국어 3~5문장으로 요약해라 — 이 기관이 ① 어떤 지표를 근거로
-쓰는지(지표 수집 방법), ② 그 지표를 어떤 논리로 해석해 어떤 결론에 도달하는지(사고 과정),
-③ 결론을 어떤 형식·어조로 전달하는지(보고 방식 — 예: 수치를 먼저 제시하는지 서술을 먼저 하는지,
+이 데이터만 근거로 다음 세 가지를 한국어 3~5문장으로 요약해라 — 이 기관이 첫째 어떤 지표를 근거로
+쓰는지(지표 수집 방법), 둘째 그 지표를 어떤 논리로 해석해 어떤 결론에 도달하는지(사고 과정),
+셋째 결론을 어떤 형식·어조로 전달하는지(보고 방식 — 예: 수치를 먼저 제시하는지 서술을 먼저 하는지,
 확정적으로 단언하는지 조건부로 표현하는지, 몇 개 시나리오로 나누는지 등).
+
+*** 형식 규칙(중요) ***
+- 굵게(**) 표시나 마크다운 서식을 쓰지 마라 — 일반 텍스트로만 써라.
+- "①", "②", "1.", "첫째," 같은 번호나 소제목을 답변에 그대로 옮기지 마라 — 세 가지를 순서대로
+  다루되, 번호 없이 자연스러운 문장으로 이어 써라.
+- AI가 형식적으로 답한 것처럼 보이지 않게, 사람이 정리한 리서치 노트처럼 편하게 써라.
 데이터에 없는 내용을 지어내지 마라. 존댓말 아닌 평서체로.
 ${truncationNotes.length > 0 ? `\n${truncationNotes.join("\n")}\n` : ""}
 데이터:
@@ -136,8 +143,8 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
     const results = await Promise.all(
       batch.map(async ([sourceName, sourceRecords]) => {
         try {
-          const summary = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
-          return { sourceName, sourceRecords, summary };
+          const raw = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
+          return { sourceName, sourceRecords, summary: toPlainSentenceLines(raw) };
         } catch (e) {
           errors.push(`Mistral distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
           return null;

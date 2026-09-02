@@ -299,6 +299,7 @@
   color: var(--ink-dim);
   word-break: keep-all;
   overflow-wrap: break-word;
+  white-space: pre-line;
 }
 
 .sourceLinkCell {
