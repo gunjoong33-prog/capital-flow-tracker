@@ -24,4 +24,16 @@ describe("fetchRecentLearningContext", () => {
 
     expect(result).toBe("이번 주 여러 기관은 조건부 서술을 선호했다.");
   });
+
+  it("14일 이내 범위로 조회한다", async () => {
+    findFirst.mockResolvedValueOnce(null);
+
+    await fetchRecentLearningContext();
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { createdAt: { gte: expect.any(Date) } },
+      })
+    );
+  });
 });

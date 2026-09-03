@@ -146,7 +146,7 @@ export default async function SelfLearningPage() {
                 소개 페이지에 공개한 기관 리서치 출처(네이버금융·SEC·연준·ECB·World Bank·PIMCO·BlackRock 등)를 정기적으로
                 수집합니다.
               </span>
-              <span>모은 자료를 LLM으로 다시 읽혀, 각 기관의 다음 세 가지를 학습 노트로 남깁니다.</span>
+              <span>모은 자료를 LLM으로 다시 읽혀, 각 기관의 다음 네 가지를 학습 노트로 남깁니다.</span>
               <span>
                 <strong>① 어떤 지표를 근거로 쓰는지(지표 수집 방법)</strong>
               </span>
@@ -156,7 +156,13 @@ export default async function SelfLearningPage() {
               <span>
                 <strong>③ 결론을 어떤 형식·어조로 전달하는지(보고 방식)</strong>
               </span>
-              <span>이 학습 노트는 매일의 리포트를 서술하는 프롬프트에 참고자료로 함께 들어갑니다.</span>
+              <span>
+                <strong>④ 실제로 어떤 주제·수치·전망을 다뤘는지(배경지식)</strong>
+              </span>
+              <span>
+                이 학습 노트들은 매주 한 번 LLM으로 하나의 &ldquo;이번 주 학습 요약&rdquo;으로 압축되고, 매일의 리포트를
+                서술하는 프롬프트에는 원문 노트가 아니라 이 압축본 1건이 참고자료로 함께 들어갑니다.
+              </span>
               <span>이 페이지는 세 단계(수집 · 증류 · 적용)가 실제로 어디까지 진행됐고, 무엇이 부족한지를 있는 그대로 보여줍니다.</span>
             </p>
           </div>
@@ -193,14 +199,14 @@ export default async function SelfLearningPage() {
             <div className={styles.stageHead}>
               <span className={styles.stageNum}>③</span>
               <span className={styles.stageName}>적용</span>
-              <span className={`${styles.statusDot} ${distilling ? styles.on : styles.off}`} style={{ marginLeft: "auto" }} />
+              <span className={`${styles.statusDot} ${weeklySynthesis ? styles.on : styles.off}`} style={{ marginLeft: "auto" }} />
             </div>
-            <span className={styles.stageMetric}>{distilling ? "최근 5건" : "0건"}</span>
-            <span className={styles.stageMetricLabel}>리포트 프롬프트에 주입되는 학습 노트</span>
+            <span className={styles.stageMetric}>{weeklySynthesis ? "압축본 1건" : "0건"}</span>
+            <span className={styles.stageMetricLabel}>리포트 프롬프트에 주입되는 주간 학습 요약</span>
             <p className={styles.stageNote}>
-              {distilling
-                ? "매 리포트 생성마다 실제로 프롬프트에 주입됨(코드 확인) — 문장에 얼마나 반영됐는지는 미측정"
-                : "학습 노트가 없어 아직 반영할 내용이 없습니다"}
+              {weeklySynthesis
+                ? `매 리포트 생성마다 이번 주(${weeklySynthesis.periodKey}) 압축본이 실제로 프롬프트에 주입됨(코드 확인) — 문장에 얼마나 반영됐는지는 미측정`
+                : "아직 생성된 주간 압축본이 없어 반영할 내용이 없습니다"}
             </p>
           </div>
         </div>
@@ -324,8 +330,9 @@ export default async function SelfLearningPage() {
               <h3>③ 적용 — 코드 실행은 확인, 문장 반영 정도는 미측정</h3>
               <p>
                 <code>generateNarrative()</code>가 일일 리포트·종합 보고서·주기별 리포트 등 서술을 생성하는 모든 호출마다 예외
-                없이 최근 학습 노트 5건을 프롬프트에 참고자료로 붙인다는 것은 코드로 확인했습니다. 다만 LLM이 그 참고자료를
-                실제로 얼마나 반영해 문장을 바꾸는지는 정량적으로 측정하지 않았습니다(A/B 비교 등 검증 인프라 없음).
+                없이 이번 주 학습 노트를 압축한 주간 요약 1건을 프롬프트에 참고자료로 붙인다는 것은 코드로 확인했습니다. 다만
+                LLM이 그 참고자료를 실제로 얼마나 반영해 문장을 바꾸는지는 정량적으로 측정하지 않았습니다(A/B 비교 등 검증
+                인프라 없음).
               </p>
             </div>
           </div>
@@ -335,8 +342,9 @@ export default async function SelfLearningPage() {
               <div className={styles.gapText}>
                 <h3>중복 학습 노트 {duplicateNoteRows}건</h3>
                 <p>
-                  같은 출처를 여러 번 증류하며 생긴 중복입니다. 리포트에는 최신 5건만 쓰여 기능상 문제는 없지만, 데이터 정리가
-                  필요합니다.
+                  같은 출처를 여러 번 증류하며 생긴 중복입니다. 이제는 개별 노트가 리포트에 직접 쓰이지 않고 매주 한 번
+                  압축될 뿐이라 중복 자체가 압축 결과를 왜곡할 위험은 낮지만(같은 내용이 한 번 더 들어가는 정도), 압축
+                  단계의 입력을 불필요하게 늘리는 셈이라 데이터 정리는 여전히 필요합니다.
                 </p>
               </div>
             </div>

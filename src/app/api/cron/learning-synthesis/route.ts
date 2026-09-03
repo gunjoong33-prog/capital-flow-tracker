@@ -4,9 +4,9 @@ import { synthesizeWeeklyLearning } from "@/lib/learning-synthesis";
 import { sendHealthCheckAlert } from "@/lib/discord-alert";
 
 export const dynamic = "force-dynamic";
-// LLM 1회 호출뿐이라(학습노트 20+건을 순차 distill하는 learning-distill과 다름) 기본 60초로
-// 충분하다.
-export const maxDuration = 60;
+// LLM 1회 호출이지만 429 재시도(llm-clients.ts)가 그 자체로 최대 60초를 기다릴 수 있어
+// 응답까지 포함하면 60초로는 빠듯하다 — learning-distill과 같은 120으로 맞춘다.
+export const maxDuration = 120;
 
 export async function GET(request: Request) {
   const unauthorized = requireCronAuth(request);

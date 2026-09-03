@@ -9,8 +9,19 @@
 // comprehensiveReport·periodReport·debug) 호출마다 원문을 통째로 재전송하지 않기 위함.
 import { db } from "@/lib/db";
 
-/** 가장 최근 주간 학습 요약을 해설 프롬프트에 참고자료로 얹을 문자열로 반환한다. 없으면 undefined. */
+// 압축본이 오래됐으면(예: 주간 크론이 조용히 멈춤) "이번 주 학습 요약"이라는 문구로 몇 달 전
+// 내용을 계속 주입하는 걸 막는다 — 이 프로젝트는 크론이 등록만 되고 실행은 안 되던 사고
+// 전례가 있다(institutional-research·learning-distill, 2026-09-01 세션, 코드 리뷰 지적).
+// 2주 이상 지난 압축본은 없는 것과 같게 취급한다.
+const MAX_SYNTHESIS_AGE_DAYS = 14;
+
+/** 가장 최근 주간 학습 요약을 해설 프롬프트에 참고자료로 얹을 문자열로 반환한다. 없거나
+ * 14일 넘게 오래됐으면 undefined. */
 export async function fetchRecentLearningContext(): Promise<string | undefined> {
-  const synthesis = await db.weeklyLearningSynthesis.findFirst({ orderBy: { createdAt: "desc" } });
+  const cutoff = new Date(Date.now() - MAX_SYNTHESIS_AGE_DAYS * 86_400_000);
+  const synthesis = await db.weeklyLearningSynthesis.findFirst({
+    where: { createdAt: { gte: cutoff } },
+    orderBy: { createdAt: "desc" },
+  });
   return synthesis?.content;
 }

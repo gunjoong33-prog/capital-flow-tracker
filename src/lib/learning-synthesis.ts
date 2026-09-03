@@ -7,7 +7,6 @@
 import { db } from "@/lib/db";
 import { callMistral } from "@/lib/llm-clients";
 import { toPlainSentenceLines } from "@/lib/text-format";
-import { isoWeekKey } from "@/lib/learning-distill";
 
 type NoteForSynthesis = { category: string; sourceName: string; summary: string };
 
@@ -33,12 +32,25 @@ export function buildSynthesisPrompt(notes: NoteForSynthesis[]): string {
 ${body}`;
 }
 
-/** 이번 주 LearningNote 전체를 압축해 WeeklyLearningSynthesis에 저장한다. 노트가 하나도
- * 없으면(신규 배포 첫 주 등) null을 반환하고 아무것도 저장하지 않는다 — 에러 아님. */
+/** 가장 최근 LearningNote의 periodKey를 그대로 이번 주로 취급해 압축해 WeeklyLearningSynthesis에
+ * 저장한다. LearningNote가 하나도 없으면(신규 배포 첫 주 등) null을 반환하고 아무것도 저장하지
+ * 않는다 — 에러 아님.
+ *
+ * periodKey를 isoWeekKey(new Date())로 "지금"을 기준으로 독립 계산하지 않는 이유(코드 리뷰
+ * 지적): 이 함수를 도는 크론과 learning-distill 크론이 각자 다른 시각에 isoWeekKey(new Date())를
+ * 계산하면, UTC 주 경계 근처에서는 사람이 보기엔 "같은 주"인데 서로 다른 periodKey를 얻을 수
+ * 있다. 그러면 이 함수가 조용히 0건을 찾고 그 주 압축을 영구히 건너뛰어도 아무 에러도 나지
+ * 않는다. 대신 self-learning/page.tsx의 recentNotes 패턴처럼 실제 데이터(가장 최근에 생성된
+ * LearningNote)에서 periodKey를 읽어와 두 크론이 같은 시계를 참조하게 만든다. */
 export async function synthesizeWeeklyLearning(): Promise<{ periodKey: string; content: string } | null> {
-  const periodKey = isoWeekKey(new Date());
-  const notes = await db.learningNote.findMany({ where: { periodKey } });
-  if (notes.length === 0) return null;
+  const latest = await db.learningNote.findFirst({ orderBy: { createdAt: "desc" }, select: { periodKey: true } });
+  if (!latest) return null;
+
+  const periodKey = latest.periodKey;
+  const notes = await db.learningNote.findMany({
+    where: { periodKey },
+    select: { category: true, sourceName: true, summary: true },
+  });
 
   const raw = await callMistral(buildSynthesisPrompt(notes), 1536, 0.3);
   const content = toPlainSentenceLines(raw);
