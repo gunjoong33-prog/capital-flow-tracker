@@ -165,6 +165,17 @@ model LearningNote {
   @@index([category, sourceName])
 }
 
+// learning-distill.ts가 만드는 개별 기관 노트(LearningNote)를 매주 한 번 더 LLM으로 압축한
+// "이번 주 학습 요약" 1건 — 매일 리포트 프롬프트가 원문 노트를 통째로 재전송하지 않고 이 압축본만
+// 참고하게 하기 위함(비용·지연·플레이스홀더 준수율 저하 위험 완화, 설계 문서
+// docs/superpowers/specs/2026-09-02-learning-application-design.md 참고).
+model WeeklyLearningSynthesis {
+  id        String   @id @default(cuid())
+  periodKey String   @unique
+  content   String
+  createdAt DateTime @default(now())
+}
+
 // 자가진단이 발견한 이상과 자동수정 시도 이력 — 성공/실패 무관하게 전부 남긴다(감사 로그).
 model AutoFixLog {
   id                   String   @id @default(cuid())
