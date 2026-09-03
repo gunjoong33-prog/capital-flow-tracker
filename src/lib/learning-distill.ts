@@ -50,7 +50,7 @@ const CATEGORY_BY_SOURCE_TYPE: Record<string, string> = {
 
 // LearningNote.periodKey에 쓰는 ISO 8601 주차 키(예: "2026-W36") — 마이그레이션의 백필 SQL
 // (TO_CHAR(..., 'IYYY"-W"IW'))과 반드시 같은 결과를 내야 한다(목요일 기준 ISO 주차 계산).
-function isoWeekKey(d: Date): string {
+export function isoWeekKey(d: Date): string {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const dayNum = date.getUTCDay() || 7; // 월=1 ... 일=7
   date.setUTCDate(date.getUTCDate() + 4 - dayNum); // 이번 ISO 주의 목요일로 이동
@@ -91,14 +91,16 @@ export function buildDistillPrompt(sourceName: string, records: ConsensusRecord[
   });
 
   return `너는 매크로 리서치 애널리스트다. 아래는 "${sourceName}"의 최근 공개 데이터다.
-이 데이터만 근거로 다음 세 가지를 한국어 3~5문장으로 요약해라 — 이 기관이 첫째 어떤 지표를 근거로
+이 데이터만 근거로 다음 네 가지를 한국어 4~6문장으로 요약해라 — 이 기관이 첫째 어떤 지표를 근거로
 쓰는지(지표 수집 방법), 둘째 그 지표를 어떤 논리로 해석해 어떤 결론에 도달하는지(사고 과정),
 셋째 결론을 어떤 형식·어조로 전달하는지(보고 방식 — 예: 수치를 먼저 제시하는지 서술을 먼저 하는지,
-확정적으로 단언하는지 조건부로 표현하는지, 몇 개 시나리오로 나누는지 등).
+확정적으로 단언하는지 조건부로 표현하는지, 몇 개 시나리오로 나누는지 등), 넷째 이 자료가 실제로
+다룬 핵심 내용(배경지식 — 어떤 사실·수치·주장을 구체적으로 다뤘는지, 예: "미국 금리 3.625%를
+근거로 긴축 기조 유지를 전망했다"처럼 구체적으로).
 
 *** 형식 규칙(중요) ***
 - 굵게(**) 표시나 마크다운 서식을 쓰지 마라 — 일반 텍스트로만 써라.
-- "①", "②", "1.", "첫째," 같은 번호나 소제목을 답변에 그대로 옮기지 마라 — 세 가지를 순서대로
+- "①", "②", "1.", "첫째," 같은 번호나 소제목을 답변에 그대로 옮기지 마라 — 네 가지를 순서대로
   다루되, 번호 없이 자연스러운 문장으로 이어 써라.
 - AI가 형식적으로 답한 것처럼 보이지 않게, 사람이 정리한 리서치 노트처럼 편하게 써라.
 데이터에 없는 내용을 지어내지 마라. 존댓말 아닌 평서체로.

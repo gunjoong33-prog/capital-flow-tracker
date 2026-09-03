@@ -42,4 +42,13 @@ describe("buildDistillPrompt", () => {
     expect(prompt).not.toContain("상위");
     expect(prompt).toContain("COMPANY 4");
   });
+
+  it("넷째 요소(배경지식)를 프롬프트에 포함한다", () => {
+    const prompt = buildDistillPrompt("Bridgewater Associates", [
+      { id: "test-id-1", sourceType: "13f", date: new Date("2026-08-14"), payload: { nameOfIssuer: "APPLE INC" } },
+    ]);
+
+    expect(prompt).toContain("배경지식");
+    expect(prompt).toContain("넷째");
+  });
 });
