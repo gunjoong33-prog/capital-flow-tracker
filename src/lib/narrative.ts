@@ -49,7 +49,7 @@ export async function generateNarrative(prompt: string, maxOutputTokens = 2048):
     learningContext = undefined;
   }
   const fullPrompt = learningContext
-    ? `${prompt}\n\n참고(다른 기관들의 최근 해석 방법론 — 오늘의 사실로 인용하지 말고, 서술 방식의 참고 자료로만 써라):\n${learningContext}`
+    ? `${prompt}\n\n참고(이번 주 여러 기관의 학습 요약 — 지표·사고과정·보고형식·배경지식을 종합한 것이다. 오늘 분석의 배경 맥락으로 삼아 반영하되, 특정 기관이 이렇게 말했다는 식으로 직접 인용하거나 이 사이트 자체의 사실인 것처럼 단정하지 마라):\n${learningContext}`
     : prompt;
 
   const draft = await callMistral(fullPrompt, maxOutputTokens, 0.4);
