@@ -59,6 +59,7 @@ export default async function SelfLearningPage() {
       db.learningNote.findFirst({ orderBy: { createdAt: "desc" } }),
       db.learningNote.groupBy({ by: ["sourceName"], _count: { _all: true } }),
     ]);
+  const weeklySynthesis = await db.weeklyLearningSynthesis.findFirst({ orderBy: { createdAt: "desc" } });
 
   // 기관별 버튼으로 걸러볼 "최근 학습 노트"는 최신 1건이 속한 주(periodKey) 전체를 보여준다 —
   // "최근 8건" 같은 임의 개수 컷은 노트가 많은 기관(예: 미래에셋 10건)이 적은 기관을 밀어내
@@ -203,6 +204,19 @@ export default async function SelfLearningPage() {
             </p>
           </div>
         </div>
+
+        {weeklySynthesis && (
+          <>
+            <h2 className={styles.sectionHeading}>이번 주 학습 요약 — 매일 리포트에 실제로 주입됨</h2>
+            <div className={styles.noteSample}>
+              <div className={styles.noteSampleHead}>
+                <span>periodKey: {weeklySynthesis.periodKey}</span>
+                <span>{fmtDateTime(weeklySynthesis.createdAt)}</span>
+              </div>
+              <p className={styles.noteSampleBody}>{weeklySynthesis.content}</p>
+            </div>
+          </>
+        )}
 
         <h2 className={styles.sectionHeading}>① 수집 — 소스별 현황</h2>
         <div className={styles.tableWrap}>
