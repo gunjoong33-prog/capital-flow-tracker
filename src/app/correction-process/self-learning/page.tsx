@@ -5,6 +5,7 @@ import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import siteStyles from "@/styles/site.module.css";
 import styles from "../page.module.css";
 import { InstitutionNotes } from "./InstitutionNotes";
+import { MAX_SYNTHESIS_AGE_DAYS } from "@/lib/narrative-learning-context";
 
 export const dynamic = "force-dynamic"; // 수집·증류가 계속 쌓이므로 항상 최신 조회
 
@@ -59,7 +60,15 @@ export default async function SelfLearningPage() {
       db.learningNote.findFirst({ orderBy: { createdAt: "desc" } }),
       db.learningNote.groupBy({ by: ["sourceName"], _count: { _all: true } }),
     ]);
-  const weeklySynthesis = await db.weeklyLearningSynthesis.findFirst({ orderBy: { createdAt: "desc" } });
+  // fetchRecentLearningContext()(narrative-learning-context.ts)와 같은 신선도 기준을 써야
+  // "화면에 표시된 압축본"과 "실제로 프롬프트에 주입되는 압축본"이 항상 일치한다 — 이 컷오프가
+  // 없으면 주간 크론이 멈춰 오래된 행이 남아있을 때 페이지는 "주입됨"이라고 보여주는데 실제
+  // 리포트 생성 경로는 그 행을 이미 무시하고 있는 모순이 생길 수 있다(코드 리뷰 지적).
+  const synthesisCutoff = new Date(Date.now() - MAX_SYNTHESIS_AGE_DAYS * 86_400_000);
+  const weeklySynthesis = await db.weeklyLearningSynthesis.findFirst({
+    where: { createdAt: { gte: synthesisCutoff } },
+    orderBy: { createdAt: "desc" },
+  });
 
   // 기관별 버튼으로 걸러볼 "최근 학습 노트"는 최신 1건이 속한 주(periodKey) 전체를 보여준다 —
   // "최근 8건" 같은 임의 개수 컷은 노트가 많은 기관(예: 미래에셋 10건)이 적은 기관을 밀어내
