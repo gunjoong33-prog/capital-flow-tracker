@@ -1,9 +1,9 @@
 // ExternalConsensus 누적 데이터에서 "이 기관은 어떤 지표를 어떤 논리로 해석해 이런 결론에
 // 도달했는가"를 LLM으로 distill해 LearningNote에 저장 + 옵시디언 "학습" 폴더로 내보낸다.
-// 서술 품질이 중요한 작업이라 narrative.ts와 같은 이유로 Mistral을 쓴다(llm-clients.ts 주석 참고).
+// 서술 품질이 중요한 작업이라 narrative.ts와 같은 이유로 Claude를 쓴다(llm-clients.ts 주석 참고).
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
-import { callMistral } from "@/lib/llm-clients";
+import { callClaude } from "@/lib/llm-clients";
 import { upsertObsidianFile } from "@/lib/obsidian-export";
 import { toPlainSentenceLines } from "@/lib/text-format";
 
@@ -145,10 +145,14 @@ export async function distillAndSaveLearningNotes(): Promise<{ saved: number; er
     const results = await Promise.all(
       batch.map(async ([sourceName, sourceRecords]) => {
         try {
-          const raw = await callMistral(buildDistillPrompt(sourceName, sourceRecords), 1024, 0.3);
+          const raw = await callClaude(buildDistillPrompt(sourceName, sourceRecords), {
+            model: "claude-sonnet-5",
+            maxTokens: 1024,
+            temperature: 0.3,
+          });
           return { sourceName, sourceRecords, summary: toPlainSentenceLines(raw) };
         } catch (e) {
-          errors.push(`Mistral distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(`Claude distill 실패(${sourceName}): ${e instanceof Error ? e.message : String(e)}`);
           return null;
         }
       })

@@ -5,7 +5,7 @@
 // 자체는 문제가 아니었지만(mistral-small-latest 실측 한도 262K 토큰), 비용·지연·
 // 플레이스홀더 준수율 저하 위험을 줄이기 위해 압축한다.
 import { db } from "@/lib/db";
-import { callMistral } from "@/lib/llm-clients";
+import { callClaude } from "@/lib/llm-clients";
 import { toPlainSentenceLines } from "@/lib/text-format";
 
 type NoteForSynthesis = { category: string; sourceName: string; summary: string };
@@ -52,7 +52,7 @@ export async function synthesizeWeeklyLearning(): Promise<{ periodKey: string; c
     select: { category: true, sourceName: true, summary: true },
   });
 
-  const raw = await callMistral(buildSynthesisPrompt(notes), 1536, 0.3);
+  const raw = await callClaude(buildSynthesisPrompt(notes), { model: "claude-sonnet-5", maxTokens: 1536, temperature: 0.3 });
   const content = toPlainSentenceLines(raw);
 
   await db.weeklyLearningSynthesis.upsert({
