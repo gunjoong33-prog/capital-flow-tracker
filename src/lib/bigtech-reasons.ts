@@ -83,7 +83,7 @@ async function judgeBigTechReasons(
       // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 종목이 "명확한 원인 확인 안 됨"으로 뜨는데도
       // sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가 깨진
       // 것을 화면에서 구분할 수 없었음) — errors 배열에 남겨 호출부가 기록하게 한다.
-      if (!items) throw new Error(`Groq 빅테크 원인 판정 응답 파싱 실패(${ticker}, 응답 앞부분: ${text.slice(0, 300)})`);
+      if (!items) throw new Error(`Claude 빅테크 원인 판정 응답 파싱 실패(${ticker}, 응답 앞부분: ${text.slice(0, 300)})`);
       parsed.push(...items);
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));

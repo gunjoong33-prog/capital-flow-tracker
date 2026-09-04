@@ -330,7 +330,7 @@ ${list}`;
 
   const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 512 });
   const irrelevantIndices = extractJsonArray<number>(text);
-  if (irrelevantIndices === null) throw new Error("Groq 관련성 판정 응답 파싱 실패");
+  if (irrelevantIndices === null) throw new Error("Claude 관련성 판정 응답 파싱 실패");
 
   const irrelevantSet = new Set(irrelevantIndices);
   return headlines.map((_, i) => !irrelevantSet.has(i + 1));
