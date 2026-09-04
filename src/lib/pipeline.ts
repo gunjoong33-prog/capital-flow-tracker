@@ -15,7 +15,6 @@ import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { generateComprehensiveReport } from "@/lib/comprehensive-report";
 import { generatePptHeadlines } from "@/lib/ppt-headlines";
-import { sleep } from "@/lib/llm-clients";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
 import { exportDailyReportNow } from "@/lib/obsidian-export";
@@ -343,17 +342,12 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       sourceErrors.push({ source: "뉴스페이지(실데이터 속보)", error: err instanceof Error ? err.message : String(err) });
     }
 
-    // 3) 해설 생성 — narrative.ts·comprehensive-report.ts 둘 다 Mistral을 쓰는데 무료 티어가
-    // 분당 2회 제한이다. 이 둘은 바로 연달아 호출돼 초 단위로 붙어있고, 위(1단계 뉴스 판정)에서
-    // 이미 Mistral을 한 번 호출했으니 여기서 곧바로 2번 더 부르면 짧은 시간 안에 3번째 요청이 될
-    // 위험이 있다 — 사이에 여유를 둬 레이트리밋(429)을 피한다.
+    // 3) 해설 생성
     try {
       narrative = await generateNarrative(buildDailyNarrativePrompt(report));
     } catch (err) {
       narrative = `[해설 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
     }
-
-    await sleep(20_000);
 
     try {
       report.details.comprehensiveReport = await generateComprehensiveReport(report);

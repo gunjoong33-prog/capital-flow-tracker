@@ -5,7 +5,7 @@
 // 벗어난 예외라는 걸 사용자에게 먼저 확인할 것.
 import "dotenv/config";
 import { db } from "../src/lib/db";
-import { callMistral, extractJsonArray } from "../src/lib/llm-clients";
+import { callClaude, extractJsonArray } from "../src/lib/llm-clients";
 import {
   capScheduledPolicyMeetingSeverity,
   downgradeUnsupportedHigh,
@@ -49,7 +49,7 @@ async function main() {
 목록:
 ${list}`;
 
-  const text = await callMistral(prompt, 8192);
+  const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 8192 });
   const parsed = extractJsonArray<{ index: number; severity?: string; evidence?: string }>(text);
   if (!parsed) {
     console.log("재분류 응답 파싱 실패, 중단");
