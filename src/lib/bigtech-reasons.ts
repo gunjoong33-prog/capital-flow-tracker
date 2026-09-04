@@ -4,7 +4,7 @@
 import { getMetricHistoryByCount } from "@/lib/metrics";
 import { fetchBigTechHeadlines, type Headline } from "@/lib/sources/news-feeds";
 import { BIG_TECH_LABELS } from "@/lib/sources/types";
-import { callGroq, extractJsonArray } from "@/lib/llm-clients";
+import { callClaude, extractJsonArray } from "@/lib/llm-clients";
 import { buildConsistentReasons } from "@/lib/bigtech-direction";
 
 async function change1dFor(ticker: string, asOf: Date): Promise<number | null> {
@@ -54,7 +54,7 @@ async function judgeBigTechReasons(
   changes: { ticker: string; changePct1d: number | null }[],
   headlinesByTicker: Record<string, Headline[]>
 ): Promise<{ reasons: Record<string, string>; errors: string[] }> {
-  if (!process.env.GROQ_API_KEY) return { reasons: {}, errors: [] };
+  if (!process.env.ANTHROPIC_API_KEY) return { reasons: {}, errors: [] };
 
   const errors: string[] = [];
   const parsed: { ticker: string; reason: string; direction?: "up" | "down" | "flat" }[] = [];
@@ -78,7 +78,7 @@ async function judgeBigTechReasons(
       // 추론에 뺏기지 않게 한다("none"은 이 모델이 거부해서 최소값인 "low"를 쓴다). 종목 1개치
       // 판정이라 8/22에 7종목 배치용으로 올렸던 8192는 필요 없다 — 2048이면 프롬프트(종목 1개+
       // 헤드라인 최대 6개, 약 400~600토큰)를 더해도 TPM 한도(8000)에 전혀 근접하지 않는다.
-      const text = await callGroq(prompt, { maxTokens: 2048, reasoningEffort: "low" });
+      const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 2048 });
       const items = extractJsonArray<{ ticker: string; reason: string; direction?: "up" | "down" | "flat" }>(text);
       // 예전엔 파싱 실패를 조용히 빈 객체로 삼켜서 종목이 "명확한 원인 확인 안 됨"으로 뜨는데도
       // sourceErrors엔 아무 기록이 안 남았다(AI가 정직하게 "모름"이라 답한 것과 응답 자체가 깨진

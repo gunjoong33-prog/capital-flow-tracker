@@ -4,7 +4,7 @@
 // 문장)만 넘기고 원본 숫자는 아예 안 준다 — 숫자를 안 주면 잘못 옮겨 적을 수도 없다. 그래도 혹시
 // 모델이 body에 있던 숫자를 헤드라인에 베껴 쓰면(예: "148건의 뉴스가...") 그 슬라이드만 kicker로
 // 폴백한다 — 화면에 카드가 아예 안 뜨는 것보단 안전(데이터 정직성 원칙).
-import { callGroq, extractJsonArray } from "@/lib/llm-clients";
+import { callClaude, extractJsonArray } from "@/lib/llm-clients";
 import type { PptSlide } from "@/lib/scoring/types";
 
 interface HeadlineResponse {
@@ -34,7 +34,7 @@ ${sections}`;
 
   let text: string;
   try {
-    text = await callGroq(prompt, { maxTokens: 1024, reasoningEffort: "low" });
+    text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 1024 });
   } catch {
     return fallback;
   }

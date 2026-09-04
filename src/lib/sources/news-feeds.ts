@@ -1,6 +1,6 @@
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { BIG_TECH_TICKERS } from "@/lib/sources/types";
-import { callGroq, extractJsonArray } from "@/lib/llm-clients";
+import { callClaude, extractJsonArray } from "@/lib/llm-clients";
 
 // RSS 헤드라인 수집 — 뉴스 API 없이 표준 RSS 피드만 쓴다(무료, 키 불필요).
 // Google News RSS: 검색어 기반 공개 RSS(비공식이지만 안정적으로 유지돼온 포맷).
@@ -328,7 +328,7 @@ export async function judgeRelevanceByLLM(headlines: { title: string }[]): Promi
 헤드라인 목록:
 ${list}`;
 
-  const text = await callGroq(prompt, { maxTokens: 512, reasoningEffort: "low" });
+  const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 512 });
   const irrelevantIndices = extractJsonArray<number>(text);
   if (irrelevantIndices === null) throw new Error("Groq 관련성 판정 응답 파싱 실패");
 

@@ -4,12 +4,12 @@ vi.mock("@/lib/metrics", () => ({ getMetricHistoryByCount: vi.fn() }));
 vi.mock("@/lib/sources/news-feeds", () => ({ fetchBigTechHeadlines: vi.fn() }));
 vi.mock("@/lib/llm-clients", async () => {
   const actual = await vi.importActual<typeof import("./llm-clients")>("./llm-clients");
-  return { callGroq: vi.fn(), extractJsonArray: actual.extractJsonArray };
+  return { callClaude: vi.fn(), extractJsonArray: actual.extractJsonArray };
 });
 
 import { getMetricHistoryByCount } from "@/lib/metrics";
 import { fetchBigTechHeadlines } from "@/lib/sources/news-feeds";
-import { callGroq } from "@/lib/llm-clients";
+import { callClaude } from "@/lib/llm-clients";
 import { computeBigTechReasons } from "./bigtech-reasons";
 
 const ASOF = new Date("2026-08-24T21:00:00.000Z");
@@ -22,7 +22,7 @@ function history(prev: number, curr: number) {
 describe("computeBigTechReasons", () => {
   beforeEach(() => {
     vi.clearAllMocks(); // restoreAllMocks는 vi.spyOn 대상만 초기화한다 — 모듈 목의 mock.calls 누적은 별도로 비워야 함
-    vi.stubEnv("GROQ_API_KEY", "test-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     vi.mocked(fetchBigTechHeadlines).mockResolvedValue({ byTicker: {}, errors: [] });
   });
   afterEach(() => {
@@ -36,11 +36,11 @@ describe("computeBigTechReasons", () => {
       if (ticker === "BBB") return history(100, 90); // -10%
       return history(100, 100); // CCC: 변동 없음
     });
-    vi.mocked(callGroq).mockImplementation(async (prompt: unknown) => {
+    vi.mocked(callClaude).mockImplementation(async (prompt: unknown) => {
       const p = prompt as string;
       if (p.includes("AAA(")) return '[{"ticker":"AAA","reason":"AAA 실적 호조로 상승했습니다.","direction":"up"}]';
       if (p.includes("BBB(")) {
-        // 실측 재현: 재시도 3회를 다 써도 여전히 429라 callGroq가 던지는 경우
+        // 실측 재현: 재시도 3회를 다 써도 여전히 429라 callClaude가 던지는 경우
         throw new Error(
           'Groq 요청 실패: 429 {"error":{"message":"Rate limit reached ... tokens per minute (TPM)"}}'
         );
@@ -58,21 +58,24 @@ describe("computeBigTechReasons", () => {
     expect(reasons.BBB).toBeUndefined();
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/429/);
-    expect(callGroq).toHaveBeenCalledTimes(3); // 3종목 전부 개별 호출 시도(배치 1회 아님)
+    expect(callClaude).toHaveBeenCalledTimes(3); // 3종목 전부 개별 호출 시도(배치 1회 아님)
   });
 
-  it("종목마다 maxTokens 2048로 호출한다(배치용 8192 회귀 방지)", async () => {
+  it("종목마다 maxTokens 2048로 Haiku를 호출한다(배치용 8192 회귀 방지)", async () => {
     vi.mocked(getMetricHistoryByCount).mockResolvedValue(history(100, 105));
-    vi.mocked(callGroq).mockResolvedValue('[{"ticker":"AAA","reason":"이유","direction":"up"}]');
+    vi.mocked(callClaude).mockResolvedValue('[{"ticker":"AAA","reason":"이유","direction":"up"}]');
 
     await computeBigTechReasons(["AAA"], ASOF);
 
-    expect(callGroq).toHaveBeenCalledWith(expect.any(String), { maxTokens: 2048, reasoningEffort: "low" });
+    expect(callClaude).toHaveBeenCalledWith(expect.any(String), {
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 2048,
+    });
   });
 
   it("응답이 방향과 모순되면(direction 불일치) 대체 문구로 바뀐다 — bigtech-direction 검증이 실제로 연결돼 있다", async () => {
     vi.mocked(getMetricHistoryByCount).mockResolvedValue(history(100, 90)); // -10%(하락)
-    vi.mocked(callGroq).mockResolvedValue('[{"ticker":"AAA","reason":"목표주가 상향으로 상승했습니다.","direction":"up"}]');
+    vi.mocked(callClaude).mockResolvedValue('[{"ticker":"AAA","reason":"목표주가 상향으로 상승했습니다.","direction":"up"}]');
 
     const { reasons } = await computeBigTechReasons(["AAA"], ASOF);
 
@@ -81,7 +84,7 @@ describe("computeBigTechReasons", () => {
 
   it("Groq 응답이 JSON 배열이 아니면(파싱 실패) 그 종목만 에러로 기록되고 결과에서 빠진다", async () => {
     vi.mocked(getMetricHistoryByCount).mockResolvedValue(history(100, 105));
-    vi.mocked(callGroq).mockResolvedValue("이 문장은 JSON이 아닙니다.");
+    vi.mocked(callClaude).mockResolvedValue("이 문장은 JSON이 아닙니다.");
 
     const { reasons, errors } = await computeBigTechReasons(["AAA"], ASOF);
 
@@ -90,21 +93,21 @@ describe("computeBigTechReasons", () => {
     expect(errors[0]).toMatch(/파싱 실패/);
   });
 
-  it("GROQ_API_KEY가 없으면 Groq를 호출하지 않고 빈 결과를 반환한다", async () => {
-    vi.stubEnv("GROQ_API_KEY", "");
+  it("ANTHROPIC_API_KEY가 없으면 Claude를 호출하지 않고 빈 결과를 반환한다", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.mocked(getMetricHistoryByCount).mockResolvedValue(history(100, 105));
 
     const { reasons, errors } = await computeBigTechReasons(["AAA"], ASOF);
 
     expect(reasons).toEqual({});
     expect(errors).toEqual([]);
-    expect(callGroq).not.toHaveBeenCalled();
+    expect(callClaude).not.toHaveBeenCalled();
   });
 
   it("뉴스 헤드라인 조회(fetchBigTechHeadlines) 에러도 errors에 합쳐진다", async () => {
     vi.mocked(getMetricHistoryByCount).mockResolvedValue(history(100, 105));
     vi.mocked(fetchBigTechHeadlines).mockResolvedValue({ byTicker: {}, errors: ["google-news-AAA: 타임아웃"] });
-    vi.mocked(callGroq).mockResolvedValue('[{"ticker":"AAA","reason":"이유","direction":"up"}]');
+    vi.mocked(callClaude).mockResolvedValue('[{"ticker":"AAA","reason":"이유","direction":"up"}]');
 
     const { errors } = await computeBigTechReasons(["AAA"], ASOF);
 
@@ -113,11 +116,11 @@ describe("computeBigTechReasons", () => {
 
   it("전일 데이터가 부족하면(history 1건 이하) changePct1d를 null로 두고 '확인 못함'으로 프롬프트에 넣는다", async () => {
     vi.mocked(getMetricHistoryByCount).mockResolvedValue([{ value: 100 }] as any); // 1건뿐
-    vi.mocked(callGroq).mockResolvedValue('[{"ticker":"AAA","reason":"명확한 원인 확인 안 됨","direction":"flat"}]');
+    vi.mocked(callClaude).mockResolvedValue('[{"ticker":"AAA","reason":"명확한 원인 확인 안 됨","direction":"flat"}]');
 
     await computeBigTechReasons(["AAA"], ASOF);
 
-    const prompt = vi.mocked(callGroq).mock.calls[0][0] as string;
+    const prompt = vi.mocked(callClaude).mock.calls[0][0] as string;
     expect(prompt).toContain("확인 못함");
   });
 });
