@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { fetchCandidateHeadlines, type Headline, type NewsCategory } from "@/lib/sources/news-feeds";
-import { callMistral, extractJsonArray } from "@/lib/llm-clients";
+import { callClaude, extractJsonArray } from "@/lib/llm-clients";
 import { dedupBySimilarTitle } from "@/lib/text-similarity";
 import { kstToday } from "@/lib/date";
 
@@ -41,7 +41,7 @@ interface JudgedItem {
  * 필요 없다.
  */
 async function judgeHeadlines(headlines: Headline[]): Promise<JudgedItem[]> {
-  if (!process.env.MISTRAL_API_KEY || headlines.length === 0) return [];
+  if (!process.env.ANTHROPIC_API_KEY || headlines.length === 0) return [];
 
   const list = headlines
     .map((h, i) => `${i + 1}. [${h.source}] ${h.title} (${h.url})`)
@@ -92,7 +92,7 @@ risky가 아닌 항목은 배열에 아예 포함하지 마라. 해당하는 게
 헤드라인 목록:
 ${list}`;
 
-  const text = await callMistral(prompt, 8192);
+  const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 8192 });
   const parsed = extractJsonArray<{
     index: number;
     summary: string;
@@ -155,7 +155,7 @@ ${list}`;
  * 프레이밍이 별도 항목으로 살아남아 심각도를 부풀리는 것)을 직접 차단한다.
  */
 export async function mergeCrossSourceDuplicates(items: JudgedItem[]): Promise<JudgedItem[]> {
-  if (!process.env.MISTRAL_API_KEY || items.length < 2) return items;
+  if (!process.env.ANTHROPIC_API_KEY || items.length < 2) return items;
 
   const list = items
     .map((it, i) => `${i + 1}. [${it.category}] ${it.title}\n   요약: ${it.summary}`)
@@ -179,7 +179,7 @@ export async function mergeCrossSourceDuplicates(items: JudgedItem[]): Promise<J
 목록:
 ${list}`;
 
-  const text = await callMistral(prompt, 2048);
+  const text = await callClaude(prompt, { model: "claude-haiku-4-5-20251001", maxTokens: 2048 });
   const clusters = extractJsonArray<{ indices: number[]; evidence?: string }>(text);
   if (!clusters) return items;
 
