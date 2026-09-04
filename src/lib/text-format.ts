@@ -40,3 +40,15 @@ export function toPlainSentenceLines(text: string): string {
     .map((s) => (s.endsWith(".") ? s : `${s}.`))
     .join("\n");
 }
+
+/** 한글 문장 사이에 영어 단어가 그대로 섞인 경우를 찾는다("although", "unusual한",
+ * "조금flows됐지만"처럼) — comprehensive-report.ts·narrative.ts가 프롬프트로 "영어 쓰지
+ * 마라"를 아무리 강조해도 mistral-small-latest가 예시로 든 단어만 피하고 새 단어로 계속
+ * 어기는 사례가 실측됐다(2026-09 두 차례 재발, "circulating money" 차단 후 "uncertainties"로
+ * 재발). 대문자로만 된 토큰(CPI·PPI·FOMC·GDP·VIX·ETF·CEO·AI·BOJ 등 통계·기관 약어와
+ * S&P500 같은 지수 표기)은 이 사이트가 원래 허용하는 표기라 제외한다. 자동 번역은 못 하므로
+ * (규칙 기반 오번역 위험) 탐지·로그만 한다 — 실제 차단은 프롬프트 규칙과 자가검수 패스가 한다. */
+export function findStrayEnglishWords(text: string): string[] {
+  const tokens = text.match(/[A-Za-z]{3,}/g) ?? [];
+  return [...new Set(tokens.filter((w) => w !== w.toUpperCase()))];
+}

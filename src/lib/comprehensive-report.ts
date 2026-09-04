@@ -3,7 +3,7 @@
 // 계산은 전부 scoring/pure.ts가 결정론적으로 하고, 여기서는 그 결과를 근거로 서술만 생성한다.
 import { generateNarrative } from "@/lib/narrative";
 import { WEIGHTS, TOTAL_WEIGHT } from "@/lib/scoring/pure";
-import { collapseRepeatedDots } from "@/lib/text-format";
+import { collapseRepeatedDots, findStrayEnglishWords } from "@/lib/text-format";
 
 // gemini-flash-latest는 내부적으로 thinking 모델로 풀려 추론에 토큰을 많이 쓴다(narrative.ts와 같은 문제).
 // 4문단 + 마지막 요약 문장을 다 채우려면 2048로는 부족해서 넉넉히 잡는다.
@@ -114,9 +114,12 @@ export function buildComprehensiveReportPrompt(report: {
 - **글머리에 "①", "②"처럼 번호를 매기거나, 굵게(**) 표시한 소제목·질문("① 오늘 시장을 움직인
   요인은 무엇입니까?" 같은 형태)을 절대 달지 마라.** 다섯 덩어리는 오직 빈 줄로만 구분되는 순수한
   문단 다섯 개여야 한다 — 각 문단이 무슨 내용인지 알려주는 제목·질문·번호를 문단 앞에 붙이면 안 된다.
-- 모든 단어는 한국어로만 써라. "circulating money", "forward signals", "certainty", "upcoming
-  events"처럼 영어 단어나 표현을 한글 문장 사이에 그대로 섞어 쓰지 마라 — 반드시 자연스러운
-  한국어로 번역해서 써라.
+- 모든 단어는 한국어로만 써라. 예외는 딱 두 종류뿐이다 — (1) 한국 금융 매체가 관용적으로 그대로
+  쓰는 지수·회사명·티커 표기(S&P500, 나스닥100 등)와 (2) 대문자로만 쓰는 통계·기관 약어(CPI,
+  PPI, FOMC, GDP, VIX, ETF, CEO, AI, BOJ 등). 이 두 경우가 아니면 접속사든 형용사든 명사든
+  동사든 어떤 영어 단어도 한글 문장 중간에 그대로 쓰면 안 된다 — 반드시 자연스러운 한국어
+  단어로 완전히 바꿔써라. 영어 단어 뒤에 괄호로 한글 뜻만 병기하고 영어는 남겨두는 것도
+  금지다 — 괄호 없이 한국어 단어 하나로 대체해라.
 - 글을 "오늘 하루를 정리합니다", "오늘 하루를 정리해드리겠습니다" 같은 상투적인 도입 문장으로 시작
   하지 마라 — 바로 첫 번째 문단(오늘 자본을 움직인 사건)의 내용으로 시작해라.
 
@@ -230,7 +233,16 @@ export async function generateComprehensiveReport(report: Parameters<typeof buil
 
   // jpyVolNote가 이미 마침표로 끝나는 완결된 문장인데, LLM이 그 뒤에 자기 마침표를 하나 더 붙이는
   // 경우가 있었다("...습니다.." 중복) — 치환 후 남는 이중 마침표만 하나로 정리한다.
-  return collapseRepeatedDots(sanitizeFormat(text));
+  const finalText = collapseRepeatedDots(sanitizeFormat(text));
+
+  const strayEnglish = findStrayEnglishWords(finalText);
+  if (strayEnglish.length > 0) {
+    console.error(
+      `generateComprehensiveReport: 프롬프트 규칙·자가검수 패스를 뚫고 영어 단어가 남았다(${strayEnglish.join(", ")}) — 원문 확인 필요`
+    );
+  }
+
+  return finalText;
 }
 
 // mistral-large-latest가 결제수단 미등록으로 막혀(2026-09-01~) mistral-small-latest로 임시

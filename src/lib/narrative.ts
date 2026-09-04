@@ -12,12 +12,24 @@ import { fetchRecentLearningContext } from "@/lib/narrative-learning-context";
  * 생성한 해설을 스스로 재검토해 어려운 문장이면 한 번만 다시 쓴다(무한루프 방지로 1회 제한).
  * "비전공자가 읽어도 명쾌해야 한다"는 요구를 생성 프롬프트 지시만으로는 못 지키는 날이 있어서
  * (LLM이 지시를 놓치는 경우) 별도 검수 패스를 둔다 — narrative.ts 자체가 서술 레이어라 안전.
+ *
+ * 2026-09-04: 영어 단어 혼용("although", "uncertainties(불확실성)"처럼) 재검토도 여기에 얹었다
+ * — comprehensive-report.ts 프롬프트가 "영어 쓰지 마라"를 아무리 예시로 강조해도
+ * mistral-small-latest가 예시로 든 단어만 피하고 새 단어로 계속 어기는 게 실측됐다. 이미 매
+ * generateNarrative() 호출마다 도는 2차 LLM 패스라 새 호출을 추가하지 않고 검사 항목만 늘렸다.
  */
 async function selfReviewForPlainLanguage(narrative: string, maxOutputTokens: number): Promise<string> {
-  const reviewPrompt = `아래 글을 비전공자가 한 번 읽고 바로 이해할 수 있는지 검토해라.
-전문용어를 괄호로 풀이하는 방식이 아니라, 문장 구조 자체를 쉽게 바꿔야 한다.
-이미 충분히 쉬우면 그대로 반환하고, 어려운 부분이 있으면 그 부분만 쉬운 문장으로 다시 써서
-전체 글을 반환해라. 다른 설명 없이 최종 글만 출력해라.
+  const reviewPrompt = `아래 글을 두 가지 기준으로 검토해라.
+
+1) 비전공자가 한 번 읽고 바로 이해할 수 있는가 — 전문용어를 괄호로 풀이하는 방식이 아니라,
+   문장 구조 자체를 쉽게 바꿔야 한다.
+2) 한글 문장 중간에 영어 단어가 그대로 섞여 있지 않은가 — 지수·회사명·티커 표기(S&P500 등)와
+   대문자로만 쓰는 통계·기관 약어(CPI, PPI, FOMC, GDP, VIX, ETF, CEO, AI, BOJ 등)는 예외지만,
+   그 외의 영어 단어는 접속사든 형용사든 명사든 동사든 발견하는 즉시 자연스러운 한국어 단어로
+   완전히 바꿔라. 영어 단어 뒤에 괄호로 한글 뜻만 병기하고 영어를 그대로 남기는 것도 위반이다.
+
+두 기준 모두 이미 충족돼 있으면 원문 그대로 반환하고, 위반이 있으면 그 부분만 고쳐서 전체 글을
+반환해라. 다른 설명 없이 최종 글만 출력해라.
 
 원문:
 ${narrative}`;
