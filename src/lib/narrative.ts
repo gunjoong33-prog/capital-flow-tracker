@@ -1,11 +1,10 @@
 // 정성적 해설(왜 이런 흐름인지 서술) 생성 — 계산은 전부 scoring/pure.ts가 결정론적으로 하고,
 // 여기서는 그 결과를 자연스러운 한국어 문장으로 풀어쓰는 것만 담당한다.
 //
-// 원래 Gemini 무료 티어를 썼으나 하루 20건 요청 한도가 메인 리포트 파이프라인과 공유돼 자주
-// 소진됐다 — Mistral(mistral-large-latest, 무료 Experiment 플랜)로 교체. 실측 비교에서 Groq의
-// Llama 3.3 70B는 한국어 응답에 한자·일본어 문자가 섞여 나와 제외했고, Mistral이 이 사이트가
-// 쓰는 분석적 한국어 문체를 가장 자연스럽게 생성했다(llm-clients.ts 주석 참고).
-import { callMistral, sleep } from "@/lib/llm-clients";
+// 2026-09-04: Gemini(하루 20건 한도) → Mistral/Groq(무료 티어 계정 문제 2회 반복, 2026-09-01
+// 403·2026-09-04 요청한도 0) 순으로 거쳐 Claude API(claude-sonnet-5)로 이관했다 — 카드 기반
+// 표준 종량제라 이런 유형의 계정 사고 이력이 없다(llm-clients.ts 주석 참고).
+import { callClaude } from "@/lib/llm-clients";
 import { fetchRecentLearningContext } from "@/lib/narrative-learning-context";
 
 /**
@@ -34,7 +33,7 @@ async function selfReviewForPlainLanguage(narrative: string, maxOutputTokens: nu
 원문:
 ${narrative}`;
   try {
-    const reviewed = await callMistral(reviewPrompt, maxOutputTokens, 0.3);
+    const reviewed = await callClaude(reviewPrompt, { model: "claude-sonnet-5", maxTokens: maxOutputTokens, temperature: 0.3 });
     return reviewed.trim().length > 0 ? reviewed : narrative;
   } catch {
     return narrative; // 검수 실패해도 원문은 이미 있으니 그대로 쓴다(자가검수는 개선 시도일 뿐, 필수 경로 아님).
@@ -42,8 +41,8 @@ ${narrative}`;
 }
 
 export async function generateNarrative(prompt: string, maxOutputTokens = 2048): Promise<string> {
-  if (!process.env.MISTRAL_API_KEY) {
-    return "[해설 생성 안 됨 — MISTRAL_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return "[해설 생성 안 됨 — ANTHROPIC_API_KEY 미설정. 숫자·점수는 위 결과 그대로 신뢰 가능]";
   }
 
   // buildDailyNarrativePrompt는 learningContext 파라미터를 받지만, 유일한 실제 호출부인
@@ -64,12 +63,9 @@ export async function generateNarrative(prompt: string, maxOutputTokens = 2048):
     ? `${prompt}\n\n참고(이번 주 여러 기관의 학습 요약 — 지표·사고과정·보고형식·배경지식을 종합한 것이다. 오늘 분석의 배경 맥락으로 삼아 반영하되, 특정 기관이 이렇게 말했다는 식으로 직접 인용하거나 이 사이트 자체의 사실인 것처럼 단정하지 마라):\n${learningContext}`
     : prompt;
 
-  const draft = await callMistral(fullPrompt, maxOutputTokens, 0.4);
-  // 자가검수 패스가 연달아 두 번째 Mistral 호출을 만든다 — 이 코드베이스의 기존 관례
-  // (pipeline.ts:356, llm-clients.ts 주석)대로 무료 티어 레이트리밋을 지키려면 연속 호출
-  // 사이에 간격을 둬야 한다(최종 리뷰 지적: generateNarrative 호출부가 4곳이라 이 간격
-  // 없이는 Mistral 호출량이 그냥 2배가 된다).
-  await sleep(20_000);
+  const draft = await callClaude(fullPrompt, { model: "claude-sonnet-5", maxTokens: maxOutputTokens, temperature: 0.4 });
+  // Claude 표준 티어는 Mistral 무료 티어(분당 2회)와 달리 이 사이트 물량 대비 압도적으로
+  // 여유로워(공식 문서 확인) 연쇄 호출 사이 rate-limit 대기가 더 이상 필요 없다.
   return selfReviewForPlainLanguage(draft, maxOutputTokens);
 }
 
