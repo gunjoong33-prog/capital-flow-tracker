@@ -32,6 +32,10 @@ export async function callClaude(
   // claude-sonnet-5는 temperature 파라미터 자체를 거부한다(2026-09-05 실측:
   // 400 "temperature is deprecated for this model" — haiku-4-5는 정상 수신 확인).
   const temperatureField = model === "claude-sonnet-5" ? {} : { temperature };
+  // sonnet-5는 기본적으로 adaptive thinking을 켜고 그 사고 토큰까지 maxTokens에서 깎는다 —
+  // 이 사이트 프롬프트(약 22K토큰짜리 종합보고서 등)에서 사고가 예산을 전부 먹어치워 실제 답변
+  // text 블록이 하나도 안 나오는 걸 실측함. 여기서 하는 작업(정해진 형식의 산문 생성·분류)은
+  // 확장 사고가 필요 없으니 꺼서 maxTokens 전체가 실제 답변에 쓰이게 한다.
   const request = () =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -43,6 +47,7 @@ export async function callClaude(
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
+        thinking: { type: "disabled" },
         ...temperatureField,
         messages: [{ role: "user", content: prompt }],
       }),

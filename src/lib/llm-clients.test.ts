@@ -146,4 +146,17 @@ describe("callClaude", () => {
     expect(body.max_tokens).toBe(4096);
     expect(body).not.toHaveProperty("temperature");
   });
+
+  it("모델과 무관하게 항상 thinking을 끈다(adaptive thinking이 maxTokens를 다 먹는 것 방지)", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(CLAUDE_OK_BODY));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callClaude("프롬프트", { model: "claude-sonnet-5" });
+    await callClaude("프롬프트", { model: "claude-haiku-4-5-20251001" });
+
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(body.thinking).toEqual({ type: "disabled" });
+    }
+  });
 });
