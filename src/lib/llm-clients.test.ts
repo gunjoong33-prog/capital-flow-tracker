@@ -106,23 +106,23 @@ describe("callClaude", () => {
     await expect(callClaude("프롬프트", { model: "claude-sonnet-5" })).rejects.toThrow("Claude 응답에 텍스트가 없다");
   });
 
-  it("model·maxTokens·temperature를 요청 본문에 그대로 실어 보낸다", async () => {
+  it("model·maxTokens·temperature를 요청 본문에 그대로 실어 보낸다(haiku)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(CLAUDE_OK_BODY));
     vi.stubGlobal("fetch", fetchMock);
 
-    await callClaude("프롬프트", { model: "claude-sonnet-5", maxTokens: 4096, temperature: 0.5 });
+    await callClaude("프롬프트", { model: "claude-haiku-4-5-20251001", maxTokens: 4096, temperature: 0.5 });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.anthropic.com/v1/messages");
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe("claude-sonnet-5");
+    expect(body.model).toBe("claude-haiku-4-5-20251001");
     expect(body.max_tokens).toBe(4096);
     expect(body.temperature).toBe(0.5);
     const headers = init.headers as Record<string, string>;
     expect(headers["anthropic-version"]).toBe("2023-06-01");
   });
 
-  it("maxTokens·temperature 생략 시 기본값(2048, 0.2)을 쓴다", async () => {
+  it("maxTokens·temperature 생략 시 기본값(2048, 0.2)을 쓴다(haiku)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(CLAUDE_OK_BODY));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -132,5 +132,18 @@ describe("callClaude", () => {
     const body = JSON.parse(init.body as string);
     expect(body.max_tokens).toBe(2048);
     expect(body.temperature).toBe(0.2);
+  });
+
+  it("claude-sonnet-5는 temperature를 요청 본문에서 아예 뺀다(API가 거부하므로)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(CLAUDE_OK_BODY));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callClaude("프롬프트", { model: "claude-sonnet-5", maxTokens: 4096, temperature: 0.5 });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe("claude-sonnet-5");
+    expect(body.max_tokens).toBe(4096);
+    expect(body).not.toHaveProperty("temperature");
   });
 });

@@ -29,6 +29,9 @@ export async function callClaude(
   options: { model: string; maxTokens?: number; temperature?: number }
 ): Promise<string> {
   const { model, maxTokens = 2048, temperature = 0.2 } = options;
+  // claude-sonnet-5는 temperature 파라미터 자체를 거부한다(2026-09-05 실측:
+  // 400 "temperature is deprecated for this model" — haiku-4-5는 정상 수신 확인).
+  const temperatureField = model === "claude-sonnet-5" ? {} : { temperature };
   const request = () =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -40,7 +43,7 @@ export async function callClaude(
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        temperature,
+        ...temperatureField,
         messages: [{ role: "user", content: prompt }],
       }),
     });
