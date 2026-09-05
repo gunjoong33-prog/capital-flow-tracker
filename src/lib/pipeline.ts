@@ -262,7 +262,7 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
     const marketDateAnchor = new Date(`${marketDate}T12:00:00Z`);
 
     const { reasons: bigTechReasons, errors: bigTechErrors } = await computeBigTechReasons(BIG_TECH_TICKERS, marketDateAnchor);
-    if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Groq)", error: bigTechErrors.join("; ") });
+    if (bigTechErrors.length) sourceErrors.push({ source: "빅테크 등락 원인(Claude)", error: bigTechErrors.join("; ") });
 
     const { signals: institutionalSignals, errors: institutionalErrors } = await computeInstitutionalSignals(
       BIG_TECH_TICKERS,
