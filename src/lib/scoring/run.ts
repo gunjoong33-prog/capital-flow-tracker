@@ -1527,6 +1527,12 @@ export async function runDailyAnalysis(
     { label: "투자 적합도 점수", criterion: `가중합 / ${TOTAL_WEIGHT}`, value: step8.macroTrendScore.toFixed(2), met: null },
     { label: "1단계 거부권 적용", criterion: "발동 시 한 단계 하향", value: step8.vetoApplied ? "적용됨" : "미적용", met: !step8.vetoApplied },
     { label: "최종 결론", criterion: "≥7.0 매수\n≥5.0 지켜보기\n미만 현금비중늘리기", value: step8.finalDecision, met: null },
+    {
+      label: "자산배분 가이드(참고용, 투자자문 아님)",
+      criterion: "고정 규칙 기반(위험:안전 비중 → 코인·채권 세분화, 부동산은 신호 없어 0%)",
+      value: `주식 ${step8.assetAllocation.stock}% · 코인 ${step8.assetAllocation.coin}% · 채권 ${step8.assetAllocation.bond}% · 부동산 ${step8.assetAllocation.realEstate}% · 현금 ${step8.assetAllocation.cash}%`,
+      met: null,
+    },
   ];
 
   // forwardSignals — 종합 보고서 "앞으로 자본이 이동할 곳" 문단 전용 재료(StepDetails 타입 주석 참고).

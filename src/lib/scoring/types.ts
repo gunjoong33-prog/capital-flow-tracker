@@ -138,6 +138,7 @@ export interface Step5Result {
   riskAppetite: "안전선호" | "위험선호" | "중립"; // DJI vs SPX
   score: number; // 0~10, 격차가 작을수록 높음
   cryptoAlignsWithRisk: boolean | null;
+  coinMomentumHigherThanStock: boolean | null; // (BTC+ETH)/2 20일 수익률이 (NDX+RUT)/2보다 높은지 — 자산배분 가이드의 코인 비중 결정에 씀. 코인 데이터 없으면 null.
 }
 
 export interface SectorInput {
@@ -180,6 +181,18 @@ export interface Step8Result {
   vetoApplied: boolean;
   positionSizePct: number | null; // 매수 시 배분 비율
   cashAllocationPct: number | null; // 현금비중늘리기 시 권장 현금 비중(참고용, 투자자문 아님)
+  assetAllocation: AssetAllocation; // 위 이분법을 5개 자산군으로 세분화한 참고용 가이드(고정 규칙 기반, 투자자문 아님)
+}
+
+// 자산배분 가이드 — 전부 고정 규칙(코드에 노출된 상수)으로 계산되는 참고용 수치다. LLM이 이 비율
+// 자체를 만들지 않는다(narrative.ts가 이 숫자를 받아 "왜 이런지"만 서술). 부동산은 이 사이트에
+// 실제 신호가 없어 항상 0 — "분석 결과 0%"가 아니라 "다룰 데이터가 없다"는 뜻.
+export interface AssetAllocation {
+  stock: number;
+  coin: number;
+  bond: number;
+  realEstate: number;
+  cash: number;
 }
 
 // 각 단계 판정에 실제로 쓰인 기준·수치를 UI 표로 보여주기 위한 행 단위 데이터.

@@ -16,6 +16,7 @@ import type {
   Step7Result,
   Step8Input,
   Step8Result,
+  AssetAllocation,
 } from "./types";
 import {
   NEWS_RISK_INTENSITY_THRESHOLD,
@@ -213,7 +214,16 @@ export function scoreStep5(input: Step5Input): Step5Result {
     cryptoAlignsWithRisk = ndxUp === btcUp;
   }
 
-  return { gapPp, concentrationWarning, riskAppetite, score, cryptoAlignsWithRisk };
+  // 자산배분 가이드(8단계)가 위험자산 중 코인 비중을 정할 때 쓴다 — 코인 모멘텀이 주식보다
+  // 강하면 코인 비중을 늘린다. 둘 다 없으면(BTC만 있고 ETH 없는 경우는 실무상 없음) null.
+  let coinMomentumHigherThanStock: boolean | null = null;
+  if (input.btcReturn20d !== null && input.ethReturn20d !== null) {
+    const coinAvg = (input.btcReturn20d + input.ethReturn20d) / 2;
+    const stockAvg = (input.ndxReturn20d + input.rutReturn20d) / 2;
+    coinMomentumHigherThanStock = coinAvg > stockAvg;
+  }
+
+  return { gapPp, concentrationWarning, riskAppetite, score, cryptoAlignsWithRisk, coinMomentumHigherThanStock };
 }
 
 // ── 6단계: 섹터(사후 확인용) ──────────────────────────────────
@@ -318,5 +328,42 @@ export function scoreStep8(input: Step8Input): Step8Result {
     else cashAllocationPct = 60;
   }
 
-  return { macroTrendScore, finalDecision, vetoApplied, positionSizePct, cashAllocationPct };
+  const assetAllocation = computeAssetAllocation({
+    finalDecision,
+    positionSizePct,
+    cashAllocationPct,
+    coinMomentumHigherThanStock: input.step5.coinMomentumHigherThanStock,
+  });
+
+  return { macroTrendScore, finalDecision, vetoApplied, positionSizePct, cashAllocationPct, assetAllocation };
+}
+
+// 자산배분 가이드 — 전부 고정 규칙(아래 상수)으로 계산한다, LLM이 이 숫자를 만들지 않는다.
+// 부동산은 이 사이트에 실제 신호가 없어 항상 0(AssetAllocation 타입 주석 참고).
+const RISK_PCT_WATCH = 50; // "지켜보기"엔 positionSizePct/cashAllocationPct 둘 다 없어 위험:안전 중간값을 쓴다.
+const COIN_SHARE_OF_RISK_HIGH = 0.15; // 코인 모멘텀이 주식보다 강할 때, 위험자산 중 코인 비중
+const COIN_SHARE_OF_RISK_LOW = 0.05; // 그 외(약하거나 코인 데이터 없음)
+const BOND_SHARE_OF_SAFE = 0.3; // 안전자산 중 채권 비중(나머지는 현금)
+
+function computeAssetAllocation(input: {
+  finalDecision: Step8Result["finalDecision"];
+  positionSizePct: number | null;
+  cashAllocationPct: number | null;
+  coinMomentumHigherThanStock: boolean | null;
+}): AssetAllocation {
+  let riskPct: number;
+  if (input.finalDecision === "매수") riskPct = input.positionSizePct ?? RISK_PCT_WATCH;
+  else if (input.finalDecision === "현금비중늘리기") riskPct = 100 - (input.cashAllocationPct ?? RISK_PCT_WATCH);
+  else riskPct = RISK_PCT_WATCH;
+
+  const safePct = 100 - riskPct;
+  const coinShare = input.coinMomentumHigherThanStock === true ? COIN_SHARE_OF_RISK_HIGH : COIN_SHARE_OF_RISK_LOW;
+
+  return {
+    stock: Math.round(riskPct * (1 - coinShare)),
+    coin: Math.round(riskPct * coinShare),
+    bond: Math.round(safePct * BOND_SHARE_OF_SAFE),
+    realEstate: 0,
+    cash: Math.round(safePct * (1 - BOND_SHARE_OF_SAFE)),
+  };
 }

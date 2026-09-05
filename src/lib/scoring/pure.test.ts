@@ -177,6 +177,21 @@ describe("scoreStep4", () => {
 });
 
 describe("scoreStep5", () => {
+  it("코인(BTC+ETH 평균)이 주식(NDX+RUT 평균)보다 수익률이 높으면 true", () => {
+    const result = scoreStep5({ ndxReturn20d: 1, rutReturn20d: 1, gapPercentile: 50, djiReturn20d: 0, spxReturn20d: 0, btcReturn20d: 20, ethReturn20d: 20 });
+    expect(result.coinMomentumHigherThanStock).toBe(true);
+  });
+
+  it("코인이 주식보다 수익률이 낮으면 false", () => {
+    const result = scoreStep5({ ndxReturn20d: 10, rutReturn20d: 10, gapPercentile: 50, djiReturn20d: 0, spxReturn20d: 0, btcReturn20d: 1, ethReturn20d: 1 });
+    expect(result.coinMomentumHigherThanStock).toBe(false);
+  });
+
+  it("코인 데이터가 없으면 null", () => {
+    const result = scoreStep5({ ndxReturn20d: 1, rutReturn20d: 1, gapPercentile: 50, djiReturn20d: 0, spxReturn20d: 0, btcReturn20d: null, ethReturn20d: null });
+    expect(result.coinMomentumHigherThanStock).toBeNull();
+  });
+
   it("나스닥100이 하락 중이면 점수를 절반으로 감쇠한다(만점 오독 방지)", () => {
     const declining = scoreStep5({ ndxReturn20d: -10, rutReturn20d: 0.5, gapPercentile: 95, djiReturn20d: 0, spxReturn20d: 0, btcReturn20d: null, ethReturn20d: null });
     const rising = scoreStep5({ ndxReturn20d: 10, rutReturn20d: 0.5, gapPercentile: 95, djiReturn20d: 0, spxReturn20d: 0, btcReturn20d: null, ethReturn20d: null });
@@ -239,7 +254,7 @@ describe("scoreStep8", () => {
     step2: { overseasScore: 10, overseasQualifyingCount: 7, overseasTotalCount: 7, overseasStrengthSum: 7, finalScore: 10 },
     step3: { spreadBp: 400, zone: "안정" as const, score: 10, warning: null },
     step4: { quadrant: "금↓/보합 실질금리↑", score: 10, note: "", dollarConfirms: true },
-    step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 10, cryptoAlignsWithRisk: null },
+    step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 10, cryptoAlignsWithRisk: null, coinMomentumHigherThanStock: null },
     step6: { qualifying: ["a", "b", "c"], score: 10 },
     step7: { bothOverheated: false, oneOverheated: false, fearZone: false, positionSizeMultiplier: 1.0 },
   };
@@ -256,5 +271,59 @@ describe("scoreStep8", () => {
     const result = scoreStep8({ ...perfectSteps, step1: { vetoTriggered: true, reason: "" } });
     expect(result.finalDecision).toBe("지켜보기");
     expect(result.vetoApplied).toBe(true);
+  });
+
+  describe("assetAllocation(자산배분 가이드)", () => {
+    it("매수 + 코인 모멘텀 강세면 위험자산 중 코인 비중을 늘린다(15%)", () => {
+      const result = scoreStep8({
+        ...perfectSteps,
+        step1: { vetoTriggered: false, reason: "" },
+        step5: { ...perfectSteps.step5, coinMomentumHigherThanStock: true },
+      });
+      expect(result.finalDecision).toBe("매수");
+      expect(result.positionSizePct).toBe(50); // macroTrendScore 10(>=8.5) * multiplier 1.0
+      expect(result.assetAllocation).toEqual({ stock: 43, coin: 8, bond: 15, realEstate: 0, cash: 35 });
+    });
+
+    it("매수 + 코인 데이터 없으면 코인 비중은 낮게(5%)", () => {
+      const result = scoreStep8({ ...perfectSteps, step1: { vetoTriggered: false, reason: "" } });
+      expect(result.assetAllocation).toEqual({ stock: 48, coin: 3, bond: 15, realEstate: 0, cash: 35 });
+    });
+
+    it("현금비중늘리기(점수 2 미만)면 cashAllocationPct(80) 기준으로 안전자산을 채운다", () => {
+      const zeroSteps = {
+        step2: { overseasScore: 0, overseasQualifyingCount: 0, overseasTotalCount: 7, overseasStrengthSum: 0, finalScore: 0 },
+        step3: { spreadBp: 100, zone: "위험" as const, score: 0, warning: "급등" },
+        step4: { quadrant: "금↑ 실질금리↓", score: 0, note: "", dollarConfirms: false },
+        step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 0, cryptoAlignsWithRisk: null, coinMomentumHigherThanStock: null },
+        step6: { qualifying: [], score: 0 },
+        step7: { bothOverheated: false, oneOverheated: false, fearZone: false, positionSizeMultiplier: 1.0 },
+      };
+      const result = scoreStep8({ ...zeroSteps, step1: { vetoTriggered: false, reason: "" } });
+      expect(result.finalDecision).toBe("현금비중늘리기");
+      expect(result.cashAllocationPct).toBe(80);
+      expect(result.assetAllocation).toEqual({ stock: 19, coin: 1, bond: 24, realEstate: 0, cash: 56 });
+    });
+
+    it("지켜보기(positionSizePct·cashAllocationPct 둘 다 없음)면 위험:안전 50:50을 기준으로 채운다", () => {
+      const midSteps = {
+        step2: { overseasScore: 6, overseasQualifyingCount: 4, overseasTotalCount: 7, overseasStrengthSum: 4, finalScore: 6 },
+        step3: { spreadBp: 250, zone: "위험" as const, score: 6, warning: null },
+        step4: { quadrant: "금↓/보합 실질금리↑", score: 6, note: "", dollarConfirms: true },
+        step5: { gapPp: 0, concentrationWarning: false, riskAppetite: "중립" as const, score: 6, cryptoAlignsWithRisk: null, coinMomentumHigherThanStock: null },
+        step6: { qualifying: ["a"], score: 6 },
+        step7: { bothOverheated: false, oneOverheated: false, fearZone: false, positionSizeMultiplier: 1.0 },
+      };
+      const result = scoreStep8({ ...midSteps, step1: { vetoTriggered: false, reason: "" } });
+      expect(result.finalDecision).toBe("지켜보기");
+      expect(result.positionSizePct).toBeNull();
+      expect(result.cashAllocationPct).toBeNull();
+      expect(result.assetAllocation).toEqual({ stock: 48, coin: 3, bond: 15, realEstate: 0, cash: 35 });
+    });
+
+    it("realEstate는 항상 0(이 사이트에 실제 신호가 없음)", () => {
+      const result = scoreStep8({ ...perfectSteps, step1: { vetoTriggered: false, reason: "" } });
+      expect(result.assetAllocation.realEstate).toBe(0);
+    });
   });
 });
