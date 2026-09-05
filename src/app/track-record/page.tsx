@@ -4,11 +4,14 @@ import { DecisionBadge } from "@/components/ScoreBadge";
 import { HitRateDonut, HitTrendStrip } from "@/components/TrackRecordGraphs";
 import {
   computeVerdictOutcomes,
+  computeCapitalFlowOutcomes,
   hitStats,
+  expectancyStats,
+  capitalFlowAssetStats,
   GRADING_LAG_TRADING_DAYS,
   NEUTRAL_BAND_PCT,
 } from "@/lib/verdict-outcomes";
-import type { Step8Result } from "@/lib/scoring/types";
+import type { Step8Result, StepDetails, CapitalFlowForecastAssetKey } from "@/lib/scoring/types";
 import { ibmPlexMono, mrsSaintDelafield } from "@/lib/site-fonts";
 import siteStyles from "@/styles/site.module.css";
 import styles from "./page.module.css";
@@ -37,9 +40,11 @@ function HitCell({ returnPct, hit }: { returnPct: number | null; hit: boolean | 
 function StatCard({
   label,
   stats,
+  expectancy,
 }: {
   label: string;
   stats: { hits: number; graded: number; pct: number; ciLowPct: number; ciHighPct: number } | null;
+  expectancy?: { winCount: number; avgWinPct: number; lossCount: number; avgLossPct: number } | null;
 }) {
   return (
     <div className={styles.summaryCard}>
@@ -57,6 +62,15 @@ function StatCard({
             <div className={styles.summaryContext}>
               오차범위 {stats.ciLowPct}~{stats.ciHighPct}% · 동전 던지기 50%
             </div>
+            {/* 승률만으론 손익비를 못 본다(Druckenmiller/Soros — "승률보다 장타율") — 적중 시·
+                미적중 시 평균 수익률을 따로 보여준다. 표본이 한쪽에 없으면(winCount/lossCount=0)
+                그 평균은 0으로 나오므로, 그 경우 문구 자체를 생략한다. */}
+            {expectancy && (expectancy.winCount > 0 || expectancy.lossCount > 0) && (
+              <div className={styles.summaryContext}>
+                적중 시 평균 {expectancy.winCount > 0 ? `+${expectancy.avgWinPct}%(${expectancy.winCount}건)` : "표본 없음"} ·
+                미적중 시 평균 {expectancy.lossCount > 0 ? `${expectancy.avgLossPct}%(${expectancy.lossCount}건)` : "표본 없음"}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -68,7 +82,7 @@ export default async function TrackRecordPage() {
   const reports = await db.dailyReport.findMany({
     orderBy: { date: "desc" },
     take: 365,
-    select: { date: true, marketDate: true, step8: true },
+    select: { date: true, marketDate: true, step8: true, details: true },
   });
 
   const verdicts = reports.map((report) => {
@@ -83,6 +97,27 @@ export default async function TrackRecordPage() {
   const outcomes = await computeVerdictOutcomes(verdicts);
   const spStats = hitStats(outcomes, "hitSp500");
   const koStats = hitStats(outcomes, "hitKospi");
+  const spExpectancy = expectancyStats(outcomes, "hitSp500", "sp500ReturnPct");
+  const koExpectancy = expectancyStats(outcomes, "hitKospi", "kospiReturnPct");
+
+  // 자금흐름 예측(주식/코인/금) — details.capitalFlowForecast가 있는 리포트만 채점 대상.
+  const forecasts = reports
+    .map((report) => {
+      const details = report.details as unknown as StepDetails;
+      const forecast = details?.capitalFlowForecast;
+      if (!forecast) return null;
+      const marketDate = report.marketDate ? report.marketDate.toISOString().slice(0, 10) : null;
+      return marketDate ? { marketDate, forecast } : null;
+    })
+    .filter((f): f is { marketDate: string; forecast: NonNullable<StepDetails["capitalFlowForecast"]> } => f !== null);
+
+  const capitalFlowOutcomes = await computeCapitalFlowOutcomes(forecasts);
+  const assetLabel: Record<CapitalFlowForecastAssetKey, string> = { stock: "주식", coin: "코인", gold: "금" };
+  const assetStats = (["stock", "coin", "gold"] as const).map((asset) => ({
+    asset,
+    label: assetLabel[asset],
+    stats: capitalFlowAssetStats(capitalFlowOutcomes, asset),
+  }));
   const asOfLabel = new Date().toLocaleString("ko-KR", {
     timeZone: "Asia/Seoul",
     dateStyle: "medium",
@@ -122,12 +157,30 @@ export default async function TrackRecordPage() {
         </p>
 
         <div className={styles.summaryRow}>
-          <StatCard label="S&P500 대비 적중" stats={spStats} />
-          <StatCard label="코스피 대비 적중" stats={koStats} />
+          <StatCard label="S&P500 대비 적중" stats={spStats} expectancy={spExpectancy} />
+          <StatCard label="코스피 대비 적중" stats={koStats} expectancy={koExpectancy} />
         </div>
 
         <div className="mb-6">
           <HitTrendStrip outcomes={outcomes} />
+        </div>
+
+        <h2 className={styles.title} style={{ fontSize: "1.1rem", marginTop: "2rem" }}>
+          자금흐름 예측(주식·코인·금) 적중률
+        </h2>
+        <p className={styles.caveat}>
+          과거 확률을 역산하지 않고, 매일 그날 신호로만 방향을 판정한 뒤 5거래일 뒤 실현 수익률과
+          대조해 채점합니다(위 최종 결론과 같은 원칙). 참고용이며 투자자문이 아닙니다.
+        </p>
+        <div className={styles.summaryRow}>
+          {assetStats.map(({ asset, label, stats }) => (
+            <StatCard
+              key={asset}
+              label={`${label} 방향 적중`}
+              stats={stats}
+              expectancy={stats}
+            />
+          ))}
         </div>
 
         <div className={styles.tableWrap}>

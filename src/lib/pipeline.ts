@@ -366,8 +366,22 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
 
     // 자금흐름 예측 — 오늘 신호로만 판정하는 순수 계산(LLM 호출 없음, 비용 0). 실패 가능성은
     // 사실상 없지만 방어적으로 감싼다(다른 블록들과 같은 관례).
+    // details.step8(표)은 runDailyAnalysis()가 이미 다 만들어 반환한 뒤라, 이 판정 행은
+    // run.ts가 아니라 여기서 직접 push한다(자산배분 가이드 행과 같은 표시 규칙).
     try {
-      report.details.capitalFlowForecast = computeCapitalFlowForecast(report.step4, report.step5, marketDate);
+      const forecast = computeCapitalFlowForecast(report.step4, report.step5, marketDate);
+      report.details.capitalFlowForecast = forecast;
+      const label = (asset: "stock" | "coin" | "gold") => ({ stock: "주식", coin: "코인", gold: "금" })[asset];
+      const arrow = (dir: "up" | "down") => (dir === "up" ? "↑" : "↓");
+      report.details.step8.push({
+        label: "자금흐름 예측(참고용, 투자자문 아님)",
+        criterion: "오늘 신호로만 판정(과거 확률 역산 없음) — 5거래일 뒤 실현 여부를 나중에 채점",
+        value: [...forecast.assets]
+          .sort((a, b) => a.rank - b.rank)
+          .map((a) => `${a.rank}위 ${label(a.asset)}${arrow(a.direction)}`)
+          .join(" · "),
+        met: null,
+      });
     } catch (err) {
       sourceErrors.push({ source: "자금흐름 예측 판정", error: err instanceof Error ? err.message : String(err) });
     }

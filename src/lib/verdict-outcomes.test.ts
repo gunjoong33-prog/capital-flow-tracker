@@ -7,9 +7,11 @@ import {
   hitStats,
   expectancyStats,
   gradeCapitalFlowForecast,
+  capitalFlowAssetStats,
   NEUTRAL_BAND_PCT,
   type PriceSeries,
   type VerdictOutcome,
+  type CapitalFlowGrade,
 } from "./verdict-outcomes";
 import type { CapitalFlowForecast } from "./scoring/types";
 
@@ -245,5 +247,33 @@ describe("gradeCapitalFlowForecast", () => {
     };
     const result = gradeCapitalFlowForecast(forecast, { stock: null, coin: null, gold: null });
     expect(result[0].hit).toBeNull();
+  });
+});
+
+describe("capitalFlowAssetStats", () => {
+  function grade(asset: "stock" | "coin" | "gold", hit: boolean | null, returnPct: number | null): CapitalFlowGrade {
+    return { asset, direction: "up", returnPct, hit };
+  }
+
+  it("자산별로 분모·적중·기댓값을 따로 낸다", () => {
+    const outcomes = [
+      { grades: [grade("stock", true, 3), grade("coin", false, -2)] },
+      { grades: [grade("stock", true, 1), grade("coin", true, 5)] },
+      { grades: [grade("stock", false, -1), grade("coin", null, null)] },
+    ];
+    const stock = capitalFlowAssetStats(outcomes, "stock")!;
+    expect(stock.hits).toBe(2);
+    expect(stock.graded).toBe(3);
+    expect(stock.avgWinPct).toBe(2);
+    expect(stock.avgLossPct).toBe(-1);
+
+    const coin = capitalFlowAssetStats(outcomes, "coin")!;
+    expect(coin.graded).toBe(2); // null 채점 제외
+    expect(coin.hits).toBe(1);
+  });
+
+  it("채점 가능한 표본이 없으면 null", () => {
+    expect(capitalFlowAssetStats([{ grades: [grade("gold", null, null)] }], "gold")).toBeNull();
+    expect(capitalFlowAssetStats([], "gold")).toBeNull();
   });
 });

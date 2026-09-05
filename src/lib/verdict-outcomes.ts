@@ -2,6 +2,7 @@
 // 과거 판정(매수/지켜보기/현금비중늘리기)이 이후 실제 가격 변화와 맞았는지 코드가 채점한다.
 // 사용자 확정: S&P500·KOSPI 둘 다 병행 채점.
 import { fetchYahooHistorical } from "./sources/yahoo";
+import { fetchCoinGeckoRange } from "./sources/coingecko";
 import { METRICS } from "./sources/types";
 import type { CapitalFlowForecast, CapitalFlowForecastAssetKey } from "./scoring/types";
 
@@ -183,4 +184,82 @@ export function gradeCapitalFlowForecast(
     }
     return { asset: a.asset, direction: a.direction, returnPct, hit };
   });
+}
+
+/**
+ * Yahoo(SPX·GOLD)·CoinGecko(BTC)에서 가격 시계열을 가져와 자금흐름 예측 전체를 채점하는
+ * 오케스트레이션(computeVerdictOutcomes와 같은 패턴). BTC는 주말도 거래되고 SPX·GOLD는
+ * 거래일만 있어 "5거래일" 뒤라는 실제 캘린더 길이가 자산마다 다를 수 있다는 한계는
+ * 알려진 것으로 남겨둔다(자산배분 가이드와 같은 범위 밖 처리, 계획 문서 참고).
+ */
+export async function computeCapitalFlowOutcomes(
+  forecasts: { marketDate: string; forecast: CapitalFlowForecast }[]
+): Promise<{ marketDate: string; grades: CapitalFlowGrade[] }[]> {
+  if (forecasts.length === 0) return [];
+  const earliestDate = new Date(forecasts.reduce((min, f) => (f.marketDate < min ? f.marketDate : min), forecasts[0].marketDate));
+
+  const [spx, gold, btc] = await Promise.all([
+    fetchYahooHistorical(METRICS.SPX).catch(() => null),
+    fetchYahooHistorical(METRICS.GOLD).catch(() => null),
+    fetchCoinGeckoRange(METRICS.BTC, earliestDate).catch(() => null),
+  ]);
+  const asSeries = (points: PriceSeries | null) => (points ? [...points].sort((a, b) => a.date.localeCompare(b.date)) : null);
+  const series: Record<CapitalFlowForecastAssetKey, PriceSeries | null> = {
+    stock: asSeries(spx),
+    gold: asSeries(gold),
+    coin: asSeries(btc),
+  };
+
+  return forecasts.map(({ marketDate, forecast }) => {
+    const returnPctAt5d: Record<CapitalFlowForecastAssetKey, number | null> = {
+      stock: series.stock ? computeReturnPct(series.stock, marketDate) : null,
+      coin: series.coin ? computeReturnPct(series.coin, marketDate) : null,
+      gold: series.gold ? computeReturnPct(series.gold, marketDate) : null,
+    };
+    return { marketDate, grades: gradeCapitalFlowForecast(forecast, returnPctAt5d) };
+  });
+}
+
+export interface CapitalFlowAssetStats {
+  hits: number;
+  graded: number;
+  pct: number;
+  ciLowPct: number;
+  ciHighPct: number;
+  winCount: number;
+  avgWinPct: number;
+  lossCount: number;
+  avgLossPct: number;
+}
+
+/** hitStats+expectancyStats를 자산별로 합친 것 — VerdictOutcome이 아니라 CapitalFlowGrade가
+ *  입력이라 그 두 함수를 그대로 재사용할 수 없어 같은 계산을 자산 단위로 다시 낸다. */
+export function capitalFlowAssetStats(
+  outcomes: { grades: CapitalFlowGrade[] }[],
+  asset: CapitalFlowForecastAssetKey
+): CapitalFlowAssetStats | null {
+  const graded = outcomes.flatMap((o) => o.grades).filter((g) => g.asset === asset && g.hit !== null);
+  if (graded.length === 0) return null;
+  const n = graded.length;
+  const hits = graded.filter((g) => g.hit === true).length;
+  const p = hits / n;
+  const z = 1.96;
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
+  const r1 = (x: number) => Math.round(x * 1000) / 10;
+  const wins = graded.filter((g) => g.hit === true).map((g) => g.returnPct as number);
+  const losses = graded.filter((g) => g.hit === false).map((g) => g.returnPct as number);
+  const avg = (xs: number[]) => (xs.length === 0 ? 0 : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100);
+  return {
+    hits,
+    graded: n,
+    pct: r1(p),
+    ciLowPct: r1(Math.max(0, center - half)),
+    ciHighPct: r1(Math.min(1, center + half)),
+    winCount: wins.length,
+    avgWinPct: avg(wins),
+    lossCount: losses.length,
+    avgLossPct: avg(losses),
+  };
 }
