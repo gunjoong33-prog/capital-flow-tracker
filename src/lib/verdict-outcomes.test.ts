@@ -5,10 +5,13 @@ import {
   gradeVerdicts,
   aggregateHitRate,
   hitStats,
+  expectancyStats,
+  gradeCapitalFlowForecast,
   NEUTRAL_BAND_PCT,
   type PriceSeries,
   type VerdictOutcome,
 } from "./verdict-outcomes";
+import type { CapitalFlowForecast } from "./scoring/types";
 
 /** 테스트 픽스처 조립기 — VerdictOutcome 필드가 늘어날 때마다 테스트를 고치지 않도록. */
 function outcome(o: Partial<VerdictOutcome> & { date: string; finalDecision: string }): VerdictOutcome {
@@ -192,5 +195,55 @@ describe("aggregateHitRate / hitStats", () => {
     expect(s.pct).toBeCloseTo(37.5, 1);
     expect(s.ciLowPct).toBeLessThan(37.5);
     expect(s.ciHighPct).toBeGreaterThan(50);
+  });
+});
+
+describe("expectancyStats", () => {
+  it("승리군·패배군 평균 수익률을 각각 낸다", () => {
+    const outcomes = [
+      outcome({ date: "1", finalDecision: "매수", hitSp500: true, sp500ReturnPct: 8 }),
+      outcome({ date: "2", finalDecision: "매수", hitSp500: true, sp500ReturnPct: 4 }),
+      outcome({ date: "3", finalDecision: "매수", hitSp500: false, sp500ReturnPct: -3 }),
+      outcome({ date: "4", finalDecision: "매수", hitSp500: null, sp500ReturnPct: null }),
+    ];
+    const result = expectancyStats(outcomes, "hitSp500", "sp500ReturnPct");
+    expect(result?.winCount).toBe(2);
+    expect(result?.avgWinPct).toBe(6);
+    expect(result?.lossCount).toBe(1);
+    expect(result?.avgLossPct).toBe(-3);
+  });
+
+  it("채점 가능한 표본이 없으면 null", () => {
+    expect(expectancyStats([], "hitSp500", "sp500ReturnPct")).toBeNull();
+  });
+});
+
+describe("gradeCapitalFlowForecast", () => {
+  it("direction=up이고 실현 수익률이 양수(+0.5% 초과)면 적중", () => {
+    const forecast: CapitalFlowForecast = {
+      computedAt: "2026-08-01",
+      assets: [{ asset: "stock", direction: "up", rank: 1, reason: "" }],
+    };
+    const result = gradeCapitalFlowForecast(forecast, { stock: 2.1, coin: null, gold: null });
+    expect(result[0].hit).toBe(true);
+    expect(result[0].returnPct).toBe(2.1);
+  });
+
+  it("무의미구간(±0.5%) 안쪽이면 방향 무관 미적중", () => {
+    const forecast: CapitalFlowForecast = {
+      computedAt: "2026-08-01",
+      assets: [{ asset: "stock", direction: "up", rank: 1, reason: "" }],
+    };
+    const result = gradeCapitalFlowForecast(forecast, { stock: 0.2, coin: null, gold: null });
+    expect(result[0].hit).toBe(false);
+  });
+
+  it("아직 가격 데이터 없으면(null) hit도 null", () => {
+    const forecast: CapitalFlowForecast = {
+      computedAt: "2026-08-01",
+      assets: [{ asset: "gold", direction: "down", rank: 1, reason: "" }],
+    };
+    const result = gradeCapitalFlowForecast(forecast, { stock: null, coin: null, gold: null });
+    expect(result[0].hit).toBeNull();
   });
 });

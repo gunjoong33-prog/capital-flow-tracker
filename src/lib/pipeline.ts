@@ -14,6 +14,7 @@ import { fetchForeignNetBuyKospi } from "@/lib/sources/korea-investment";
 import { runDailyAnalysis } from "@/lib/scoring/run";
 import { generateNarrative, buildDailyNarrativePrompt } from "@/lib/narrative";
 import { generateComprehensiveReport } from "@/lib/comprehensive-report";
+import { computeCapitalFlowForecast } from "@/lib/capital-flow-forecast";
 import { generatePptHeadlines } from "@/lib/ppt-headlines";
 import { writeDailyChecklistToNotion, writeCalendarEntry, type DailyNotionInput } from "@/lib/notion-write";
 import { generatePeriodReportsIfDue } from "@/lib/period-report";
@@ -361,6 +362,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       report.details.comprehensiveReportNoContext = await generateComprehensiveReport(report, { skipLearningContext: true });
     } catch (err) {
       sourceErrors.push({ source: "학습요약 A/B 비교(대조군)", error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // 자금흐름 예측 — 오늘 신호로만 판정하는 순수 계산(LLM 호출 없음, 비용 0). 실패 가능성은
+    // 사실상 없지만 방어적으로 감싼다(다른 블록들과 같은 관례).
+    try {
+      report.details.capitalFlowForecast = computeCapitalFlowForecast(report.step4, report.step5, marketDate);
+    } catch (err) {
+      sourceErrors.push({ source: "자금흐름 예측 판정", error: err instanceof Error ? err.message : String(err) });
     }
 
     if (report.details.pptSlides && report.details.pptSlides.length > 0) {

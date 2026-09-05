@@ -195,6 +195,20 @@ export interface AssetAllocation {
   cash: number;
 }
 
+// 자금흐름 예측 — 오늘 신호로 방향만 판정한다(과거 확률 역산 없음, 9차 방법론 재검토 결론).
+// 채권·부동산은 실제 수익률 시계열이 없어 제외.
+export type CapitalFlowForecastAssetKey = "stock" | "coin" | "gold";
+export interface CapitalFlowForecastAsset {
+  asset: CapitalFlowForecastAssetKey;
+  direction: "up" | "down"; // 다음 5거래일 방향 판정
+  rank: number; // 1이 가장 강한 신호
+  reason: string; // 어떤 신호로 이 순위를 매겼는지(결정론적 문구, LLM 아님)
+}
+export interface CapitalFlowForecast {
+  computedAt: string; // ISO date — 이 판정을 계산한 marketDate
+  assets: CapitalFlowForecastAsset[];
+}
+
 // 각 단계 판정에 실제로 쓰인 기준·수치를 UI 표로 보여주기 위한 행 단위 데이터.
 // met=null은 "판정 불가/정보성 행"(자동 소스 없음 등)을 뜻한다 — false와 구분해야 함.
 export interface StepDetailRow {
@@ -208,6 +222,7 @@ export interface StepDetailRow {
 export type StepDetails = {
   comprehensiveReport?: string; // 1단계 카드 위 "보고서" 버튼이 보여주는 종합 해설(경제 초심자용, 1~8단계 인과관계 서술)
   comprehensiveReportNoContext?: string; // 위와 같은 프롬프트로 자가학습 요약만 뺀 대조군(self-learning 페이지의 반영도 A/B 비교용, 실제 서비스 화면엔 안 씀)
+  capitalFlowForecast?: CapitalFlowForecast; // 오늘 신호 기반 자금흐름 방향 판정(사후 채점용, track-record와 같은 원칙)
   step1: StepDetailRow[];
   step2: StepDetailRow[];
   step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드, 美 2Y-10Y 스프레드) — 별도 토글

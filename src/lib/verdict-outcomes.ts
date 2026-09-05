@@ -3,6 +3,7 @@
 // 사용자 확정: S&P500·KOSPI 둘 다 병행 채점.
 import { fetchYahooHistorical } from "./sources/yahoo";
 import { METRICS } from "./sources/types";
+import type { CapitalFlowForecast, CapitalFlowForecastAssetKey } from "./scoring/types";
 
 export const GRADING_LAG_TRADING_DAYS = 5; // 채점 기산일로부터 5거래일 뒤 가격과 대조
 export const NEUTRAL_BAND_PCT = 0.5; // 세 결론 공통 — 이 안쪽 변동은 "사실상 보합"이라 적중으로 안 센다
@@ -141,4 +142,45 @@ export async function computeVerdictOutcomes(
     fetchYahooHistorical(METRICS.KOSPI).catch(() => null),
   ]);
   return gradeVerdicts(verdicts, sp500, kospi);
+}
+
+/**
+ * 승률(hitStats)만으론 "손익비"를 못 본다 — Druckenmiller/Soros 교차검증 결론(승률 30%여도
+ * 손익비가 좋으면 유효한 신호일 수 있다)에 따라 승리군·패배군 평균 수익률을 따로 낸다.
+ * 표본이 극히 적을 때 평균이 이상치 하나에 휘둘릴 수 있음을 화면에서 winCount/lossCount로
+ * 같이 밝혀야 한다(hitStats가 분모를 같이 보여주는 것과 같은 원칙).
+ */
+export function expectancyStats(
+  outcomes: VerdictOutcome[],
+  hitKey: "hitSp500" | "hitKospi",
+  returnKey: "sp500ReturnPct" | "kospiReturnPct"
+): { winCount: number; avgWinPct: number; lossCount: number; avgLossPct: number } | null {
+  const graded = outcomes.filter((o) => o[hitKey] !== null && o[returnKey] !== null);
+  if (graded.length === 0) return null;
+  const wins = graded.filter((o) => o[hitKey] === true).map((o) => o[returnKey] as number);
+  const losses = graded.filter((o) => o[hitKey] === false).map((o) => o[returnKey] as number);
+  const avg = (xs: number[]) => (xs.length === 0 ? 0 : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100);
+  return { winCount: wins.length, avgWinPct: avg(wins), lossCount: losses.length, avgLossPct: avg(losses) };
+}
+
+export interface CapitalFlowGrade {
+  asset: CapitalFlowForecastAssetKey;
+  direction: "up" | "down";
+  returnPct: number | null;
+  hit: boolean | null;
+}
+
+/** gradeHit()과 같은 무의미구간(NEUTRAL_BAND_PCT) 원칙을 자금흐름 예측 채점에도 그대로 쓴다. */
+export function gradeCapitalFlowForecast(
+  forecast: CapitalFlowForecast,
+  returnPctAt5d: Record<CapitalFlowForecastAssetKey, number | null>
+): CapitalFlowGrade[] {
+  return forecast.assets.map((a) => {
+    const returnPct = returnPctAt5d[a.asset];
+    let hit: boolean | null = null;
+    if (returnPct !== null) {
+      hit = a.direction === "up" ? returnPct > NEUTRAL_BAND_PCT : returnPct < -NEUTRAL_BAND_PCT;
+    }
+    return { asset: a.asset, direction: a.direction, returnPct, hit };
+  });
 }
