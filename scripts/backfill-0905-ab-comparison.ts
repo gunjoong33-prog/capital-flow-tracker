@@ -1,5 +1,7 @@
-// 2026-09-05 종합보고서 A/B 비교(comprehensiveReportNoContext) 기능 추가 직후, 이미 생성된 오늘자
-// 리포트에는 이 필드가 없다. 기존 comprehensiveReport는 그대로 두고 대조군만 추가로 생성해 채운다.
+// 2026-09-05 종합보고서 A/B 비교(comprehensiveReportNoContext) 기능 추가 직후 확인해보니, 오늘자
+// 리포트의 기존 comprehensiveReport 자체가 오늘 아침 크론(자동배포가 끊겨있던 시점이라 아직 옛
+// Mistral 코드로 실행됨)이 남긴 "[종합 보고서 생성 실패: Mistral 요청 실패: 429 ...]" 실패
+// 문자열이었다 — 대조군만 채우면 비교가 무의미해서 원본도 Claude로 다시 생성한다.
 // 다음 날부터는 pipeline.ts가 매일 자동으로 두 버전을 다 채우므로 이 스크립트는 오늘 하루만 필요.
 import "dotenv/config";
 import { db } from "../src/lib/db";
@@ -16,10 +18,6 @@ async function main() {
     return;
   }
   const details = existing.details as unknown as StepDetails;
-  if (details.comprehensiveReportNoContext) {
-    console.log("이미 대조군 있음, 중단");
-    return;
-  }
 
   const report = {
     step1: existing.step1,
@@ -32,16 +30,16 @@ async function main() {
     step8: existing.step8,
   };
 
-  const comprehensiveReportNoContext = await generateComprehensiveReport({ ...report, details }, { skipLearningContext: true });
-  console.log("--- 대조군(학습요약 미포함) ---");
-  console.log(comprehensiveReportNoContext);
+  const comprehensiveReport = await generateComprehensiveReport({ ...report, details });
+  console.log("--- 원본(학습요약 포함, 재생성) ---");
+  console.log(comprehensiveReport);
 
   const asJson = (v: unknown) => v as unknown as Prisma.InputJsonValue;
   await db.dailyReport.update({
     where: { date },
-    data: { details: asJson({ ...details, comprehensiveReportNoContext }) },
+    data: { details: asJson({ ...details, comprehensiveReport }) },
   });
-  console.log(`${dateStr} 대조군 저장 완료`);
+  console.log(`${dateStr} 원본 재생성·저장 완료`);
 }
 
 main().then(() => db.$disconnect());
