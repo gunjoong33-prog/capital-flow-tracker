@@ -190,8 +190,11 @@ export function buildComprehensiveReportPrompt(report: {
 ${JSON.stringify(stripStepNumbers(report), null, 2)}`;
 }
 
-export async function generateComprehensiveReport(report: Parameters<typeof buildComprehensiveReportPrompt>[0]): Promise<string> {
-  let text = await generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS);
+export async function generateComprehensiveReport(
+  report: Parameters<typeof buildComprehensiveReportPrompt>[0],
+  options?: { skipLearningContext?: boolean }
+): Promise<string> {
+  let text = await generateNarrative(buildComprehensiveReportPrompt(report), MAX_OUTPUT_TOKENS, options);
 
   // LLM이 JSON에 있는 사실을 그대로 옮겨 적다가도 가끔 틀린다 — 실제 확인된 사례 둘: (1)
   // macroTrendScore 2.901을 "3.35"로 잘못 서술, (2) step3.warning이 null(급등 미감지)인데도

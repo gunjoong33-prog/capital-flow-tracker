@@ -355,6 +355,14 @@ export async function runDailyPipeline(): Promise<DailyPipelineResult> {
       report.details.comprehensiveReport = `[종합 보고서 생성 실패: ${err instanceof Error ? err.message : String(err)}]`;
     }
 
+    // self-learning 페이지의 "학습 요약이 실제로 얼마나 반영되는가" 검증용 대조군 — 학습 요약만
+    // 뺀 버전을 하나 더 생성해 나란히 저장한다. 실패해도 비교용일 뿐이라 본 리포트 저장은 막지 않는다.
+    try {
+      report.details.comprehensiveReportNoContext = await generateComprehensiveReport(report, { skipLearningContext: true });
+    } catch (err) {
+      sourceErrors.push({ source: "학습요약 A/B 비교(대조군)", error: err instanceof Error ? err.message : String(err) });
+    }
+
     if (report.details.pptSlides && report.details.pptSlides.length > 0) {
       const headlines = await generatePptHeadlines(report.details.pptSlides);
       report.details.pptSlides = report.details.pptSlides.map((s) => ({ ...s, headline: headlines[s.step] ?? s.kicker }));

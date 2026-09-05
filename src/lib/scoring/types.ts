@@ -194,6 +194,7 @@ export interface StepDetailRow {
 }
 export type StepDetails = {
   comprehensiveReport?: string; // 1단계 카드 위 "보고서" 버튼이 보여주는 종합 해설(경제 초심자용, 1~8단계 인과관계 서술)
+  comprehensiveReportNoContext?: string; // 위와 같은 프롬프트로 자가학습 요약만 뺀 대조군(self-learning 페이지의 반영도 A/B 비교용, 실제 서비스 화면엔 안 씀)
   step1: StepDetailRow[];
   step2: StepDetailRow[];
   step2Aux?: StepDetailRow[]; // 집계에 안 들어가는 보조 지표(순유동성, RRP 방파제, TGA 이탈도, BBB 스프레드, 美 2Y-10Y 스프레드) — 별도 토글

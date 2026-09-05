@@ -70,6 +70,26 @@ export default async function SelfLearningPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  // 학습 요약이 실제 문장에 얼마나 반영되는지(부족한 점 3번) — pipeline.ts가 종합보고서를 학습
+  // 요약 포함/미포함 두 버전으로 저장해두면, 그중 둘 다 값이 있는 가장 최근 리포트를 찾아 나란히
+  // 보여준다. 최근 5건만 보면 충분하다(매일 파이프라인이 성공하면 바로 다음 것이 채워짐).
+  const recentReportsForAb = await db.dailyReport.findMany({
+    orderBy: { date: "desc" },
+    take: 5,
+    select: { date: true, details: true },
+  });
+  const abComparisonReport = recentReportsForAb.find((r) => {
+    const d = r.details as { comprehensiveReport?: string; comprehensiveReportNoContext?: string } | null;
+    return !!d?.comprehensiveReport && !!d?.comprehensiveReportNoContext;
+  });
+  const abComparison = abComparisonReport
+    ? {
+        date: abComparisonReport.date,
+        withContext: (abComparisonReport.details as { comprehensiveReport?: string }).comprehensiveReport ?? "",
+        withoutContext: (abComparisonReport.details as { comprehensiveReportNoContext?: string }).comprehensiveReportNoContext ?? "",
+      }
+    : null;
+
   // 기관별 버튼으로 걸러볼 "최근 학습 노트"는 최신 1건이 속한 주(periodKey) 전체를 보여준다 —
   // "최근 8건" 같은 임의 개수 컷은 노트가 많은 기관(예: 미래에셋 10건)이 적은 기관을 밀어내
   // 버튼을 눌러도 그 기관 노트가 하나도 안 보일 수 있었다(periodKey는 sourceName당 주 1건
@@ -233,6 +253,26 @@ export default async function SelfLearningPage() {
           </>
         )}
 
+        {abComparison && (
+          <>
+            <h2 className={styles.sectionHeading}>학습 요약이 실제로 문장을 바꾸는가 — {fmtDate(abComparison.date)} 종합보고서 비교</h2>
+            <p className={styles.stageNote} style={{ maxWidth: "48rem", marginBottom: "1rem" }}>
+              같은 날 같은 데이터로, 학습 요약을 넣은 버전과 뺀 버전을 각각 생성해 나란히 둔 것입니다. LLM에게 스스로
+              얼마나 반영했는지 묻지 않고(자기평가는 못 믿을 수 있어서), 두 글을 직접 비교해 판단할 수 있게 했습니다.
+            </p>
+            <div className={styles.abGrid}>
+              <div className={styles.abCardWith}>
+                <div className={styles.abCardLabel}>학습 요약 포함(실제 서비스 화면)</div>
+                <p className={styles.abCardBody}>{abComparison.withContext}</p>
+              </div>
+              <div className={styles.abCardWithout}>
+                <div className={styles.abCardLabel}>학습 요약 미포함(대조군)</div>
+                <p className={styles.abCardBody}>{abComparison.withoutContext}</p>
+              </div>
+            </div>
+          </>
+        )}
+
         <h2 className={styles.sectionHeading}>① 수집 — 소스별 현황</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -334,14 +374,13 @@ export default async function SelfLearningPage() {
             </div>
           </div>
           <div className={styles.gapItem}>
-            <span className={styles.gapIcon}>!</span>
+            <span className={styles.gapIcon}>{abComparison ? "✓" : "!"}</span>
             <div className={styles.gapText}>
-              <h3>③ 적용 — 코드 실행은 확인, 문장 반영 정도는 미측정</h3>
+              <h3>③ 적용 — {abComparison ? "A/B 비교로 반영 여부를 사람이 직접 확인 가능" : "A/B 비교 인프라 추가됨, 다음 파이프라인 실행 대기 중"}</h3>
               <p>
-                <code>generateNarrative()</code>가 일일 리포트·종합 보고서·주기별 리포트 등 서술을 생성하는 모든 호출마다 예외
-                없이 이번 주 학습 노트를 압축한 주간 요약 1건을 프롬프트에 참고자료로 붙인다는 것은 코드로 확인했습니다. 다만
-                LLM이 그 참고자료를 실제로 얼마나 반영해 문장을 바꾸는지는 정량적으로 측정하지 않았습니다(A/B 비교 등 검증
-                인프라 없음).
+                2026-09-05부터 종합보고서를 학습 요약 포함/미포함 두 버전으로 매일 생성해 저장합니다(<code>comprehensiveReportNoContext</code>).
+                LLM 자기평가 대신 두 글을 위 &ldquo;학습 요약이 실제로 문장을 바꾸는가&rdquo; 섹션에서 직접 비교할 수 있습니다.
+                {!abComparison && " 이 페이지를 지금 여는 시점엔 아직 두 버전이 다 채워진 리포트가 없어 비교 섹션이 안 보일 수 있습니다 — 다음 정규 리포트 생성(매일 08:50 KST) 이후 표시됩니다."}
               </p>
             </div>
           </div>

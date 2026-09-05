@@ -321,6 +321,48 @@
   font-size: 0.8rem;
 }
 
+.abGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+@media (max-width: 860px) {
+  .abGrid {
+    grid-template-columns: 1fr;
+  }
+}
+.abCard {
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+.abCardWith {
+  composes: abCard;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.abCardWithout {
+  composes: abCard;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.abCardLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin-bottom: 0.6rem;
+}
+.abCardBody {
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--ink-dim);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  white-space: pre-line;
+}
+
 .gapList {
   display: flex;
   flex-direction: column;

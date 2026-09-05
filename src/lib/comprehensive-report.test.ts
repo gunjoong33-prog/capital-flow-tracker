@@ -4,7 +4,32 @@ import { describe, expect, it, vi } from "vitest";
 // import하며 그 파일이 최상단에서 "@/lib/db"를 읽는다 — narrative.test.ts와 동일하게 mock한다.
 vi.mock("@/lib/db", () => ({ db: {} }));
 
-import { sanitizeFormat } from "./comprehensive-report";
+const { generateNarrativeMock } = vi.hoisted(() => ({ generateNarrativeMock: vi.fn() }));
+vi.mock("@/lib/narrative", () => ({ generateNarrative: generateNarrativeMock }));
+
+import { sanitizeFormat, generateComprehensiveReport } from "./comprehensive-report";
+
+describe("generateComprehensiveReport", () => {
+  const minimalReport = { step1: {}, step2: {}, step3: {}, step4: {}, step5: {}, step6: {}, step7: {}, step8: {}, details: {} };
+
+  it("options를 generateNarrative에 그대로 전달한다", async () => {
+    generateNarrativeMock.mockReset().mockResolvedValue("본문");
+
+    await generateComprehensiveReport(minimalReport, { skipLearningContext: true });
+
+    const [, , passedOptions] = generateNarrativeMock.mock.calls[0] as [string, number, { skipLearningContext?: boolean }];
+    expect(passedOptions).toEqual({ skipLearningContext: true });
+  });
+
+  it("options 생략 시 undefined를 그대로 전달한다(기존 동작 유지)", async () => {
+    generateNarrativeMock.mockReset().mockResolvedValue("본문");
+
+    await generateComprehensiveReport(minimalReport);
+
+    const [, , passedOptions] = generateNarrativeMock.mock.calls[0] as [string, number, unknown];
+    expect(passedOptions).toBeUndefined();
+  });
+});
 
 describe("sanitizeFormat", () => {
   it("굵은 번호 소제목 줄을 제거한다(9/1 리포트 실측 사례)", () => {
